@@ -439,16 +439,20 @@ export const runPayrollMagicSync = async (periodId: string, staffId?: string): P
   return data || { success: true };
 };
 
-export const login = async (username: string, password: string): Promise<{ success: boolean; user?: Staff; error?: string }> => {
-  if (!isConfigured || !supabase) {
-    const { mockStaff } = await import('./mockData');
-    const user = mockStaff.find((s: any) => s.username === username && s.password === password);
-    return user ? { success: true, user: user as Staff } : { success: false, error: 'Chế độ Offline: Sai thông tin đăng nhập.' };
-  }
-  const res = await supabase.from('staff').select('*').eq('username', username).eq('password', password).maybeSingle();
-  if (res.error) return { success: false, error: res.error.message };
-  if (!res.data) return { success: false, error: 'Tên đăng nhập hoặc mật khẩu không chính xác.' };
-  return { success: true, user: staffFromDb(res.data) };
+export const login = async (username: string, password: string) => {
+  if (!supabase) return { success: false, error: 'Supabase not configured' };
+
+  const { data, error } = await supabase.rpc('authenticate_staff', {
+    p_username: username,
+    p_password: password,
+  });
+
+  if (error) return { success: false, error: error.message };
+  if (!data) return { success: false, error: 'Sai tên đăng nhập hoặc mật khẩu' };
+
+  // IMPORTANT: không lưu password_hash/password
+  const user = staffFromDb(data); // hoặc map thủ công
+  return { success: true, user };
 };
 
 export const fetchBootstrapData = async () => {

@@ -450,6 +450,22 @@ export const login = async (username: string, password: string) => {
   return { success: true, user: data[0] };
 };
 
+export const adminSetStaffPassword = async (
+  staffId: string,
+  newPassword: string
+) => {
+  const { error } = await supabase.rpc('set_staff_password', {
+    p_staff_id: staffId,
+    p_new_password: newPassword,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return { success: true };
+};
+
 
 export const fetchBootstrapData = async () => {
   if (!isConfigured || !supabase) { console.warn('Supabase not configured. App will run with mock data.'); return null; }

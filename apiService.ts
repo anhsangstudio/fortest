@@ -440,20 +440,16 @@ export const runPayrollMagicSync = async (periodId: string, staffId?: string): P
 };
 
 export const login = async (username: string, password: string) => {
-  if (!supabase) return { success: false, error: 'Supabase not configured' };
-
-  const { data, error } = await supabase.rpc('authenticate_staff', {
-    p_username: username,
-    p_password: password,
-  });
+  const { data, error } = await supabase
+    .rpc('verify_staff_login', { p_username: username, p_password: password });
 
   if (error) return { success: false, error: error.message };
-  if (!data) return { success: false, error: 'Sai tên đăng nhập hoặc mật khẩu' };
+  if (!data || data.length === 0) return { success: false, error: 'Sai tài khoản hoặc mật khẩu' };
 
-  // IMPORTANT: không lưu password_hash/password
-  const user = staffFromDb(data); // hoặc map thủ công
-  return { success: true, user };
+  // data[0] là Staff đã “xác thực”
+  return { success: true, user: data[0] };
 };
+
 
 export const fetchBootstrapData = async () => {
   if (!isConfigured || !supabase) { console.warn('Supabase not configured. App will run with mock data.'); return null; }

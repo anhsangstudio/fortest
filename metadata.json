@@ -1,0 +1,8 @@
+{
+  "name": "Copy 30-01",
+  "description": "Comprehensive studio management system with AI-powered expense classification, smart scheduling, and contract automation.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

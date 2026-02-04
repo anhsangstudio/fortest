@@ -813,6 +813,33 @@ export const syncData = async (table: string, action: 'CREATE' | 'UPDATE' | 'DEL
   if (action === 'DELETE') {
     if (tableName === 'services') { await deleteBy('services', 'ma_dv', rawData.ma_dv ?? rawData.id ?? rawData.code); return { success: true }; }
     await deleteBy(tableName, 'id', rawData.id); return { success: true };
+	if (tableName === 'staff') {
+		if (!rawData?.id) {
+		throw new Error('Missing staff.id for DELETE');
+		}
+
+		// Thử xóa cứng trước
+		const { error } = await supabase
+		.from('staff')
+		.delete()
+		.eq('id', rawData.id);
+	
+		// Nếu bị FK chặn → soft delete
+		if (error) {
+		console.warn('Hard delete staff failed, fallback to Inactive:', error.message);
+	
+		const { error: softError } = await supabase
+			.from('staff')
+			.update({ status: 'Inactive' })
+			.eq('id', rawData.id);
+	
+		if (softError) throw softError;
+	
+		return { success: true, softDeleted: true };
+		}
+	
+		return { success: true };
+	}
   }
 
   if (tableName === 'services') {
@@ -900,33 +927,7 @@ export const syncData = async (table: string, action: 'CREATE' | 'UPDATE' | 'DEL
   }
 
   if (tableName === 'settings') { const payload = studioInfoToDb(rawData); const data = await upsertOne('settings', payload); return { success: true, data: studioInfoFromDb(data) }; }
-  if (tableName === 'staff') {
-    if (!rawData?.id) {
-      throw new Error('Missing staff.id for DELETE');
-    }
-
-    // Thử xóa cứng trước
-    const { error } = await supabase
-      .from('staff')
-      .delete()
-      .eq('id', rawData.id);
-
-    // Nếu bị FK chặn → soft delete
-    if (error) {
-      console.warn('Hard delete staff failed, fallback to Inactive:', error.message);
-
-      const { error: softError } = await supabase
-        .from('staff')
-        .update({ status: 'Inactive' })
-        .eq('id', rawData.id);
-
-      if (softError) throw softError;
-
-      return { success: true, softDeleted: true };
-    }
-
-    return { success: true };
-  }
+  if (tableName === 'staff') { const data = await upsertOne('staff', staffToDb(rawData)); return { success: true, data: staffFromDb(data) }; }
   if (tableName === 'customers') { const data = await upsertOne('customers', customerToDb(rawData)); return { success: true, data: customerFromDb(data) }; }
   if (tableName === 'transactions') { const data = await upsertOne('transactions', transactionToDb(rawData)); return { success: true, data: transactionFromDb(data) }; }
   if (tableName === 'schedules') { const data = await upsertOne('schedules', scheduleToDb(rawData)); return { success: true, data: scheduleFromDb(data) }; }

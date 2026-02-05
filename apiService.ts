@@ -440,14 +440,29 @@ export const runPayrollMagicSync = async (periodId: string, staffId?: string): P
 };
 
 export const login = async (username: string, password: string) => {
-  const { data, error } = await supabase
-    .rpc('verify_staff_login', { p_username: username, p_password: password });
+  const { data, error } = await supabase.rpc('verify_staff_login', {
+    p_username: username,
+    p_password: password
+  });
 
   if (error) return { success: false, error: error.message };
-  if (!data || data.length === 0) return { success: false, error: 'Sai tài khoản hoặc mật khẩu' };
+  if (!data || data.length === 0)
+    return { success: false, error: 'Sai tài khoản hoặc mật khẩu' };
 
-  // data[0] là Staff đã “xác thực”
   return { success: true, user: data[0] };
+};
+
+export const changeStaffPassword = async (
+  staffId: string,
+  newPassword: string
+) => {
+  const { error } = await supabase.rpc('set_staff_password', {
+    p_staff_id: staffId,
+    p_new_password: newPassword
+  });
+
+  if (error) throw error;
+  return { success: true };
 };
 
 export const adminSetStaffPassword = async (

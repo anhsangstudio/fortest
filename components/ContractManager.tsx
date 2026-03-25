@@ -53,7 +53,50 @@ const ContractManager: React.FC<Props> = ({
   const [totalCount, setTotalCount] = useState(0);
   const [paginatedContracts, setPaginatedContracts] = useState<Contract[]>([]);
   const [isLoadingContracts, setIsLoadingContracts] = useState(false);
+  const getViewport = () => {
+    if (typeof window === 'undefined') {
+      return { width: 1280, height: 720 };
+    }
 
+    const vv = window.visualViewport;
+    return {
+      width: Math.round(vv?.width || window.innerWidth),
+      height: Math.round(vv?.height || window.innerHeight),
+    };
+  };
+
+  const [viewport, setViewport] = useState(getViewport());
+
+  useEffect(() => {
+    const shouldTrackViewport = isModalOpen || isItemEditModalOpen;
+    if (!shouldTrackViewport) return;
+
+    const updateViewport = () => setViewport(getViewport());
+
+    updateViewport();
+
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    window.addEventListener('resize', updateViewport);
+    window.visualViewport?.addEventListener('resize', updateViewport);
+    window.visualViewport?.addEventListener('scroll', updateViewport);
+
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('resize', updateViewport);
+      window.visualViewport?.removeEventListener('resize', updateViewport);
+      window.visualViewport?.removeEventListener('scroll', updateViewport);
+    };
+  }, [isModalOpen, isItemEditModalOpen]);
+
+  const isMobileViewport = viewport.width < 768;
+  const modalPadding = isMobileViewport ? 12 : 20;
+  const mainModalMaxWidth = Math.min(1280, viewport.width - modalPadding * 2);
+  const mainModalMaxHeight = viewport.height - modalPadding * 2;
+  const itemModalMaxWidth = Math.min(560, viewport.width - modalPadding * 2);
+
+  
   const paymentStages = ["Đặt cọc", "Đợt 1", "Đợt 2", "Đợt 3", "Đợt 4", "Đợt 5", "Thanh toán hết"];
 
   const initialForm = {

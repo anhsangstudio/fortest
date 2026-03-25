@@ -1063,18 +1063,21 @@ const handleOpenEdit = async (contract: Contract) => {
                             <div className="text-xs text-slate-500">{tx.category} • {tx.vendor} • {formatDisplayDate(tx.date)}</div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <button
-							onClick={() => handleStartEditPayment(tx)}
-							className="p-2 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200"
-							>
-							<Pencil size={16} />
-							</button>
-							<button
-							onClick={() => handleDeletePayment(tx)}
-							className="p-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100"
-							>
-							<Trash2 size={16} />
-							</button>
+                              <button
+									onClick={() => handleStartEditPayment(tx)}
+									className="p-2 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200"
+									title="Sửa"
+								>
+									<Pencil size={16} />
+								</button>
+								
+								<button
+									onClick={() => handleDeletePayment(tx)}
+									className="p-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100"
+									title="Xóa"
+								>
+									<Trash2 size={16} />
+								</button>
                           </div>
                         </div>
                       ))}

@@ -1053,37 +1053,63 @@ const handleOpenEdit = async (contract: Contract) => {
                 </div>
 
                 {editingContractId && contractPayments.length > 0 && (
-                  <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
-                    <h4 className="font-bold text-xs uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-2"><History size={14} /> Lịch sử thanh toán</h4>
-                    <div className="space-y-2 max-h-64 overflow-y-auto">
-                      {contractPayments.map((tx) => (
-                        <div key={tx.id} className="bg-white border border-slate-200 rounded-xl p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                          <div className="min-w-0">
-                            <div className="font-bold text-sm text-slate-800">{tx.amount.toLocaleString()}đ</div>
-                            <div className="text-xs text-slate-500">{tx.category} • {tx.vendor} • {formatDisplayDate(tx.date)}</div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                              <button
-									onClick={() => handleStartEditPayment(tx)}
-									className="p-2 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200"
-									title="Sửa"
-								>
-									<Pencil size={16} />
-								</button>
-								
-								<button
-									onClick={() => handleDeletePayment(tx)}
-									className="p-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100"
-									title="Xóa"
-								>
-									<Trash2 size={16} />
-								</button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+					<div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
+						<h4 className="font-bold text-xs uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-2">
+						<History size={14} /> Lịch sử thanh toán
+						</h4>
+					
+						<div className="overflow-x-auto">
+						<table className="w-full min-w-[700px] text-sm">
+							<thead>
+							<tr className="border-b border-slate-200 text-slate-700">
+								<th className="text-left py-3 px-4 font-bold">Ngày</th>
+								<th className="text-left py-3 px-4 font-bold">Nội dung</th>
+								<th className="text-right py-3 px-4 font-bold">Số tiền</th>
+								<th className="text-center py-3 px-4 font-bold">Hành động</th>
+							</tr>
+							</thead>
+							<tbody>
+							{contractPayments.map((tx) => (
+								<tr key={tx.id} className="border-b border-slate-100 last:border-b-0">
+								<td className="py-4 px-4 text-slate-700">
+									{formatDisplayDate(tx.date)}
+								</td>
+					
+								<td className="py-4 px-4 text-slate-700">
+									{tx.description || `${tx.category || 'Thanh toán'} HĐ ${form.contractCode}`}
+								</td>
+					
+								<td className="py-4 px-4 text-right font-bold text-emerald-600">
+									+{(tx.amount || 0).toLocaleString()}đ
+								</td>
+					
+								<td className="py-4 px-4">
+									<div className="flex items-center justify-center gap-2">
+									<button
+										onClick={() => handleStartEditPayment(tx)}
+										className="p-2 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200"
+										title="Sửa"
+									>
+										<Pencil size={16} />
+									</button>
+					
+									<button
+										onClick={() => handleDeletePayment(tx)}
+										className="p-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100"
+										title="Xóa"
+									>
+										<Trash2 size={16} />
+									</button>
+									</div>
+								</td>
+								</tr>
+							))}
+							</tbody>
+						</table>
+						</div>
+					</div>
+					)}
+
 
                 <div className="bg-purple-50 rounded-2xl p-4 border border-purple-100 space-y-4">
                   <h4 className="font-bold text-xs uppercase tracking-widest text-purple-500">Thêm thanh toán</h4>

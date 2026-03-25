@@ -654,7 +654,7 @@ const handleOpenEdit = async (contract: Contract) => {
              <Loader2 className="animate-spin mr-2" /> Đang tải dữ liệu...
           </div>
         ) : (
-          <table className="w-full text-left">
+          <table className="w-full min-w-[760px] text-left">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Mã HĐ</th>

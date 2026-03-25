@@ -96,75 +96,6 @@ const ContractManager: React.FC<Props> = ({
   const mainModalMaxHeight = viewport.height - modalPadding * 2;
   const itemModalMaxWidth = Math.min(560, viewport.width - modalPadding * 2);
 
-  const hasUnsavedMainModalData = () => {
-    return Boolean(
-      form.customerName.trim() ||
-      form.customerPhone.trim() ||
-      form.customerAddress.trim() ||
-      form.items.length > 0 ||
-      form.schedules.length > 0 ||
-      form.terms.trim() ||
-      form.source.trim() ||
-      newPayment.amount > 0
-    );
-  };
-
-  const requestCloseMainModal = () => {
-    if (isSaving) return;
-
-    if (showServiceDropdown) {
-      setShowServiceDropdown(false);
-      return;
-    }
-
-    if (hasUnsavedMainModalData()) {
-      const confirmed = window.confirm('Bạn có chắc muốn đóng popup? Các thông tin đang nhập có thể chưa được lưu.');
-      if (!confirmed) return;
-    }
-
-    setIsModalOpen(false);
-  };
-
-  const requestCloseItemModal = () => {
-    if (isSaving) return;
-
-    if (editingItem) {
-      const hasUnsavedItemData = Boolean(
-        (editingItem.serviceDescription || '').trim() ||
-        (editingItem.notes || '').trim() ||
-        Number(editingItem.discount || 0) > 0 ||
-        Number(editingItem.quantity || 1) !== 1
-      );
-
-      if (hasUnsavedItemData) {
-        const confirmed = window.confirm('Bạn có chắc muốn đóng popup dịch vụ? Các thay đổi có thể chưa được lưu.');
-        if (!confirmed) return;
-      }
-    }
-
-    setIsItemEditModalOpen(false);
-  };
-
-  useEffect(() => {
-    if (!isModalOpen && !isItemEditModalOpen) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-
-      if (isItemEditModalOpen) {
-        requestCloseItemModal();
-        return;
-      }
-
-      if (isModalOpen) {
-        requestCloseMainModal();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isModalOpen, isItemEditModalOpen, isSaving, showServiceDropdown, form, newPayment, editingItem]);
-
   
   const paymentStages = ["Đặt cọc", "Đợt 1", "Đợt 2", "Đợt 3", "Đợt 4", "Đợt 5", "Thanh toán hết"];
 
@@ -778,7 +709,7 @@ const handleOpenEdit = async (contract: Contract) => {
         <div
           className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center"
           style={{ padding: modalPadding }}
-          onClick={requestCloseMainModal}
+          onClick={() => setIsModalOpen(false)}
         >
           <div
             className="bg-white w-full overflow-hidden flex flex-col shadow-2xl"
@@ -813,7 +744,7 @@ const handleOpenEdit = async (contract: Contract) => {
                 </button>
 
                 <button
-                  onClick={requestCloseMainModal}
+                  onClick={() => setIsModalOpen(false)}
                   className="p-2 hover:bg-slate-100 rounded-full"
                 >
                   <X size={24} />
@@ -1120,7 +1051,7 @@ const handleOpenEdit = async (contract: Contract) => {
         <div
           className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-center justify-center"
           style={{ padding: modalPadding }}
-          onClick={requestCloseItemModal}
+          onClick={() => setIsItemEditModalOpen(false)}
         >
           <div
             className="bg-white w-full p-4 md:p-6 shadow-2xl space-y-4 overflow-y-auto"
@@ -1182,7 +1113,7 @@ const handleOpenEdit = async (contract: Contract) => {
             </div>
 
             <div className="flex flex-col md:flex-row gap-2 pt-4">
-              <button onClick={requestCloseItemModal} className="flex-1 py-3 bg-slate-100 font-bold rounded-xl">Hủy</button>
+              <button onClick={() => setIsItemEditModalOpen(false)} className="flex-1 py-3 bg-slate-100 font-bold rounded-xl">Hủy</button>
               <button onClick={() => {
                 const sub = (editingItem.unitPrice || 0) * (editingItem.quantity || 1) - (editingItem.discount || 0);
                 const finalItem = { ...editingItem, subtotal: sub } as ContractItem;

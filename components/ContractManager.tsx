@@ -225,8 +225,7 @@ const handleOpenEdit = async (contract: Contract) => {
   }
 };
 
-  const handleSaveContract = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveContract = async () => {
     if (!form.customerName.trim() || form.items.length === 0) {
       setFormError("Vui lòng nhập Tên khách hàng và chọn ít nhất 1 dịch vụ.");
       return;
@@ -1130,6 +1129,7 @@ const handleOpenEdit = async (contract: Contract) => {
         </div>
       )}
     </div>
+  </div>
   );
 };
 

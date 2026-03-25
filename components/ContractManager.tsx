@@ -95,6 +95,82 @@ const ContractManager: React.FC<Props> = ({
   const mainModalMaxWidth = Math.min(1280, viewport.width - modalPadding * 2);
   const mainModalMaxHeight = viewport.height - modalPadding * 2;
   const itemModalMaxWidth = Math.min(560, viewport.width - modalPadding * 2);
+  const requestCloseMainModal = () => {
+    if (isSaving) return;
+
+    if (showServiceDropdown) {
+      setShowServiceDropdown(false);
+      return;
+    }
+
+    const hasUnsavedMainFormData =
+      !!editingContractId ||
+      form.customerName.trim() !== '' ||
+      form.customerPhone.trim() !== '' ||
+      form.customerAddress.trim() !== '' ||
+      form.items.length > 0 ||
+      form.schedules.length > 0 ||
+      form.paidAmount > 0 ||
+      form.totalAmount > 0 ||
+      form.terms.trim() !== '' ||
+      form.source.trim() !== '';
+
+    if (hasUnsavedMainFormData) {
+      const confirmed = window.confirm('Bạn có chắc muốn đóng popup hợp đồng? Dữ liệu chưa lưu có thể sẽ bị mất.');
+      if (!confirmed) return;
+    }
+
+    setIsModalOpen(false);
+  };
+
+  const requestCloseItemModal = () => {
+    if (isSaving) return;
+
+    const hasUnsavedItemData =
+      !!editingItem &&
+      (
+        (editingItem.serviceDescription || '').trim() !== '' ||
+        (editingItem.notes || '').trim() !== '' ||
+        Number(editingItem.quantity || 0) !== 1 ||
+        Number(editingItem.discount || 0) !== 0
+      );
+
+    if (hasUnsavedItemData) {
+      const confirmed = window.confirm('Bạn có chắc muốn đóng popup dịch vụ? Thay đổi chưa lưu có thể sẽ bị mất.');
+      if (!confirmed) return;
+    }
+
+    setIsItemEditModalOpen(false);
+  };
+
+  useEffect(() => {
+    const handleEscKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+
+      if (isItemEditModalOpen) {
+        requestCloseItemModal();
+        return;
+      }
+
+      if (isModalOpen) {
+        requestCloseMainModal();
+      }
+    };
+
+    window.addEventListener('keydown', handleEscKey);
+
+    return () => {
+      window.removeEventListener('keydown', handleEscKey);
+    };
+  }, [
+    isModalOpen,
+    isItemEditModalOpen,
+    isSaving,
+    showServiceDropdown,
+    editingContractId,
+    editingItem,
+    form
+  ]);
 
   
   const paymentStages = ["Đặt cọc", "Đợt 1", "Đợt 2", "Đợt 3", "Đợt 4", "Đợt 5", "Thanh toán hết"];
@@ -709,7 +785,7 @@ const handleOpenEdit = async (contract: Contract) => {
         <div
           className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center"
           style={{ padding: modalPadding }}
-          onClick={() => setIsModalOpen(false)}
+          onClick={requestCloseMainModal}
         >
           <div
             className="bg-white w-full overflow-hidden flex flex-col shadow-2xl"
@@ -1051,7 +1127,7 @@ const handleOpenEdit = async (contract: Contract) => {
         <div
           className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-center justify-center"
           style={{ padding: modalPadding }}
-          onClick={() => setIsItemEditModalOpen(false)}
+          onClick={requestCloseItemModal}
         >
           <div
             className="bg-white w-full p-4 md:p-6 shadow-2xl space-y-4 overflow-y-auto"

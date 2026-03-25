@@ -143,34 +143,7 @@ const ContractManager: React.FC<Props> = ({
     setIsItemEditModalOpen(false);
   };
 
-  useEffect(() => {
-    const handleEscKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
 
-      if (isItemEditModalOpen) {
-        requestCloseItemModal();
-        return;
-      }
-
-      if (isModalOpen) {
-        requestCloseMainModal();
-      }
-    };
-
-    window.addEventListener('keydown', handleEscKey);
-
-    return () => {
-      window.removeEventListener('keydown', handleEscKey);
-    };
-  }, [
-    isModalOpen,
-    isItemEditModalOpen,
-    isSaving,
-    showServiceDropdown,
-    editingContractId,
-    editingItem,
-    form
-  ]);
 
   
   const paymentStages = ["Đặt cọc", "Đợt 1", "Đợt 2", "Đợt 3", "Đợt 4", "Đợt 5", "Thanh toán hết"];
@@ -685,6 +658,35 @@ const handleOpenEdit = async (contract: Contract) => {
     (s.ma_dv && s.ma_dv.toLowerCase().includes(serviceSearch.toLowerCase())) || 
     (s.code && s.code.toLowerCase().includes(serviceSearch.toLowerCase()))
   );
+
+  useEffect(() => {
+    const handleEscKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+
+      if (isItemEditModalOpen) {
+        requestCloseItemModal();
+        return;
+      }
+
+      if (isModalOpen) {
+        requestCloseMainModal();
+      }
+    };
+
+    window.addEventListener('keydown', handleEscKey);
+
+    return () => {
+      window.removeEventListener('keydown', handleEscKey);
+    };
+  }, [
+    isModalOpen,
+    isItemEditModalOpen,
+    isSaving,
+    showServiceDropdown,
+    editingContractId,
+    editingItem,
+    form
+  ]);
 
   return (
     <div className="space-y-6">

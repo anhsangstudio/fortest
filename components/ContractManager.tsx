@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Plus, Search, X, Trash2, Calendar as CalIcon, User, CreditCard, Package, Settings, AlignLeft, MapPin, CalendarDays, AlertCircle, Loader2, CheckCircle2, History, Banknote, ArrowRight, CloudOff, Printer, ExternalLink, FileText, Briefcase, Wallet, Info, Tag, Edit3, UserPlus, Clock, Check, MessageSquare, FileCheck, Share2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Contract, ContractStatus, Service, Customer, Staff, ContractItem, Transaction, TransactionType, StudioInfo, Schedule } from '../types';
 import { syncData, isConfigured, generateContractCode, createScheduleLabel, updateScheduleLabel, deleteScheduleLabel, fetchContractsPaginated, fetchTransactionsByContractId } from '../apiService';
@@ -53,6 +54,7 @@ const ContractManager: React.FC<Props> = ({
   const [totalCount, setTotalCount] = useState(0);
   const [paginatedContracts, setPaginatedContracts] = useState<Contract[]>([]);
   const [isLoadingContracts, setIsLoadingContracts] = useState(false);
+  const [itemEditSnapshot, setItemEditSnapshot] = useState('');
   const getViewport = () => {
     if (typeof window === 'undefined') {
       return { width: 1280, height: 720 };
@@ -95,6 +97,129 @@ const ContractManager: React.FC<Props> = ({
   const mainModalMaxWidth = Math.min(1280, viewport.width - modalPadding * 2);
   const mainModalMaxHeight = viewport.height - modalPadding * 2;
   const itemModalMaxWidth = Math.min(560, viewport.width - modalPadding * 2);
+
+  const normalizeItemForCompare = (item: Partial<ContractItem> | null) => {
+    if (!item) return '';
+    return JSON.stringify({
+      id: item.id || '',
+      serviceId: item.serviceId || '',
+      serviceName: item.serviceName || '',
+      serviceDescription: item.serviceDescription || '',
+      unitPrice: Number(item.unitPrice || 0),
+      quantity: Number(item.quantity || 0),
+      discount: Number(item.discount || 0),
+      notes: item.notes || '',
+      salesPersonId: item.salesPersonId || '',
+    });
+  };
+
+  const hasFocusedEditableField = () => {
+    if (typeof document === 'undefined') return false;
+    const el = document.activeElement as HTMLElement | null;
+    if (!el) return false;
+    const tag = el.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+  };
+
+  const hasImportantUnsavedData = useMemo(() => {
+    return Boolean(
+      form.customerName.trim() ||
+      form.customerPhone.trim() ||
+      form.customerAddress.trim() ||
+      form.source.trim() ||
+      form.terms.trim() ||
+      form.items.length > 0 ||
+      form.schedules.length > 0 ||
+      Number(form.totalAmount) > 0 ||
+      Number(newPayment.amount) > 0
+    );
+  }, [form, newPayment.amount]);
+
+  const closeItemModal = (force = false) => {
+    if (isSaving) return;
+
+    const hasItemChanges =
+      !!editingItem && normalizeItemForCompare(editingItem) !== itemEditSnapshot;
+
+    if (!force && hasItemChanges) {
+      const shouldClose = window.confirm(
+        'Bạn đang sửa dịch vụ và có thay đổi chưa lưu. Đóng popup này sẽ mất các chỉnh sửa. Bạn vẫn muốn đóng chứ?'
+      );
+      if (!shouldClose) return;
+    }
+
+    setIsItemEditModalOpen(false);
+    setEditingItem(null);
+    setItemEditSnapshot('');
+  };
+
+  const closeMainModal = (force = false) => {
+    if (isSaving) return;
+
+    if (isItemEditModalOpen) {
+      closeItemModal(force);
+      return;
+    }
+
+    if (!force && showServiceDropdown) {
+      setShowServiceDropdown(false);
+      return;
+    }
+
+    if (!force && hasImportantUnsavedData) {
+      const message = hasFocusedEditableField()
+        ? 'Bạn đang nhập thông tin hợp đồng. Đóng popup này có thể làm mất dữ liệu chưa lưu. Bạn có chắc muốn đóng không?'
+        : 'Hợp đồng đang có dữ liệu chưa lưu. Bạn có chắc muốn đóng popup không?';
+
+      const shouldClose = window.confirm(message);
+      if (!shouldClose) return;
+    }
+
+    setShowServiceDropdown(false);
+    setServiceSearch('');
+    setIsManagingTypes(false);
+    setFormError(null);
+    setIsModalOpen(false);
+  };
+
+  const handleMainOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget) return;
+    closeMainModal(false);
+  };
+
+  const handleItemOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget) return;
+    closeItemModal(false);
+  };
+
+  useEffect(() => {
+    if (!isModalOpen && !isItemEditModalOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+
+      if (isItemEditModalOpen) {
+        closeItemModal(false);
+        return;
+      }
+
+      if (isModalOpen) {
+        closeMainModal(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    isModalOpen,
+    isItemEditModalOpen,
+    isSaving,
+    editingItem,
+    itemEditSnapshot,
+    showServiceDropdown,
+    hasImportantUnsavedData,
+  ]);
+
 
   
   const paymentStages = ["Đặt cọc", "Đợt 1", "Đợt 2", "Đợt 3", "Đợt 4", "Đợt 5", "Thanh toán hết"];
@@ -340,7 +465,7 @@ const handleOpenEdit = async (contract: Contract) => {
         setContracts(prev => prev.filter(c => c.id !== editingContractId)); 
         await loadContracts(); 
         await refreshTasks();
-        setIsModalOpen(false);
+        closeMainModal(true);
         setContractTransactions([]);
         setEditingContractId(null);
       } catch (e: any) { alert("Lỗi khi xóa"); } finally { setIsSaving(false); }
@@ -363,6 +488,7 @@ const handleOpenEdit = async (contract: Contract) => {
     };
     
     setEditingItem(newItem);
+    setItemEditSnapshot(normalizeItemForCompare(newItem));
     setIsItemEditModalOpen(true);
     setShowServiceDropdown(false);
     setServiceSearch('');
@@ -436,7 +562,9 @@ const handleOpenEdit = async (contract: Contract) => {
   };
 
   const handleEditItem = (item: ContractItem) => {
-    setEditingItem({ ...item });
+    const nextItem = { ...item };
+    setEditingItem(nextItem);
+    setItemEditSnapshot(normalizeItemForCompare(nextItem));
     setIsItemEditModalOpen(true);
   };
 
@@ -705,21 +833,30 @@ const handleOpenEdit = async (contract: Contract) => {
          </button>
       </div>
 
-      {isModalOpen && (
-        <div
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center"
-          style={{ padding: modalPadding }}
-          onClick={() => setIsModalOpen(false)}
-        >
-          <div
-            className="bg-white w-full overflow-hidden flex flex-col shadow-2xl"
-            style={{
-              maxWidth: mainModalMaxWidth,
-              maxHeight: mainModalMaxHeight,
-              borderRadius: isMobileViewport ? 20 : 32,
-            }}
-            onClick={(e) => e.stopPropagation()}
+      <AnimatePresence>
+        {isModalOpen && (
+          <motion.div
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center"
+            style={{ padding: modalPadding }}
+            onClick={handleMainOverlayClick}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
           >
+            <motion.div
+              className="bg-white w-full overflow-hidden flex flex-col shadow-2xl"
+              style={{
+                maxWidth: mainModalMaxWidth,
+                maxHeight: mainModalMaxHeight,
+                borderRadius: isMobileViewport ? 20 : 32,
+              }}
+              initial={{ opacity: 0, y: 24, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 16, scale: 0.985 }}
+              transition={{ type: 'spring', stiffness: 340, damping: 28 }}
+              onClick={(e) => e.stopPropagation()}
+            >
             <div className="px-4 md:px-8 py-4 md:py-6 border-b border-slate-100 flex items-center justify-between shrink-0 gap-3">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shrink-0">
@@ -744,7 +881,7 @@ const handleOpenEdit = async (contract: Contract) => {
                 </button>
 
                 <button
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={() => closeMainModal(false)}
                   className="p-2 hover:bg-slate-100 rounded-full"
                 >
                   <X size={24} />
@@ -1043,25 +1180,35 @@ const handleOpenEdit = async (contract: Contract) => {
                 </div>
               </div>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
-      {isItemEditModalOpen && editingItem && (
-        <div
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-center justify-center"
-          style={{ padding: modalPadding }}
-          onClick={() => setIsItemEditModalOpen(false)}
-        >
-          <div
-            className="bg-white w-full p-4 md:p-6 shadow-2xl space-y-4 overflow-y-auto"
-            style={{
-              maxWidth: itemModalMaxWidth,
-              maxHeight: mainModalMaxHeight,
-              borderRadius: isMobileViewport ? 20 : 28,
-            }}
-            onClick={(e) => e.stopPropagation()}
+      <AnimatePresence>
+        {isItemEditModalOpen && editingItem && (
+          <motion.div
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-center justify-center"
+            style={{ padding: modalPadding }}
+            onClick={handleItemOverlayClick}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.16 }}
           >
+            <motion.div
+              className="bg-white w-full p-4 md:p-6 shadow-2xl space-y-4 overflow-y-auto"
+              style={{
+                maxWidth: itemModalMaxWidth,
+                maxHeight: mainModalMaxHeight,
+                borderRadius: isMobileViewport ? 20 : 28,
+              }}
+              initial={{ opacity: 0, y: 18, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.985 }}
+              transition={{ type: 'spring', stiffness: 360, damping: 28 }}
+              onClick={(e) => e.stopPropagation()}
+            >
             <h3 className="font-black text-base md:text-lg">Chi tiết dịch vụ</h3>
 
             <div className="space-y-2">
@@ -1113,7 +1260,7 @@ const handleOpenEdit = async (contract: Contract) => {
             </div>
 
             <div className="flex flex-col md:flex-row gap-2 pt-4">
-              <button onClick={() => setIsItemEditModalOpen(false)} className="flex-1 py-3 bg-slate-100 font-bold rounded-xl">Hủy</button>
+              <button onClick={() => closeItemModal(false)} className="flex-1 py-3 bg-slate-100 font-bold rounded-xl">Hủy</button>
               <button onClick={() => {
                 const sub = (editingItem.unitPrice || 0) * (editingItem.quantity || 1) - (editingItem.discount || 0);
                 const finalItem = { ...editingItem, subtotal: sub } as ContractItem;
@@ -1122,12 +1269,15 @@ const handleOpenEdit = async (contract: Contract) => {
                 } else {
                   setForm({ ...form, items: [...form.items, finalItem], totalAmount: form.totalAmount + sub });
                 }
+                setEditingItem(null);
+                setItemEditSnapshot('');
                 setIsItemEditModalOpen(false);
               }} className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl">Xác nhận</button>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
     </div>
   </div>
   );

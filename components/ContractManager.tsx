@@ -625,33 +625,51 @@ const handleOpenEdit = async (contract: Contract) => {
       setIsSaving(false);
     }
   };
-  const handleDeletePayment = async (payment: Transaction) => {
-    if (!editingContractId) return;
   
+  const handleStartEditPayment = (tx: Transaction) => {
+    setEditingTxInHistoryId(tx.id);
+    setNewPayment({
+      amount: tx.amount || 0,
+      method: tx.vendor || 'Chuyển khoản',
+      stage: tx.category || 'Đặt cọc',
+      date: tx.date || new Date().toISOString().split('T')[0],
+      staffId: tx.staffId || currentUser?.id || ''
+    });
+  };
+
+  const handleDeletePayment = async (tx: Transaction) => {
+    if (!tx?.id) return;
+
     const confirmed = window.confirm('Bạn có chắc muốn xóa khoản thanh toán này không?');
     if (!confirmed) return;
-  
+
     setIsSaving(true);
     try {
-      await syncData('transactions', 'DELETE', { id: payment.id });
-  
-      setTransactions(prev => prev.filter(t => t.id !== payment.id));
-  
-      await loadContractTransactions(editingContractId);
-      await loadContracts();
-  
+      await syncData('transactions', 'DELETE', { id: tx.id });
+
+      setTransactions(prev => prev.filter(item => item.id !== tx.id));
+      setContractTransactions(prev => prev.filter(item => item.id !== tx.id));
+
       setForm(prev => ({
         ...prev,
-        paidAmount: Math.max(0, prev.paidAmount - payment.amount)
+        paidAmount: Math.max(0, prev.paidAmount - (tx.amount || 0))
       }));
-  
+
+      setEditingTxInHistoryId(prev => (prev === tx.id ? null : prev));
+
+      if (editingContractId) {
+        await loadContractTransactions(editingContractId);
+      }
+
+      await loadContracts();
       alert('Đã xóa khoản thanh toán thành công');
     } catch (e: any) {
-      alert('Lỗi khi xóa thanh toán: ' + e.message);
+      alert('Lỗi khi xóa khoản thanh toán: ' + (e?.message || 'Không xác định'));
     } finally {
       setIsSaving(false);
     }
   };
+  
   const filteredServices = services.filter(s => 
     s.name.toLowerCase().includes(serviceSearch.toLowerCase()) ||
     (s.type && s.type.toLowerCase().includes(serviceSearch.toLowerCase())) ||
@@ -1045,7 +1063,12 @@ const handleOpenEdit = async (contract: Contract) => {
                             <div className="text-xs text-slate-500">{tx.category} • {tx.vendor} • {formatDisplayDate(tx.date)}</div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <button className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold">Sửa</button>
+                            <button
+							onClick={() => handleStartEditPayment(tx)}
+							className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold"
+							>
+							Sửa
+							</button>
                           </div>
                         </div>
                       ))}

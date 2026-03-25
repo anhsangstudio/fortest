@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Plus, Search, X, Trash2, Calendar as CalIcon, User, CreditCard, Package, Settings, AlignLeft, MapPin, CalendarDays, AlertCircle, Loader2, CheckCircle2, History, Banknote, ArrowRight, CloudOff, Printer, ExternalLink, FileText, Briefcase, Wallet, Info, Tag, Edit3, UserPlus, Clock, Check, MessageSquare, FileCheck, Share2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Search, X, Trash2, Calendar as CalIcon, User, CreditCard, Package, Settings, AlignLeft, MapPin, CalendarDays, AlertCircle, Loader2, CheckCircle2, History, Banknote, ArrowRight, CloudOff, Printer, ExternalLink, FileText, Briefcase, Wallet, Info, Tag, Edit3, UserPlus, Clock, Check, MessageSquare, FileCheck, Share2, ChevronLeft, Pencil, ChevronRight } from 'lucide-react';
 import { Contract, ContractStatus, Service, Customer, Staff, ContractItem, Transaction, TransactionType, StudioInfo, Schedule } from '../types';
 import { syncData, isConfigured, generateContractCode, createScheduleLabel, updateScheduleLabel, deleteScheduleLabel, fetchContractsPaginated, fetchTransactionsByContractId } from '../apiService';
 import ContractPrint from './ContractPrint';
@@ -1065,9 +1065,15 @@ const handleOpenEdit = async (contract: Contract) => {
                           <div className="flex items-center gap-2">
                             <button
 							onClick={() => handleStartEditPayment(tx)}
-							className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold"
+							className="p-2 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200"
 							>
-							Sửa
+							<Pencil size={16} />
+							</button>
+							<button
+							onClick={() => handleDeletePayment(tx)}
+							className="p-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100"
+							>
+							<Trash2 size={16} />
 							</button>
                           </div>
                         </div>

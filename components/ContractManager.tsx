@@ -648,6 +648,7 @@ const handleOpenEdit = async (contract: Contract) => {
       </div>
 
       <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+      <div className="overflow-x-auto">
         {isLoadingContracts ? (
           <div className="p-10 flex justify-center items-center text-slate-400">
              <Loader2 className="animate-spin mr-2" /> Đang tải dữ liệu...

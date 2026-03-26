@@ -895,6 +895,34 @@ export const enrichConsultationLogs = (
   });
 };
 
+export const fetchConsultationListData = async (
+  page: number = 1,
+  pageSize: number = 20,
+  filters?: Partial<ConsultationFilter>
+) => {
+  const [masterData, paginatedLogs] = await Promise.all([
+    fetchConsultationMasterData(),
+    fetchConsultationLogsPaginated(page, pageSize, filters),
+  ]);
+
+  const logIds = paginatedLogs.data.map((item) => item.id);
+
+  const logServices = await fetchConsultationLogServicesByLogIds(logIds);
+
+  const enrichedData = enrichConsultationLogs(
+    paginatedLogs.data,
+    masterData,
+    logServices
+  );
+
+  return {
+    ...paginatedLogs,
+    data: enrichedData,
+    masterData,
+    logServices,
+  };
+};
+
 export const fetchContractsPaginated = async (page: number, pageSize: number, searchCode: string = '', searchName: string = '') => {
   if (!supabase) return { data: [], count: 0 };
   const from = (page - 1) * pageSize;

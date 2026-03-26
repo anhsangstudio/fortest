@@ -12,6 +12,7 @@ import StaffManager from './components/StaffManager';
 import ProductManager from './components/ProductManager';
 import StudioSettings from './components/StudioSettings';
 import TaskManager from './components/TaskManager';
+import ConsultationManager from './components/ConsultationManager';
 import { 
   Contract, Customer, Staff, Service, Transaction, Schedule, 
   Task, StudioInfo, ExpenseCategoryItem, ServiceTypeItem, ServiceGroupItem 

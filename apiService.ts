@@ -28,7 +28,8 @@ import { Service,
 		ConsultationRejectionReason,
 		ConsultationService,
 		ConsultationLog,
-		ConsultationFilter, } from './types';
+		ConsultationFilter,
+		ConsultationLogService,} from './types';
 
 const SUPABASE_URL = (import.meta as any).env?.VITE_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
@@ -798,6 +799,78 @@ export const fetchConsultationLogsPaginated = async (
     pageSize: safePageSize,
     totalPages: Math.ceil((count || 0) / safePageSize),
   };
+};
+
+type ConsultationMasterDataBundle = {
+  sources: ConsultationSource[];
+  statuses: ConsultationStatus[];
+  rejectionReasons: ConsultationRejectionReason[];
+  services: ConsultationService[];
+  staffOptions: Array<{
+    id: string;
+    name: string;
+    role?: string;
+    status?: string;
+  }>;
+};
+
+export const enrichConsultationLogs = (
+  logs: ConsultationLog[],
+  masterData: ConsultationMasterDataBundle,
+  logServices: ConsultationLogService[] = []
+): ConsultationLog[] => {
+  const sourceMap = new Map(
+    masterData.sources.map((item) => [item.id, item.ten_nguon])
+  );
+
+  const statusMap = new Map(
+    masterData.statuses.map((item) => [item.id, item.ten_tinh_trang])
+  );
+
+  const rejectionReasonMap = new Map(
+    masterData.rejectionReasons.map((item) => [item.id, item.ten_ly_do])
+  );
+
+  const serviceMap = new Map(
+    masterData.services.map((item) => [item.id, item.ten_dich_vu])
+  );
+
+  const staffMap = new Map(
+    masterData.staffOptions.map((item) => [item.id, item.name])
+  );
+
+  const serviceIdsByLogId = new Map<string, string[]>();
+
+  for (const row of logServices) {
+    const current = serviceIdsByLogId.get(row.consultation_log_id) || [];
+    current.push(row.service_id);
+    serviceIdsByLogId.set(row.consultation_log_id, current);
+  }
+
+  return logs.map((log) => {
+    const serviceIds = serviceIdsByLogId.get(log.id) || [];
+    const serviceNames = serviceIds
+      .map((id) => serviceMap.get(id))
+      .filter(Boolean) as string[];
+
+    return {
+      ...log,
+      nguon_khach_hang_ten: log.nguon_khach_hang_id
+        ? sourceMap.get(log.nguon_khach_hang_id) || ''
+        : '',
+      tinh_trang_ten: log.tinh_trang_id
+        ? statusMap.get(log.tinh_trang_id) || ''
+        : '',
+      ly_do_tu_choi_ten: log.ly_do_tu_choi_id
+        ? rejectionReasonMap.get(log.ly_do_tu_choi_id) || ''
+        : '',
+      nhan_vien_tu_van_ten: log.nhan_vien_tu_van
+        ? staffMap.get(log.nhan_vien_tu_van) || ''
+        : '',
+      dich_vu_quan_tam_ids: serviceIds,
+      dich_vu_quan_tam_ten: serviceNames,
+    };
+  });
 };
 
 export const fetchContractsPaginated = async (page: number, pageSize: number, searchCode: string = '', searchName: string = '') => {

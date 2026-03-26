@@ -405,6 +405,224 @@ const ConsultationManager: React.FC = () => {
           </>
         )}
       </div>
+	  {isCreateModalOpen && (
+	    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+	   	 <div className="w-full max-w-4xl rounded-2xl bg-white shadow-xl overflow-hidden">
+	   	 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+	   		 <h2 className="text-xl font-bold text-gray-800">
+	   		 Thêm mới nhật ký tư vấn
+	   		 </h2>
+	   		 <button
+	   		 type="button"
+	   		 onClick={closeCreateModal}
+	   		 className="text-gray-500 hover:text-gray-700"
+	   		 >
+	   		 Đóng
+	   		 </button>
+	   	 </div>
+	    
+	   	 <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[75vh] overflow-y-auto">
+	   		 <div>
+	   		 <label className="block text-sm font-medium text-gray-700 mb-1">
+	   			 Ngày tư vấn
+	   		 </label>
+	   		 <input
+	   			 type="date"
+	   			 value={formData.ngay_tu_van}
+	   			 onChange={(e) => handleFormChange('ngay_tu_van', e.target.value)}
+	   			 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+	   		 />
+	   		 </div>
+	    
+	   		 <div>
+	   		 <label className="block text-sm font-medium text-gray-700 mb-1">
+	   			 Tên khách hàng <span className="text-red-500">*</span>
+	   		 </label>
+	   		 <input
+	   			 type="text"
+	   			 value={formData.ten_khach_hang}
+	   			 onChange={(e) =>
+	   			 handleFormChange('ten_khach_hang', e.target.value)
+	   			 }
+	   			 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+	   			 placeholder="Nhập tên khách hàng"
+	   		 />
+	   		 </div>
+	    
+	   		 <div>
+	   		 <label className="block text-sm font-medium text-gray-700 mb-1">
+	   			 Địa chỉ
+	   		 </label>
+	   		 <input
+	   			 type="text"
+	   			 value={formData.dia_chi}
+	   			 onChange={(e) => handleFormChange('dia_chi', e.target.value)}
+	   			 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+	   		 />
+	   		 </div>
+	    
+	   		 <div>
+	   		 <label className="block text-sm font-medium text-gray-700 mb-1">
+	   			 Số điện thoại
+	   		 </label>
+	   		 <input
+	   			 type="text"
+	   			 value={formData.so_dien_thoai}
+	   			 onChange={(e) =>
+	   			 handleFormChange('so_dien_thoai', e.target.value)
+	   			 }
+	   			 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+	   		 />
+	   		 </div>
+	    
+	   		 <div>
+	   		 <label className="block text-sm font-medium text-gray-700 mb-1">
+	   			 Ngày dự định chụp
+	   		 </label>
+	   		 <input
+	   			 type="date"
+	   			 value={formData.ngay_du_dinh_chup}
+	   			 onChange={(e) =>
+	   			 handleFormChange('ngay_du_dinh_chup', e.target.value)
+	   			 }
+	   			 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+	   		 />
+	   		 </div>
+	    
+	   		 <div>
+	   		 <label className="block text-sm font-medium text-gray-700 mb-1">
+	   			 Ngày ăn hỏi
+	   		 </label>
+	   		 <input
+	   			 type="date"
+	   			 value={formData.ngay_an_hoi}
+	   			 onChange={(e) => handleFormChange('ngay_an_hoi', e.target.value)}
+	   			 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+	   		 />
+	   		 </div>
+	    
+	   		 <div>
+	   		 <label className="block text-sm font-medium text-gray-700 mb-1">
+	   			 Ngày cưới
+	   		 </label>
+	   		 <input
+	   			 type="date"
+	   			 value={formData.ngay_cuoi}
+	   			 onChange={(e) => handleFormChange('ngay_cuoi', e.target.value)}
+	   			 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+	   		 />
+	   		 </div>
+	    
+	   		 <div>
+	   		 <label className="block text-sm font-medium text-gray-700 mb-1">
+	   			 Nguồn khách
+	   		 </label>
+	   		 <select
+	   			 value={formData.nguon_khach_hang_id}
+	   			 onChange={(e) =>
+	   			 handleFormChange('nguon_khach_hang_id', e.target.value)
+	   			 }
+	   			 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+	   		 >
+	   			 <option value="">Chọn nguồn khách</option>
+	   			 {masterData.sources.map((item) => (
+	   			 <option key={item.id} value={item.id}>
+	   				 {item.ten_nguon}
+	   			 </option>
+	   			 ))}
+	   		 </select>
+	   		 </div>
+	    
+	   		 <div>
+	   		 <label className="block text-sm font-medium text-gray-700 mb-1">
+	   			 Tình trạng
+	   		 </label>
+	   		 <select
+	   			 value={formData.tinh_trang_id}
+	   			 onChange={(e) =>
+	   			 handleFormChange('tinh_trang_id', e.target.value)
+	   			 }
+	   			 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+	   		 >
+	   			 <option value="">Chọn tình trạng</option>
+	   			 {masterData.statuses.map((item) => (
+	   			 <option key={item.id} value={item.id}>
+	   				 {item.ten_tinh_trang}
+	   			 </option>
+	   			 ))}
+	   		 </select>
+	   		 </div>
+	    
+	   		 <div>
+	   		 <label className="block text-sm font-medium text-gray-700 mb-1">
+	   			 Nhân viên tư vấn
+	   		 </label>
+	   		 <select
+	   			 value={formData.nhan_vien_tu_van}
+	   			 onChange={(e) =>
+	   			 handleFormChange('nhan_vien_tu_van', e.target.value)
+	   			 }
+	   			 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+	   		 >
+	   			 <option value="">Chọn nhân viên tư vấn</option>
+	   			 {masterData.staffOptions.map((item) => (
+	   			 <option key={item.id} value={item.id}>
+	   				 {item.name}
+	   			 </option>
+	   			 ))}
+	   		 </select>
+	   		 </div>
+	    
+	   		 <div>
+	   		 <label className="block text-sm font-medium text-gray-700 mb-1">
+	   			 Tổng giá trị dự kiến
+	   		 </label>
+	   		 <input
+	   			 type="number"
+	   			 value={formData.tong_gia_tri_du_kien}
+	   			 onChange={(e) =>
+	   			 handleFormChange('tong_gia_tri_du_kien', e.target.value)
+	   			 }
+	   			 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+	   			 placeholder="0"
+	   		 />
+	   		 </div>
+	    
+	   		 <div className="md:col-span-2">
+	   		 <label className="block text-sm font-medium text-gray-700 mb-1">
+	   			 Ghi chú
+	   		 </label>
+	   		 <textarea
+	   			 value={formData.ghi_chu}
+	   			 onChange={(e) => handleFormChange('ghi_chu', e.target.value)}
+	   			 rows={4}
+	   			 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+	   		 />
+	   		 </div>
+	   	 </div>
+	    
+	   	 <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
+	   		 <button
+	   		 type="button"
+	   		 onClick={closeCreateModal}
+	   		 disabled={saving}
+	   		 className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-white disabled:opacity-50"
+	   		 >
+	   		 Hủy
+	   		 </button>
+	    
+	   		 <button
+	   		 type="button"
+	   		 onClick={handleCreate}
+	   		 disabled={saving}
+	   		 className="rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+	   		 >
+	   		 {saving ? 'Đang lưu...' : 'Lưu'}
+	   		 </button>
+	   	 </div>
+	   	 </div>
+	    </div>
+	    )}
     </div>
   );
 };

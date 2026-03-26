@@ -801,6 +801,28 @@ export const fetchConsultationLogsPaginated = async (
   };
 };
 
+export const fetchConsultationLogServicesByLogIds = async (
+  logIds: string[]
+): Promise<ConsultationLogService[]> => {
+  if (!logIds || logIds.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from('consultation_log_services')
+    .select('id, consultation_log_id, service_id, created_at')
+    .in('consultation_log_id', logIds);
+
+  if (error) throw error;
+
+  return (data || []).map((row: any) => ({
+    id: row.id,
+    consultation_log_id: row.consultation_log_id,
+    service_id: row.service_id,
+    created_at: row.created_at,
+  }));
+};
+
 type ConsultationMasterDataBundle = {
   sources: ConsultationSource[];
   statuses: ConsultationStatus[];

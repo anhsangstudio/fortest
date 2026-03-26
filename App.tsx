@@ -243,6 +243,10 @@ export default function App() {
                   visible={canAccess('schedules')}
                />
                <SidebarItem 
+			      icon={Users} label="Nhật ký tư vấn" id="consultation" activeTab={activeTab} setActiveTab={setActiveTab} 
+			      visible={true}
+			   />
+               <SidebarItem 
                   icon={DollarSign} label="Thu & Chi" id="finance" activeTab={activeTab} setActiveTab={setActiveTab} 
                   visible={canAccess('finance')}
                />
@@ -294,6 +298,7 @@ export default function App() {
                   {activeTab === 'contracts' && 'Quản lý Hợp đồng'}
                   {activeTab === 'tasks' && 'Quản lý Công việc'}
                   {activeTab === 'schedule' && 'Lịch làm việc'}
+				  {activeTab === 'consultation' && 'Nhật ký tư vấn'}
                   {activeTab === 'finance' && 'Quản lý Tài chính'}
                   {activeTab === 'payroll' && 'Bảng lương nhân sự'}
                   {activeTab === 'staff' && 'Danh sách nhân viên'}
@@ -334,6 +339,9 @@ export default function App() {
                 contracts={contracts}
                 customers={customers}
               />
+            )}
+			{activeTab === 'consultation' && (
+              <ConsultationManager />
             )}
             {((activeTab === 'finance' && canAccess('finance')) || activeTab === 'quick_expense') && (
               <ExpenseManager 

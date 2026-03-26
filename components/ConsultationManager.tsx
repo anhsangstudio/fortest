@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { fetchConsultationListData } from '../apiService';
-import { supabase } from '../apiClient';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.1';
 import type { ConsultationFilter, ConsultationLog } from '../types';
 
 const DEFAULT_PAGE_SIZE = 20;

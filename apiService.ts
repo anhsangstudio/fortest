@@ -437,6 +437,141 @@ const salaryItemFromDb = (db: any): SalaryItem => ({
   id: db.id, salarySlipId: db.salary_slip_id, type: db.type, title: db.title, amount: db.amount, source: db.source, refId: db.ref_id, createdAt: db.created_at
 });
 
+// ================================
+// CONSULTATION MODULE MAPPERS
+// ================================
+
+const consultationSourceFromDb = (row: any): ConsultationSource => ({
+  id: row.id,
+  ten_nguon: row.ten_nguon,
+  mau_hien_thi: row.mau_hien_thi,
+  thu_tu_hien_thi: row.thu_tu_hien_thi ?? 0,
+  dang_su_dung: row.dang_su_dung ?? true,
+  created_at: row.created_at,
+  updated_at: row.updated_at,
+});
+
+const consultationStatusFromDb = (row: any): ConsultationStatus => ({
+  id: row.id,
+  ten_tinh_trang: row.ten_tinh_trang,
+  mau_hien_thi: row.mau_hien_thi,
+  nhom_trang_thai: row.nhom_trang_thai,
+  thu_tu_hien_thi: row.thu_tu_hien_thi ?? 0,
+  dang_su_dung: row.dang_su_dung ?? true,
+  la_trang_thai_chot: row.la_trang_thai_chot ?? false,
+  la_trang_thai_tu_choi: row.la_trang_thai_tu_choi ?? false,
+  la_trang_thai_dong: row.la_trang_thai_dong ?? false,
+  created_at: row.created_at,
+  updated_at: row.updated_at,
+});
+
+const consultationRejectionReasonFromDb = (row: any): ConsultationRejectionReason => ({
+  id: row.id,
+  ten_ly_do: row.ten_ly_do,
+  thu_tu_hien_thi: row.thu_tu_hien_thi ?? 0,
+  dang_su_dung: row.dang_su_dung ?? true,
+  created_at: row.created_at,
+  updated_at: row.updated_at,
+});
+
+const consultationServiceFromDb = (row: any): ConsultationService => ({
+  id: row.id,
+  ten_dich_vu: row.ten_dich_vu,
+  mau_hien_thi: row.mau_hien_thi,
+  thu_tu_hien_thi: row.thu_tu_hien_thi ?? 0,
+  dang_su_dung: row.dang_su_dung ?? true,
+  created_at: row.created_at,
+  updated_at: row.updated_at,
+});
+
+const consultationLogFromDb = (row: any): ConsultationLog => ({
+  id: row.id,
+  ngay_tu_van: row.ngay_tu_van,
+  ten_khach_hang: row.ten_khach_hang,
+  nickname: row.nickname,
+  dia_chi: row.dia_chi,
+  so_dien_thoai: row.so_dien_thoai,
+
+  ngay_du_dinh_chup: row.ngay_du_dinh_chup,
+  ngay_an_hoi: row.ngay_an_hoi,
+  ngay_cuoi: row.ngay_cuoi,
+
+  nguon_khach_hang_id: row.nguon_khach_hang_id,
+  tinh_trang_id: row.tinh_trang_id,
+  ly_do_tu_choi_id: row.ly_do_tu_choi_id,
+  nhan_vien_tu_van: row.nhan_vien_tu_van,
+
+  tong_gia_tri_du_kien: Number(row.tong_gia_tri_du_kien ?? 0),
+  ghi_chu: row.ghi_chu,
+
+  lead_score: row.lead_score,
+  next_follow_up_date: row.next_follow_up_date,
+
+  created_at: row.created_at,
+  updated_at: row.updated_at,
+
+  nguon_khach_hang_ten: row.nguon_khach_hang_ten,
+  tinh_trang_ten: row.tinh_trang_ten,
+  ly_do_tu_choi_ten: row.ly_do_tu_choi_ten,
+  nhan_vien_tu_van_ten: row.nhan_vien_tu_van_ten,
+  dich_vu_quan_tam_ids: row.dich_vu_quan_tam_ids ?? [],
+  dich_vu_quan_tam_ten: row.dich_vu_quan_tam_ten ?? [],
+});
+
+const consultationSourceToDb = (item: Partial<ConsultationSource>) => ({
+  ten_nguon: item.ten_nguon,
+  mau_hien_thi: item.mau_hien_thi ?? null,
+  thu_tu_hien_thi: item.thu_tu_hien_thi ?? 0,
+  dang_su_dung: item.dang_su_dung ?? true,
+});
+
+const consultationStatusToDb = (item: Partial<ConsultationStatus>) => ({
+  ten_tinh_trang: item.ten_tinh_trang,
+  mau_hien_thi: item.mau_hien_thi ?? null,
+  nhom_trang_thai: item.nhom_trang_thai ?? null,
+  thu_tu_hien_thi: item.thu_tu_hien_thi ?? 0,
+  dang_su_dung: item.dang_su_dung ?? true,
+  la_trang_thai_chot: item.la_trang_thai_chot ?? false,
+  la_trang_thai_tu_choi: item.la_trang_thai_tu_choi ?? false,
+  la_trang_thai_dong: item.la_trang_thai_dong ?? false,
+});
+
+const consultationRejectionReasonToDb = (item: Partial<ConsultationRejectionReason>) => ({
+  ten_ly_do: item.ten_ly_do,
+  thu_tu_hien_thi: item.thu_tu_hien_thi ?? 0,
+  dang_su_dung: item.dang_su_dung ?? true,
+});
+
+const consultationServiceToDb = (item: Partial<ConsultationService>) => ({
+  ten_dich_vu: item.ten_dich_vu,
+  mau_hien_thi: item.mau_hien_thi ?? null,
+  thu_tu_hien_thi: item.thu_tu_hien_thi ?? 0,
+  dang_su_dung: item.dang_su_dung ?? true,
+});
+
+const consultationLogToDb = (item: Partial<ConsultationLog>) => ({
+  ngay_tu_van: item.ngay_tu_van,
+  ten_khach_hang: item.ten_khach_hang,
+  nickname: item.nickname ?? null,
+  dia_chi: item.dia_chi ?? null,
+  so_dien_thoai: item.so_dien_thoai ?? null,
+
+  ngay_du_dinh_chup: item.ngay_du_dinh_chup ?? null,
+  ngay_an_hoi: item.ngay_an_hoi ?? null,
+  ngay_cuoi: item.ngay_cuoi ?? null,
+
+  nguon_khach_hang_id: item.nguon_khach_hang_id ?? null,
+  tinh_trang_id: item.tinh_trang_id ?? null,
+  ly_do_tu_choi_id: item.ly_do_tu_choi_id ?? null,
+  nhan_vien_tu_van: item.nhan_vien_tu_van ?? null,
+
+  tong_gia_tri_du_kien: item.tong_gia_tri_du_kien ?? 0,
+  ghi_chu: item.ghi_chu ?? null,
+
+  lead_score: item.lead_score ?? null,
+  next_follow_up_date: item.next_follow_up_date ?? null,
+});
+
 const fetchTransactionsByContractIds = async (contractIds: string[]): Promise<Map<string, Transaction[]>> => {
   const txMap = new Map<string, Transaction[]>();
   const ids = Array.from(new Set((contractIds || []).filter(Boolean)));

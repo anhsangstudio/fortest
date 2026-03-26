@@ -680,6 +680,69 @@ export const fetchBootstrapData = async () => {
   return { services, staff, customers, contracts: Array.from(contractMap.values()), transactions, schedules: [], studioInfo, expenseCategories, serviceTypes, tasks: [], scheduleLabels, serviceGroups };
 };
 
+export const fetchConsultationMasterData = async () => {
+  const [
+    sourcesRes,
+    statusesRes,
+    rejectionReasonsRes,
+    servicesRes,
+    staffRes,
+  ] = await Promise.all([
+    supabase
+      .from('consultation_sources')
+      .select('*')
+      .eq('dang_su_dung', true)
+      .order('thu_tu_hien_thi', { ascending: true })
+      .order('ten_nguon', { ascending: true }),
+
+    supabase
+      .from('consultation_statuses')
+      .select('*')
+      .eq('dang_su_dung', true)
+      .order('thu_tu_hien_thi', { ascending: true })
+      .order('ten_tinh_trang', { ascending: true }),
+
+    supabase
+      .from('consultation_rejection_reasons')
+      .select('*')
+      .eq('dang_su_dung', true)
+      .order('thu_tu_hien_thi', { ascending: true })
+      .order('ten_ly_do', { ascending: true }),
+
+    supabase
+      .from('consultation_services')
+      .select('*')
+      .eq('dang_su_dung', true)
+      .order('thu_tu_hien_thi', { ascending: true })
+      .order('ten_dich_vu', { ascending: true }),
+
+    supabase
+      .from('staff')
+      .select('id, name, role, status')
+      .eq('status', 'active')
+      .order('name', { ascending: true }),
+  ]);
+
+  if (sourcesRes.error) throw sourcesRes.error;
+  if (statusesRes.error) throw statusesRes.error;
+  if (rejectionReasonsRes.error) throw rejectionReasonsRes.error;
+  if (servicesRes.error) throw servicesRes.error;
+  if (staffRes.error) throw staffRes.error;
+
+  return {
+    sources: (sourcesRes.data || []).map(consultationSourceFromDb),
+    statuses: (statusesRes.data || []).map(consultationStatusFromDb),
+    rejectionReasons: (rejectionReasonsRes.data || []).map(consultationRejectionReasonFromDb),
+    services: (servicesRes.data || []).map(consultationServiceFromDb),
+    staffOptions: (staffRes.data || []).map((row: any) => ({
+      id: row.id,
+      name: row.name,
+      role: row.role,
+      status: row.status,
+    })),
+  };
+};
+
 export const fetchContractsPaginated = async (page: number, pageSize: number, searchCode: string = '', searchName: string = '') => {
   if (!supabase) return { data: [], count: 0 };
   const from = (page - 1) * pageSize;

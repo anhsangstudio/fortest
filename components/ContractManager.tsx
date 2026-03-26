@@ -580,50 +580,104 @@ const handleOpenEdit = async (contract: Contract) => {
   };
 
   const handleAddExtraPayment = async () => {
-    if (!editingContractId || newPayment.amount <= 0) return;
-    setIsSaving(true);
-    try {
-      const txObj: Transaction = {
-        id: 'tx-' + Math.random().toString(36).substr(2, 9),
-        type: TransactionType.INCOME,
-        mainCategory: 'Hợp đồng',
-        category: newPayment.stage,
-        amount: newPayment.amount,
-        description: `Thanh toán ${newPayment.stage} HĐ ${form.contractCode}`,
-        date: newPayment.date,
-        contractId: editingContractId,
-        vendor: newPayment.method,
-        staffId: newPayment.staffId || currentUser?.id
-      };
-
-      const res = await syncData('transactions', 'CREATE', {
-        ...txObj,
-        contractCode: form.contractCode,
-        staffName: staff.find(s => s.id === txObj.staffId)?.name || 'N/A'
-      });
-
-      if (editingContractId) {
-        await loadContractTransactions(editingContractId);
-        }
-      
-      if (res.success) {
-        setTransactions(prev => [txObj, ...prev]);
-        setContracts(prev => prev.map(c => c.id === editingContractId ? { ...c, paidAmount: c.paidAmount + txObj.amount } : c));
-        setForm(prev => ({ ...prev, paidAmount: prev.paidAmount + txObj.amount }));
-        setNewPayment({
-          ...newPayment,
-          amount: 0,
-          date: new Date().toISOString().split('T')[0],
-          staffId: currentUser?.id || ''
-        });
-        await loadContracts(); 
-        alert("Đã thêm thanh toán thành công");
-      }
-    } catch (e: any) {
-      alert("Lỗi khi thêm thanh toán: " + e.message);
-    } finally {
-      setIsSaving(false);
-    }
+	if (!editingContractId || newPayment.amount <= 0) return;
+	
+	setIsSaving(true);
+	try {
+		const isEditingPayment = !!editingTxInHistoryId;
+	
+		const txObj: Transaction = {
+		id: isEditingPayment
+			? editingTxInHistoryId
+			: 'tx-' + Math.random().toString(36).substr(2, 9),
+		type: TransactionType.INCOME,
+		mainCategory: 'Hợp đồng',
+		category: newPayment.stage,
+		amount: newPayment.amount,
+		description: `Thanh toán ${newPayment.stage} HĐ ${form.contractCode}`,
+		date: newPayment.date,
+		contractId: editingContractId,
+		vendor: newPayment.method,
+		staffId: newPayment.staffId || currentUser?.id || ''
+		};
+	
+		const payload = {
+		...txObj,
+		contractCode: form.contractCode,
+		staffName: staff.find(s => s.id === txObj.staffId)?.name || 'N/A'
+		};
+	
+		const res = await syncData(
+		'transactions',
+		isEditingPayment ? 'UPDATE' : 'CREATE',
+		payload
+		);
+	
+		if (editingContractId) {
+		await loadContractTransactions(editingContractId);
+		}
+	
+		if (res.success) {
+		if (isEditingPayment) {
+			setTransactions(prev =>
+			prev.map(item => (item.id === txObj.id ? { ...item, ...txObj } : item))
+			);
+	
+			setContracts(prev =>
+			prev.map(c =>
+				c.id === editingContractId
+				? {
+					...c,
+					paidAmount:
+						form.totalAmount -
+						Math.max(0, form.totalAmount - newPayment.amount)
+					}
+				: c
+			)
+			);
+	
+			setForm(prev => ({
+			...prev,
+			paidAmount:
+				contractPayments
+				.filter(tx => tx.id !== txObj.id)
+				.reduce((sum, tx) => sum + (tx.amount || 0), 0) + txObj.amount
+			}));
+	
+			alert('Đã cập nhật thanh toán thành công');
+		} else {
+			setTransactions(prev => [txObj, ...prev]);
+			setContracts(prev =>
+			prev.map(c =>
+				c.id === editingContractId
+				? { ...c, paidAmount: c.paidAmount + txObj.amount }
+				: c
+			)
+			);
+			setForm(prev => ({ ...prev, paidAmount: prev.paidAmount + txObj.amount }));
+	
+			alert('Đã thêm thanh toán thành công');
+		}
+	
+		setEditingTxInHistoryId(null);
+	
+		setNewPayment({
+			...newPayment,
+			amount: 0,
+			date: new Date().toISOString().split('T')[0],
+			staffId: currentUser?.id || ''
+		});
+	
+		await loadContracts();
+		}
+	} catch (e: any) {
+		alert(
+		`Lỗi khi ${editingTxInHistoryId ? 'cập nhật' : 'thêm'} thanh toán: ` +
+		(e?.message || 'Không xác định')
+		);
+	} finally {
+		setIsSaving(false);
+	}
   };
   
   const handleStartEditPayment = (tx: Transaction) => {

@@ -328,7 +328,103 @@ export interface AIRule {
   vendor?: string;
   category: ExpenseCategory;
 }
+// ================================
+// CONSULTATION MODULE TYPES
+// ================================
 
+export interface ConsultationSource {
+  id: string;
+  ten_nguon: string;
+  mau_hien_thi?: string | null;
+  thu_tu_hien_thi?: number;
+  dang_su_dung?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ConsultationStatus {
+  id: string;
+  ten_tinh_trang: string;
+  mau_hien_thi?: string | null;
+  nhom_trang_thai?: string | null;
+  thu_tu_hien_thi?: number;
+  dang_su_dung?: boolean;
+  la_trang_thai_chot?: boolean;
+  la_trang_thai_tu_choi?: boolean;
+  la_trang_thai_dong?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ConsultationRejectionReason {
+  id: string;
+  ten_ly_do: string;
+  thu_tu_hien_thi?: number;
+  dang_su_dung?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ConsultationService {
+  id: string;
+  ten_dich_vu: string;
+  mau_hien_thi?: string | null;
+  thu_tu_hien_thi?: number;
+  dang_su_dung?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ConsultationLogService {
+  id: string;
+  consultation_log_id: string;
+  service_id: string;
+  created_at?: string;
+}
+
+export interface ConsultationLog {
+  id: string;
+  ngay_tu_van: string;
+  ten_khach_hang: string;
+  nickname?: string | null;
+  dia_chi?: string | null;
+  so_dien_thoai?: string | null;
+
+  ngay_du_dinh_chup?: string | null;
+  ngay_an_hoi?: string | null;
+  ngay_cuoi?: string | null;
+
+  nguon_khach_hang_id?: string | null;
+  tinh_trang_id?: string | null;
+  ly_do_tu_choi_id?: string | null;
+  nhan_vien_tu_van?: string | null;
+
+  tong_gia_tri_du_kien?: number;
+  ghi_chu?: string | null;
+
+  lead_score?: string | null;
+  next_follow_up_date?: string | null;
+
+  created_at?: string;
+  updated_at?: string;
+
+  // Virtual fields cho UI / report
+  nguon_khach_hang_ten?: string;
+  tinh_trang_ten?: string;
+  ly_do_tu_choi_ten?: string;
+  nhan_vien_tu_van_ten?: string;
+  dich_vu_quan_tam_ids?: string[];
+  dich_vu_quan_tam_ten?: string[];
+}
+
+export interface ConsultationFilter {
+  tu_khoa: string;
+  tinh_trang_id?: string;
+  nguon_khach_hang_id?: string;
+  nhan_vien_tu_van?: string;
+  tu_ngay?: string;
+  den_ngay?: string;
+}
 // Constants
 export const DEFAULT_SCHEDULE_TYPES = [
   'Tư vấn', 'Chụp Pre-wedding', 'Chụp Phóng sự', 

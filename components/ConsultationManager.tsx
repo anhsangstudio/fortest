@@ -14,8 +14,25 @@ const ConsultationManager: React.FC = () => {
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
 
-  const [filters] = useState<Partial<ConsultationFilter>>({
+  const [filters, setFilters] = useState<Partial<ConsultationFilter>>({
     tu_khoa: '',
+    tinh_trang_id: '',
+    nguon_khach_hang_id: '',
+    nhan_vien_tu_van: '',
+  });
+  
+  const [masterData, setMasterData] = useState<{
+    sources: Array<{ id: string; ten_nguon: string }>;
+    statuses: Array<{ id: string; ten_tinh_trang: string }>;
+    rejectionReasons: Array<{ id: string; ten_ly_do: string }>;
+    services: Array<{ id: string; ten_dich_vu: string }>;
+    staffOptions: Array<{ id: string; name: string }>;
+  }>({
+    sources: [],
+    statuses: [],
+    rejectionReasons: [],
+    services: [],
+    staffOptions: [],
   });
 
   const loadData = useCallback(async () => {
@@ -28,6 +45,7 @@ const ConsultationManager: React.FC = () => {
       setData(result.data || []);
       setTotal(result.total || 0);
       setTotalPages(result.totalPages || 1);
+      setMasterData(result.masterData);
     } catch (err: any) {
       console.error('Lỗi khi tải dữ liệu nhật ký tư vấn:', err);
       setError(err?.message || 'Không thể tải dữ liệu nhật ký tư vấn');
@@ -48,6 +66,27 @@ const ConsultationManager: React.FC = () => {
     setPage((prev) => Math.min(totalPages, prev + 1));
   };
 
+  const handleFilterChange = (
+    field: keyof ConsultationFilter,
+    value: string
+  ) => {
+    setPage(1);
+    setFilters((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+  
+  const resetFilters = () => {
+    setPage(1);
+    setFilters({
+      tu_khoa: '',
+      tinh_trang_id: '',
+      nguon_khach_hang_id: '',
+      nhan_vien_tu_van: '',
+    });
+  };
+
   return (
     <div className="p-6 space-y-4">
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
@@ -62,6 +101,91 @@ const ConsultationManager: React.FC = () => {
 
           <div className="text-sm text-gray-600">
             Tổng số dòng: <span className="font-semibold">{total}</span>
+          </div>
+        </div>
+      </div>
+	  
+	  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Từ khóa
+            </label>
+            <input
+              type="text"
+              value={filters.tu_khoa || ''}
+              onChange={(e) => handleFilterChange('tu_khoa', e.target.value)}
+              placeholder="Tên khách hàng hoặc số điện thoại"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+      
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Tình trạng
+            </label>
+            <select
+              value={filters.tinh_trang_id || ''}
+              onChange={(e) => handleFilterChange('tinh_trang_id', e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Tất cả</option>
+              {masterData.statuses.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.ten_tinh_trang}
+                </option>
+              ))}
+            </select>
+          </div>
+      
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Nguồn khách
+            </label>
+            <select
+              value={filters.nguon_khach_hang_id || ''}
+              onChange={(e) =>
+                handleFilterChange('nguon_khach_hang_id', e.target.value)
+              }
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Tất cả</option>
+              {masterData.sources.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.ten_nguon}
+                </option>
+              ))}
+            </select>
+          </div>
+      
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Nhân viên tư vấn
+            </label>
+            <select
+              value={filters.nhan_vien_tu_van || ''}
+              onChange={(e) =>
+                handleFilterChange('nhan_vien_tu_van', e.target.value)
+              }
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Tất cả</option>
+              {masterData.staffOptions.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </div>
+      
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-50"
+            >
+              Xóa bộ lọc
+            </button>
           </div>
         </div>
       </div>

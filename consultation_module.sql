@@ -246,3 +246,40 @@ before update on consultation_services
 for each row
 execute function set_updated_at();
 
+-- ============================================
+-- INDEX TOI UU HIEU NANG CHO MODULE NHAT KY TU VAN
+-- ============================================
+
+create index if not exists idx_consultation_logs_ngay_tu_van
+on consultation_logs (ngay_tu_van desc);
+
+create index if not exists idx_consultation_logs_tinh_trang_id
+on consultation_logs (tinh_trang_id);
+
+create index if not exists idx_consultation_logs_nguon_khach_hang_id
+on consultation_logs (nguon_khach_hang_id);
+
+create index if not exists idx_consultation_logs_nhan_vien_tu_van
+on consultation_logs (nhan_vien_tu_van);
+
+create index if not exists idx_consultation_logs_next_follow_up_date
+on consultation_logs (next_follow_up_date);
+
+create index if not exists idx_consultation_logs_so_dien_thoai
+on consultation_logs (so_dien_thoai);
+
+create index if not exists idx_consultation_logs_ten_khach_hang
+on consultation_logs (ten_khach_hang);
+
+create index if not exists idx_consultation_logs_created_at
+on consultation_logs (created_at desc);
+
+create index if not exists idx_consultation_logs_updated_at
+on consultation_logs (updated_at desc);
+
+create index if not exists idx_consultation_log_services_consultation_log_id
+on consultation_log_services (consultation_log_id);
+
+create index if not exists idx_consultation_log_services_service_id
+on consultation_log_services (service_id);
+

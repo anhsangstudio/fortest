@@ -1207,7 +1207,11 @@ const handleOpenEdit = async (contract: Contract) => {
 
                   {editingContractId && (
                     <button onClick={handleAddExtraPayment} disabled={isSaving || newPayment.amount <= 0} className="w-full py-2 bg-purple-600 text-white rounded-lg text-xs font-bold uppercase shadow-lg disabled:opacity-50">
-                      {isSaving ? 'Đang xử lý...' : 'Xác nhận thu thêm'}
+                      {isSaving
+					  ? 'Đang xử lý...'
+					  : editingTxInHistoryId
+					  ? 'Cập nhật thanh toán'
+					  : 'Xác nhận thu thêm'}
                     </button>
                   )}
                 </div>

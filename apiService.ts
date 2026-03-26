@@ -1,6 +1,34 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.1';
-import { Service, Transaction, Staff, Contract, Schedule, Customer, StudioInfo, ExpenseCategoryItem, FixedCost, RevenueStream, BreakevenResult, TransactionType, Asset, ServiceTypeItem, Task, ServiceTaskTemplate, TaskAttachment, SalaryPeriod, SalarySlip, SalaryItem, SalaryConfig, ContractItem, ServiceGroupItem } from './types';
+import { Service, 
+		Transaction,
+		Staff,
+		Contract,
+		Schedule,
+		Customer,
+		StudioInfo,
+		ExpenseCategoryItem,
+		FixedCost,
+		RevenueStream,
+		BreakevenResult,
+		TransactionType,
+		Asset,
+		ServiceTypeItem,
+		Task,
+		ServiceTaskTemplate,
+		TaskAttachment,
+		SalaryPeriod,
+		SalarySlip,
+		SalaryItem,
+		SalaryConfig,
+		ContractItem, 
+		ServiceGroupItem,
+		ConsultationSource,
+		ConsultationStatus,
+		ConsultationRejectionReason,
+		ConsultationService,
+		ConsultationLog,
+		ConsultationFilter, } from './types';
 
 const SUPABASE_URL = (import.meta as any).env?.VITE_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';

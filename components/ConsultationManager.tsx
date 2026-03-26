@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { fetchConsultationListData } from '../apiService';
+import { supabase } from '../apiClient';
 import type { ConsultationFilter, ConsultationLog } from '../types';
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -33,6 +34,24 @@ const ConsultationManager: React.FC = () => {
     rejectionReasons: [],
     services: [],
     staffOptions: [],
+  });
+  
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  
+  const [formData, setFormData] = useState({
+    ngay_tu_van: new Date().toISOString().slice(0, 10),
+    ten_khach_hang: '',
+    dia_chi: '',
+    so_dien_thoai: '',
+    ngay_du_dinh_chup: '',
+    ngay_an_hoi: '',
+    ngay_cuoi: '',
+    nguon_khach_hang_id: '',
+    tinh_trang_id: '',
+    nhan_vien_tu_van: '',
+    tong_gia_tri_du_kien: '',
+    ghi_chu: '',
   });
 
   const loadData = useCallback(async () => {
@@ -86,6 +105,85 @@ const ConsultationManager: React.FC = () => {
       nhan_vien_tu_van: '',
     });
   };
+  
+  const resetForm = () => {
+    setFormData({
+      ngay_tu_van: new Date().toISOString().slice(0, 10),
+      ten_khach_hang: '',
+      dia_chi: '',
+      so_dien_thoai: '',
+      ngay_du_dinh_chup: '',
+      ngay_an_hoi: '',
+      ngay_cuoi: '',
+      nguon_khach_hang_id: '',
+      tinh_trang_id: '',
+      nhan_vien_tu_van: '',
+      tong_gia_tri_du_kien: '',
+      ghi_chu: '',
+    });
+  };
+  
+  const openCreateModal = () => {
+    resetForm();
+    setIsCreateModalOpen(true);
+  };
+  
+  const closeCreateModal = () => {
+    if (saving) return;
+    setIsCreateModalOpen(false);
+  };
+  
+  const handleFormChange = (
+    field: keyof typeof formData,
+    value: string
+  ) => {
+    setFormData((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+  
+  const handleCreate = async () => {
+    if (!formData.ten_khach_hang.trim()) {
+      alert('Vui lòng nhập tên khách hàng');
+      return;
+    }
+  
+    try {
+      setSaving(true);
+  
+      const payload = {
+        ngay_tu_van: formData.ngay_tu_van || null,
+        ten_khach_hang: formData.ten_khach_hang.trim(),
+        dia_chi: formData.dia_chi.trim() || null,
+        so_dien_thoai: formData.so_dien_thoai.trim() || null,
+        ngay_du_dinh_chup: formData.ngay_du_dinh_chup || null,
+        ngay_an_hoi: formData.ngay_an_hoi || null,
+        ngay_cuoi: formData.ngay_cuoi || null,
+        nguon_khach_hang_id: formData.nguon_khach_hang_id || null,
+        tinh_trang_id: formData.tinh_trang_id || null,
+        nhan_vien_tu_van: formData.nhan_vien_tu_van || null,
+        tong_gia_tri_du_kien: formData.tong_gia_tri_du_kien
+          ? Number(formData.tong_gia_tri_du_kien)
+          : 0,
+        ghi_chu: formData.ghi_chu.trim() || null,
+      };
+  
+      const { error } = await supabase
+        .from('consultation_logs')
+        .insert([payload]);
+  
+      if (error) throw error;
+  
+      setIsCreateModalOpen(false);
+      await loadData();
+    } catch (err: any) {
+      console.error('Lỗi khi thêm mới nhật ký tư vấn:', err);
+      alert(err?.message || 'Không thể thêm mới nhật ký tư vấn');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="p-6 space-y-4">
@@ -99,8 +197,18 @@ const ConsultationManager: React.FC = () => {
             </p>
           </div>
 
-          <div className="text-sm text-gray-600">
-            Tổng số dòng: <span className="font-semibold">{total}</span>
+          <div className="flex items-center gap-3">
+            <div className="text-sm text-gray-600">
+              Tổng số dòng: <span className="font-semibold">{total}</span>
+            </div>
+          
+            <button
+              type="button"
+              onClick={openCreateModal}
+              className="rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-medium hover:bg-blue-700"
+            >
+              Thêm mới
+            </button>
           </div>
         </div>
       </div>

@@ -743,6 +743,63 @@ export const fetchConsultationMasterData = async () => {
   };
 };
 
+export const fetchConsultationLogsPaginated = async (
+  page: number = 1,
+  pageSize: number = 20,
+  filters?: Partial<ConsultationFilter>
+) => {
+  const safePage = Math.max(1, page);
+  const safePageSize = Math.max(1, Math.min(pageSize, 100));
+  const from = (safePage - 1) * safePageSize;
+  const to = from + safePageSize - 1;
+
+  let query = supabase
+    .from('consultation_logs')
+    .select('*', { count: 'exact' });
+
+  if (filters?.tinh_trang_id) {
+    query = query.eq('tinh_trang_id', filters.tinh_trang_id);
+  }
+
+  if (filters?.nguon_khach_hang_id) {
+    query = query.eq('nguon_khach_hang_id', filters.nguon_khach_hang_id);
+  }
+
+  if (filters?.nhan_vien_tu_van) {
+    query = query.eq('nhan_vien_tu_van', filters.nhan_vien_tu_van);
+  }
+
+  if (filters?.tu_ngay) {
+    query = query.gte('ngay_tu_van', filters.tu_ngay);
+  }
+
+  if (filters?.den_ngay) {
+    query = query.lte('ngay_tu_van', filters.den_ngay);
+  }
+
+  const tuKhoa = filters?.tu_khoa?.trim();
+  if (tuKhoa) {
+    query = query.or(
+      `ten_khach_hang.ilike.%${tuKhoa}%,so_dien_thoai.ilike.%${tuKhoa}%`
+    );
+  }
+
+  const { data, error, count } = await query
+    .order('ngay_tu_van', { ascending: false })
+    .order('created_at', { ascending: false })
+    .range(from, to);
+
+  if (error) throw error;
+
+  return {
+    data: (data || []).map(consultationLogFromDb),
+    total: count || 0,
+    page: safePage,
+    pageSize: safePageSize,
+    totalPages: Math.ceil((count || 0) / safePageSize),
+  };
+};
+
 export const fetchContractsPaginated = async (page: number, pageSize: number, searchCode: string = '', searchName: string = '') => {
   if (!supabase) return { data: [], count: 0 };
   const from = (page - 1) * pageSize;

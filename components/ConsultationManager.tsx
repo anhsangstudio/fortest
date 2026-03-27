@@ -785,36 +785,6 @@ const ConsultationManager: React.FC = () => {
   const isRejectStatus =
     selectedStatus?.ten_tinh_trang?.trim().toLowerCase() === 'khach tu choi';
   
-  const handleEdit = (item: any) => {
-    setFormData({
-      ...formData,
-      ...item,
-    });
-  
-    setShowModal(true);
-  };
-  
-  const handleDelete = async (item: any) => {
-    const confirmDelete = window.confirm(
-      `Bạn có chắc muốn xóa khách "${item.ten_khach_hang}"?`
-    );
-  
-    if (!confirmDelete) return;
-  
-    try {
-      const { error } = await supabase
-        .from('consultation_logs')
-        .delete()
-        .eq('id', item.id);
-  
-      if (error) throw error;
-  
-      await loadData();
-    } catch (err: any) {
-      console.error(err);
-      alert('Không thể xóa dữ liệu');
-    }
-  };
 
   return (
     <div className="p-6 space-y-4">
@@ -1017,7 +987,7 @@ const ConsultationManager: React.FC = () => {
                       </td>
                     </tr>
                   ))}
-                <tr key={item.id} className="hover:bg-gray-50 transition">
+               
                 <tr key={item.id} className="hover:bg-gray-50 transition">
               </table>
             </div>

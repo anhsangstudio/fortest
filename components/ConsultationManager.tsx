@@ -9,6 +9,7 @@ type MasterDataState = {
   sources: Array<{ id: string; ten_nguon: string }>;
   statuses: Array<{ id: string; ten_tinh_trang: string }>;
   services: Array<{ id: string; ten_dich_vu: string }>;
+  rejectionReasons: Array<{ id: string; ten_ly_do: string }>;
   staffOptions: Array<{ id: string; name: string; role?: string | null; status?: string | null }>;
 };
 
@@ -37,6 +38,7 @@ const ConsultationManager: React.FC = () => {
     statuses: [],
     services: [],
     staffOptions: [],
+	rejectionReasons: [],
   });
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -52,6 +54,7 @@ const ConsultationManager: React.FC = () => {
     ngay_cuoi: '',
     nguon_khach_hang_id: '',
     tinh_trang_id: '',
+	ly_do_tu_choi_id: '',
     nhan_vien_tu_van: '',
     tong_gia_tri_du_kien: '',
     ghi_chu: '',
@@ -62,13 +65,15 @@ const ConsultationManager: React.FC = () => {
   const [showAddressManager, setShowAddressManager] = useState(false);
   const [showSourceManager, setShowSourceManager] = useState(false);
   const [showBusinessManager, setShowBusinessManager] = useState(false);
+  const [showRejectReasonManager, setShowRejectReasonManager] = useState(false);
+  const [rejectReasonManageId, setRejectReasonManageId] = useState('');
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const [result, addressesRes, servicesRes, staffRes] = await Promise.all([
+      const [result, addressesRes, rejectionReasonsRes, servicesRes, staffRes] = await Promise.all([
         fetchConsultationListData(page, pageSize, filters),
         supabase
           .from('consultation_addresses')
@@ -76,6 +81,12 @@ const ConsultationManager: React.FC = () => {
           .eq('dang_su_dung', true)
           .order('thu_tu_hien_thi', { ascending: true })
           .order('ten_dia_chi', { ascending: true }),
+		supabase
+          .from('consultation_rejection_reasons')
+          .select('id, ten_ly_do')
+          .eq('dang_su_dung', true)
+          .order('thu_tu_hien_thi', { ascending: true })
+          .order('ten_ly_do', { ascending: true }),
         supabase
           .from('consultation_services')
           .select('id, ten_dich_vu')
@@ -89,6 +100,7 @@ const ConsultationManager: React.FC = () => {
       ]);
 
       if (addressesRes.error) throw addressesRes.error;
+	  if (rejectionReasonsRes.error) throw rejectionReasonsRes.error;
       if (servicesRes.error) throw servicesRes.error;
       if (staffRes.error) throw staffRes.error;
 
@@ -111,6 +123,10 @@ const ConsultationManager: React.FC = () => {
         addresses: (addressesRes.data || []).map((item: any) => ({
           id: item.id,
           ten_dia_chi: item.ten_dia_chi,
+        })),
+		rejectionReasons: (rejectionReasonsRes.data || []).map((item: any) => ({
+          id: item.id,
+          ten_ly_do: item.ten_ly_do,
         })),
         sources: result.masterData.sources || [],
         statuses: result.masterData.statuses || [],
@@ -173,6 +189,7 @@ const ConsultationManager: React.FC = () => {
       ngay_cuoi: '',
       nguon_khach_hang_id: '',
       tinh_trang_id: '',
+	  ly_do_tu_choi_id: '',
       nhan_vien_tu_van: '',
       tong_gia_tri_du_kien: '',
       ghi_chu: '',
@@ -217,6 +234,7 @@ const ConsultationManager: React.FC = () => {
         ngay_cuoi: formData.ngay_cuoi || null,
         nguon_khach_hang_id: formData.nguon_khach_hang_id || null,
         tinh_trang_id: formData.tinh_trang_id || null,
+		ly_do_tu_choi_id: formData.ly_do_tu_choi_id || null,
         nhan_vien_tu_van: formData.nhan_vien_tu_van || null,
         tong_gia_tri_du_kien: formData.tong_gia_tri_du_kien ? Number(formData.tong_gia_tri_du_kien) : 0,
         ghi_chu: formData.ghi_chu.trim() || null,
@@ -560,6 +578,90 @@ const ConsultationManager: React.FC = () => {
     } catch (err: any) {
       console.error('Lỗi khi xóa dịch vụ:', err);
       alert(err?.message || 'Không thể xóa dịch vụ');
+    }
+  };
+  
+  const handleAddRejectReason = async () => {
+    const tenLyDo = window.prompt('Nhập lý do từ chối mới:');
+    if (!tenLyDo || !tenLyDo.trim()) return;
+  
+    try {
+      const { error } = await supabase
+        .from('consultation_rejection_reasons')
+        .insert([
+          {
+            ten_ly_do: tenLyDo.trim(),
+            thu_tu_hien_thi: masterData.rejectionReasons.length + 1,
+            dang_su_dung: true,
+          },
+        ]);
+  
+      if (error) throw error;
+      await loadData();
+    } catch (err: any) {
+      console.error('Lỗi khi thêm lý do từ chối:', err);
+      alert(err?.message || 'Không thể thêm lý do từ chối');
+    }
+  };
+  
+  const handleEditRejectReason = async () => {
+    if (!rejectReasonManageId) {
+      alert('Vui lòng chọn một lý do để sửa');
+      return;
+    }
+  
+    const currentItem = masterData.rejectionReasons.find(
+      (item) => item.id === rejectReasonManageId
+    );
+    if (!currentItem) return;
+  
+    const tenMoi = window.prompt('Sửa lý do từ chối:', currentItem.ten_ly_do);
+    if (!tenMoi || !tenMoi.trim()) return;
+  
+    try {
+      const { error } = await supabase
+        .from('consultation_rejection_reasons')
+        .update({ ten_ly_do: tenMoi.trim() })
+        .eq('id', currentItem.id);
+  
+      if (error) throw error;
+      await loadData();
+    } catch (err: any) {
+      console.error('Lỗi khi sửa lý do từ chối:', err);
+      alert(err?.message || 'Không thể sửa lý do từ chối');
+    }
+  };
+  
+  const handleDeleteRejectReason = async () => {
+    if (!rejectReasonManageId) {
+      alert('Vui lòng chọn một lý do để xóa');
+      return;
+    }
+  
+    const currentItem = masterData.rejectionReasons.find(
+      (item) => item.id === rejectReasonManageId
+    );
+    if (!currentItem) return;
+  
+    const confirmed = window.confirm(
+      `Xóa lý do "${currentItem.ten_ly_do}" khỏi danh sách?`
+    );
+    if (!confirmed) return;
+  
+    try {
+      const { error } = await supabase
+        .from('consultation_rejection_reasons')
+        .update({ dang_su_dung: false })
+        .eq('id', currentItem.id);
+  
+      if (error) throw error;
+  
+      setFormData((prev) => ({ ...prev, ly_do_tu_choi_id: '' }));
+      setRejectReasonManageId('');
+      await loadData();
+    } catch (err: any) {
+      console.error('Lỗi khi xóa lý do từ chối:', err);
+      alert(err?.message || 'Không thể xóa lý do từ chối');
     }
   };
 
@@ -1146,8 +1248,102 @@ const ConsultationManager: React.FC = () => {
                   </select>
                 </div>
               </div>
-            
-              {/* ================= 5. GHI CHÚ ================= */}
+              
+			  {/* ================= 5. LÝ DO TỪ CHỐI ================= */}
+			  
+			  <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-bold uppercase text-rose-500 tracking-widest">
+                    🚫 Lý do từ chối
+                  </h3>
+              
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowRejectReasonManager((prev) => !prev);
+                      setShowBusinessManager(false);
+                      setShowAddressManager(false);
+                      setShowSourceManager(false);
+                    }}
+                    className="p-1 rounded-lg hover:bg-gray-100 text-slate-400 hover:text-slate-700"
+                    title="Tùy chỉnh lý do từ chối"
+                  >
+                    <Settings size={14} />
+                  </button>
+                </div>
+              
+                {showRejectReasonManager && (
+                  <div className="flex flex-wrap gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                    <select
+                      value={rejectReasonManageId}
+                      onChange={(e) => setRejectReasonManageId(e.target.value)}
+                      className="min-w-[240px] rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white"
+                    >
+                      <option value="">Chọn lý do để sửa / xóa</option>
+                      {masterData.rejectionReasons.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.ten_ly_do}
+                        </option>
+                      ))}
+                    </select>
+              
+                    <button
+                      type="button"
+                      onClick={handleAddRejectReason}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-medium hover:bg-slate-100"
+                    >
+                      <Plus size={14} />
+                      Thêm
+                    </button>
+              
+                    <button
+                      type="button"
+                      onClick={handleEditRejectReason}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-medium hover:bg-slate-100"
+                    >
+                      <Pencil size={14} />
+                      Sửa
+                    </button>
+              
+                    <button
+                      type="button"
+                      onClick={handleDeleteRejectReason}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-red-300 bg-white text-red-500 text-sm font-medium hover:bg-red-50"
+                    >
+                      <Trash2 size={14} />
+                      Xóa
+                    </button>
+                  </div>
+                )}
+              
+                <div className="flex flex-wrap gap-2">
+                  {masterData.rejectionReasons.map((item) => {
+                    const isSelected = formData.ly_do_tu_choi_id === item.id;
+              
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() =>
+                          handleFormChange(
+                            'ly_do_tu_choi_id',
+                            isSelected ? '' : item.id
+                          )
+                        }
+                        className={`px-3 py-1 rounded-full text-sm ${
+                          isSelected
+                            ? 'bg-rose-500 text-white'
+                            : 'bg-gray-100 text-gray-700'
+                        }`}
+                      >
+                        {item.ten_ly_do}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+			  
+              {/* ================= 6. GHI CHÚ ================= */}
               <div>
                 <h3 className="text-xs font-bold uppercase text-gray-500 mb-2">
                   📝 Ghi chú

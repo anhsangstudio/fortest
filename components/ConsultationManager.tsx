@@ -43,7 +43,6 @@ const ConsultationManager: React.FC = () => {
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [editingLogId, setEditingLogId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     ngay_tu_van: new Date().toISOString().slice(0, 10),
@@ -202,80 +201,13 @@ const ConsultationManager: React.FC = () => {
   const openCreateModal = () => {
     resetForm();
     setIsCreateModalOpen(true);
-	setEditingLogId(null);
   };
 
   const closeCreateModal = () => {
     if (saving) return;
     setIsCreateModalOpen(false);
   };
-  
-  const handleEdit = async (item: ConsultationLog) => {
-    try {
-      setEditingLogId(item.id);
-  
-      // lấy lại dịch vụ quan tâm của đúng log này
-      const { data: logServices, error: logServicesError } = await supabase
-        .from('consultation_log_services')
-        .select('service_id')
-        .eq('consultation_log_id', item.id);
-  
-      if (logServicesError) throw logServicesError;
-  
-      setFormData({
-        ngay_tu_van: item.ngay_tu_van || '',
-        ten_khach_hang: item.ten_khach_hang || '',
-        dia_chi: item.dia_chi || '',
-        so_dien_thoai: item.so_dien_thoai || '',
-        ngay_du_dinh_chup: item.ngay_du_dinh_chup || '',
-        ngay_an_hoi: item.ngay_an_hoi || '',
-        ngay_cuoi: item.ngay_cuoi || '',
-        nguon_khach_hang_id: item.nguon_khach_hang_id || '',
-        tinh_trang_id: item.tinh_trang_id || '',
-        ly_do_tu_choi_id: item.ly_do_tu_choi_id || '',
-        nhan_vien_tu_van: item.nhan_vien_tu_van || '',
-        tong_gia_tri_du_kien: String(item.tong_gia_tri_du_kien || ''),
-        ghi_chu: item.ghi_chu || '',
-      });
-  
-      setSelectedServices((logServices || []).map((row: any) => row.service_id));
-      setIsCreateModalOpen(true);
-    } catch (err: any) {
-      console.error('Lỗi khi mở dữ liệu để sửa:', err);
-      alert(err?.message || 'Không thể mở dữ liệu để chỉnh sửa');
-    }
-  };
-  
-  const handleDelete = async (item: ConsultationLog) => {
-    const confirmed = window.confirm(
-      `Bạn có chắc muốn xóa khách "${item.ten_khach_hang}" không?`
-    );
-    if (!confirmed) return;
-  
-    try {
-      // xóa bảng nối trước cho sạch dữ liệu
-      const { error: deleteServicesError } = await supabase
-        .from('consultation_log_services')
-        .delete()
-        .eq('consultation_log_id', item.id);
-  
-      if (deleteServicesError) throw deleteServicesError;
-  
-      const { error } = await supabase
-        .from('consultation_logs')
-        .delete()
-        .eq('id', item.id);
-  
-      if (error) throw error;
-  
-      await loadData();
-    } catch (err: any) {
-      console.error('Lỗi khi xóa nhật ký tư vấn:', err);
-      alert(err?.message || 'Không thể xóa dữ liệu');
-    }
-  };
-  
-  
+
    const handleFormChange = (field: keyof typeof formData, value: string) => {
      setFormData((prev) => {
        const next = {
@@ -327,55 +259,29 @@ const ConsultationManager: React.FC = () => {
         ghi_chu: formData.ghi_chu.trim() || null,
       };
 
-    let savedLogId = editingLogId;
-    
-    if (editingLogId) {
-      const { error } = await supabase
-        .from('consultation_logs')
-        .update(payload)
-        .eq('id', editingLogId);
-    
-      if (error) throw error;
-    } else {
       const { data: createdLog, error } = await supabase
         .from('consultation_logs')
         .insert([payload])
         .select()
         .single();
-    
+
       if (error) throw error;
-      savedLogId = createdLog.id;
-    }
-    
-    if (!savedLogId) {
-      throw new Error('Không xác định được bản ghi để lưu dịch vụ quan tâm');
-    }
-    
-    const { error: deleteOldServicesError } = await supabase
-      .from('consultation_log_services')
-      .delete()
-      .eq('consultation_log_id', savedLogId);
-    
-    if (deleteOldServicesError) throw deleteOldServicesError;
-    
-    if (selectedServices.length > 0) {
-      const serviceRows = selectedServices.map((serviceId) => ({
-        consultation_log_id: savedLogId,
-        service_id: serviceId,
-      }));
-    
-      const { error: serviceError } = await supabase
-        .from('consultation_log_services')
-        .insert(serviceRows);
-    
-      if (serviceError) throw serviceError;
-    }
-    
-    setIsCreateModalOpen(false);
-    resetForm();
-    await loadData();
-    
-    
+
+      if (selectedServices.length > 0) {
+        const serviceRows = selectedServices.map((serviceId) => ({
+          consultation_log_id: createdLog.id,
+          service_id: serviceId,
+        }));
+
+        const { error: serviceError } = await supabase
+          .from('consultation_log_services')
+          .insert(serviceRows);
+
+        if (serviceError) throw serviceError;
+      }
+
+      setIsCreateModalOpen(false);
+      await loadData();
     } catch (err: any) {
       console.error('Lỗi khi thêm mới nhật ký tư vấn:', err);
       alert(err?.message || 'Không thể thêm mới nhật ký tư vấn');
@@ -785,6 +691,36 @@ const ConsultationManager: React.FC = () => {
   const isRejectStatus =
     selectedStatus?.ten_tinh_trang?.trim().toLowerCase() === 'khach tu choi';
   
+  const handleEdit = (item: any) => {
+    setFormData({
+      ...formData,
+      ...item,
+    });
+  
+    setShowModal(true);
+  };
+  
+  const handleDelete = async (item: any) => {
+    const confirmDelete = window.confirm(
+      `Bạn có chắc muốn xóa khách "${item.ten_khach_hang}"?`
+    );
+  
+    if (!confirmDelete) return;
+  
+    try {
+      const { error } = await supabase
+        .from('consultation_logs')
+        .delete()
+        .eq('id', item.id);
+  
+      if (error) throw error;
+  
+      await loadData();
+    } catch (err: any) {
+      console.error(err);
+      alert('Không thể xóa dữ liệu');
+    }
+  };
 
   return (
     <div className="p-6 space-y-4">
@@ -901,6 +837,8 @@ const ConsultationManager: React.FC = () => {
           <div className="p-6 text-red-600">{error}</div>
         ) : data.length === 0 ? (
           <div className="p-6 text-gray-500">Chưa có dữ liệu nhật ký tư vấn.</div>
+        ) : (
+          <>
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-200">
@@ -911,40 +849,25 @@ const ConsultationManager: React.FC = () => {
                     <th className="px-4 py-3 font-semibold">Nguồn khách</th>
                     <th className="px-4 py-3 font-semibold">Dịch vụ quan tâm</th>
                     <th className="px-4 py-3 font-semibold">Tình trạng</th>
-                    <th className="px-4 py-3 font-semibold">Lý do từ chối</th>
+					<th className="px-4 py-3 font-semibold">Lý do từ chối</th>
                     <th className="px-4 py-3 font-semibold">Nhân viên tư vấn</th>
                     <th className="px-4 py-3 font-semibold text-right">Giá trị dự kiến</th>
-                    <th className="px-4 py-3 font-semibold text-center">Hành động</th>
+					<th className="px-4 py-3 font-semibold text-center">Hành động</th>
                   </tr>
                 </thead>
-          
+
                 <tbody>
                   {data.map((item) => (
-                    <tr
-                      key={item.id}
-                      className="border-b border-gray-100 hover:bg-gray-50 transition"
-                    >
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {item.ngay_tu_van || ''}
-                      </td>
-          
+                    <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-4 py-3 whitespace-nowrap">{item.ngay_tu_van || ''}</td>
                       <td className="px-4 py-3">
-                        <div className="font-medium text-gray-800">
-                          {item.ten_khach_hang || ''}
-                        </div>
+                        <div className="font-medium text-gray-800">{item.ten_khach_hang || ''}</div>
                         {item.dia_chi ? (
                           <div className="text-xs text-gray-500 mt-1">{item.dia_chi}</div>
                         ) : null}
                       </td>
-          
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {item.so_dien_thoai || ''}
-                      </td>
-          
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {item.nguon_khach_hang_ten || ''}
-                      </td>
-          
+                      <td className="px-4 py-3 whitespace-nowrap">{item.so_dien_thoai || ''}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">{item.nguon_khach_hang_ten || ''}</td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">
                           {(item.dich_vu_quan_tam_ten || []).length > 0 ? (
@@ -961,12 +884,8 @@ const ConsultationManager: React.FC = () => {
                           )}
                         </div>
                       </td>
-          
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {item.tinh_trang_ten || ''}
-                      </td>
-          
-                      <td className="px-4 py-3 whitespace-nowrap">
+                      <td className="px-4 py-3 whitespace-nowrap">{item.tinh_trang_ten || ''}</td>
+					  <td className="px-4 py-3 whitespace-nowrap">
                         {item.ly_do_tu_choi_ten ? (
                           <span className="inline-flex items-center rounded-full bg-red-50 text-red-600 px-2 py-1 text-xs font-medium">
                             {item.ly_do_tu_choi_ten}
@@ -975,34 +894,31 @@ const ConsultationManager: React.FC = () => {
                           <span className="text-gray-300">---</span>
                         )}
                       </td>
-          
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {item.nhan_vien_tu_van_ten || ''}
-                      </td>
-          
+                      <td className="px-4 py-3 whitespace-nowrap">{item.nhan_vien_tu_van_ten || ''}</td>
                       <td className="px-4 py-3 whitespace-nowrap text-right font-medium">
                         {(item.tong_gia_tri_du_kien || 0).toLocaleString('vi-VN')}
                       </td>
-          
-                      <td className="px-4 py-3 whitespace-nowrap text-center">
+					  <td className="px-4 py-3 whitespace-nowrap text-center">
                         <div className="flex items-center justify-center gap-2">
+                          
+                          {/* EDIT */}
                           <button
-                            type="button"
                             onClick={() => handleEdit(item)}
                             className="p-2 rounded-lg hover:bg-blue-50 text-blue-500 hover:text-blue-700"
                             title="Chỉnh sửa"
                           >
                             <Pencil size={16} />
                           </button>
-          
+                      
+                          {/* DELETE */}
                           <button
-                            type="button"
                             onClick={() => handleDelete(item)}
                             className="p-2 rounded-lg hover:bg-red-50 text-red-500 hover:text-red-700"
                             title="Xóa"
                           >
                             <Trash2 size={16} />
                           </button>
+                      
                         </div>
                       </td>
                     </tr>
@@ -1010,13 +926,13 @@ const ConsultationManager: React.FC = () => {
                 </tbody>
               </table>
             </div>
-          
+
             <div className="flex items-center justify-between px-4 py-3 bg-gray-50">
               <div className="text-sm text-gray-600">
                 Trang <span className="font-semibold">{page}</span> /{' '}
                 <span className="font-semibold">{totalPages}</span>
               </div>
-          
+
               <div className="flex items-center gap-2">
                 <button
                   onClick={goToPrevPage}
@@ -1025,7 +941,7 @@ const ConsultationManager: React.FC = () => {
                 >
                   Trang trước
                 </button>
-          
+
                 <button
                   onClick={goToNextPage}
                   disabled={page >= totalPages}
@@ -1035,6 +951,8 @@ const ConsultationManager: React.FC = () => {
                 </button>
               </div>
             </div>
+          </>
+        )}
       </div>
 
       {isCreateModalOpen && (

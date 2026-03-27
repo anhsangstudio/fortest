@@ -819,6 +819,7 @@ const ConsultationManager: React.FC = () => {
                     <th className="px-4 py-3 font-semibold">Nguồn khách</th>
                     <th className="px-4 py-3 font-semibold">Dịch vụ quan tâm</th>
                     <th className="px-4 py-3 font-semibold">Tình trạng</th>
+					<th className="px-4 py-3 font-semibold">Lý do từ chối</th>
                     <th className="px-4 py-3 font-semibold">Nhân viên tư vấn</th>
                     <th className="px-4 py-3 font-semibold text-right">Giá trị dự kiến</th>
                   </tr>
@@ -853,6 +854,15 @@ const ConsultationManager: React.FC = () => {
                         </div>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">{item.tinh_trang_ten || ''}</td>
+					  <td className="px-4 py-3 whitespace-nowrap">
+                        {item.ly_do_tu_choi_ten ? (
+                          <span className="inline-flex items-center rounded-full bg-red-50 text-red-600 px-2 py-1 text-xs font-medium">
+                            {item.ly_do_tu_choi_ten}
+                          </span>
+                        ) : (
+                          <span className="text-gray-300">---</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 whitespace-nowrap">{item.nhan_vien_tu_van_ten || ''}</td>
                       <td className="px-4 py-3 whitespace-nowrap text-right font-medium">
                         {(item.tong_gia_tri_du_kien || 0).toLocaleString('vi-VN')}

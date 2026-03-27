@@ -1288,7 +1288,6 @@ const ConsultationManager: React.FC = () => {
               
 			  {/* ================= 5. LÝ DO TỪ CHỐI ================= */}
 			  {isRejectStatus && (
-               ...toàn bộ block section lý do từ chối...
 			  <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <h3 className="text-xs font-bold uppercase text-rose-500 tracking-widest">

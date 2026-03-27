@@ -1,13 +1,14 @@
+
 import React, { useEffect, useState, useCallback } from 'react';
 import { fetchConsultationListData, supabase } from '../apiService';
 import type { ConsultationFilter, ConsultationLog } from '../types';
 
 type MasterDataState = {
+  addresses: Array<{ id: string; ten_dia_chi: string }>;
   sources: Array<{ id: string; ten_nguon: string }>;
   statuses: Array<{ id: string; ten_tinh_trang: string }>;
-  rejectionReasons: Array<{ id: string; ten_ly_do: string }>;
   services: Array<{ id: string; ten_dich_vu: string }>;
-  staffOptions: Array<{ id: string; name: string }>;
+  staffOptions: Array<{ id: string; name: string; role?: string | null; status?: string | null }>;
 };
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -30,9 +31,9 @@ const ConsultationManager: React.FC = () => {
   });
 
   const [masterData, setMasterData] = useState<MasterDataState>({
+    addresses: [],
     sources: [],
     statuses: [],
-    rejectionReasons: [],
     services: [],
     staffOptions: [],
   });
@@ -56,21 +57,72 @@ const ConsultationManager: React.FC = () => {
   });
 
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
+  const [serviceManageId, setServiceManageId] = useState('');
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const result = await fetchConsultationListData(page, pageSize, filters);
+      const [result, addressesRes, servicesRes, staffRes] = await Promise.all([
+        fetchConsultationListData(page, pageSize, filters),
+        supabase
+          .from('consultation_addresses')
+          .select('id, ten_dia_chi')
+          .eq('dang_su_dung', true)
+          .order('thu_tu_hien_thi', { ascending: true })
+          .order('ten_dia_chi', { ascending: true }),
+        supabase
+          .from('consultation_services')
+          .select('id, ten_dich_vu')
+          .eq('dang_su_dung', true)
+          .order('thu_tu_hien_thi', { ascending: true })
+          .order('ten_dich_vu', { ascending: true }),
+        supabase
+          .from('staff')
+          .select('id, name, role, status')
+          .order('name', { ascending: true }),
+      ]);
+
+      if (addressesRes.error) throw addressesRes.error;
+      if (servicesRes.error) throw servicesRes.error;
+      if (staffRes.error) throw staffRes.error;
+
+      const staffOptions = (staffRes.data || [])
+        .filter((item: any) => {
+          const status = String(item.status || '').trim().toLowerCase();
+          return status === '' || status === 'active' || status === 'đang làm' || status === 'dang lam' || status === 'working';
+        })
+        .map((item: any) => ({
+          id: item.id,
+          name: item.name,
+          role: item.role,
+          status: item.status,
+        }));
 
       setData(result.data || []);
       setTotal(result.total || 0);
       setTotalPages(result.totalPages || 1);
-      setMasterData(result.masterData);
+      setMasterData({
+        addresses: (addressesRes.data || []).map((item: any) => ({
+          id: item.id,
+          ten_dia_chi: item.ten_dia_chi,
+        })),
+        sources: result.masterData.sources || [],
+        statuses: result.masterData.statuses || [],
+        services: (servicesRes.data || []).map((item: any) => ({
+          id: item.id,
+          ten_dich_vu: item.ten_dich_vu,
+        })),
+        staffOptions,
+      });
     } catch (err: any) {
       console.error('Lỗi khi tải dữ liệu nhật ký tư vấn:', err);
-      setError(err?.message || 'Không thể tải dữ liệu nhật ký tư vấn');
+      if (err?.message?.includes('consultation_addresses')) {
+        setError('Thiếu bảng consultation_addresses trong DB. Hãy chạy file SQL đi kèm rồi tải lại trang.');
+      } else {
+        setError(err?.message || 'Không thể tải dữ liệu nhật ký tư vấn');
+      }
     } finally {
       setLoading(false);
     }
@@ -122,6 +174,7 @@ const ConsultationManager: React.FC = () => {
       ghi_chu: '',
     });
     setSelectedServices([]);
+    setServiceManageId('');
   };
 
   const openCreateModal = () => {
@@ -153,7 +206,7 @@ const ConsultationManager: React.FC = () => {
       const payload = {
         ngay_tu_van: formData.ngay_tu_van || null,
         ten_khach_hang: formData.ten_khach_hang.trim(),
-        dia_chi: formData.dia_chi.trim() || null,
+        dia_chi: formData.dia_chi || null,
         so_dien_thoai: formData.so_dien_thoai.trim() || null,
         ngay_du_dinh_chup: formData.ngay_du_dinh_chup || null,
         ngay_an_hoi: formData.ngay_an_hoi || null,
@@ -161,9 +214,7 @@ const ConsultationManager: React.FC = () => {
         nguon_khach_hang_id: formData.nguon_khach_hang_id || null,
         tinh_trang_id: formData.tinh_trang_id || null,
         nhan_vien_tu_van: formData.nhan_vien_tu_van || null,
-        tong_gia_tri_du_kien: formData.tong_gia_tri_du_kien
-          ? Number(formData.tong_gia_tri_du_kien)
-          : 0,
+        tong_gia_tri_du_kien: formData.tong_gia_tri_du_kien ? Number(formData.tong_gia_tri_du_kien) : 0,
         ghi_chu: formData.ghi_chu.trim() || null,
       };
 
@@ -198,6 +249,87 @@ const ConsultationManager: React.FC = () => {
     }
   };
 
+  const handleAddAddress = async () => {
+    const tenDiaChi = window.prompt('Nhập tên địa chỉ mới:');
+    if (!tenDiaChi || !tenDiaChi.trim()) return;
+
+    try {
+      const { error } = await supabase.from('consultation_addresses').insert([
+        {
+          ten_dia_chi: tenDiaChi.trim(),
+          thu_tu_hien_thi: masterData.addresses.length + 1,
+          dang_su_dung: true,
+        },
+      ]);
+
+      if (error) throw error;
+      await loadData();
+    } catch (err: any) {
+      console.error('Lỗi khi thêm địa chỉ:', err);
+      alert(err?.message || 'Không thể thêm địa chỉ');
+    }
+  };
+
+  const handleEditAddress = async () => {
+    if (!formData.dia_chi) {
+      alert('Vui lòng chọn một địa chỉ để sửa');
+      return;
+    }
+
+    const currentItem = masterData.addresses.find((item) => item.ten_dia_chi === formData.dia_chi);
+    if (!currentItem) {
+      alert('Địa chỉ hiện tại không thuộc danh mục dropdown');
+      return;
+    }
+
+    const tenMoi = window.prompt('Sửa tên địa chỉ:', currentItem.ten_dia_chi);
+    if (!tenMoi || !tenMoi.trim()) return;
+
+    try {
+      const { error } = await supabase
+        .from('consultation_addresses')
+        .update({ ten_dia_chi: tenMoi.trim() })
+        .eq('id', currentItem.id);
+
+      if (error) throw error;
+      setFormData((prev) => ({ ...prev, dia_chi: tenMoi.trim() }));
+      await loadData();
+    } catch (err: any) {
+      console.error('Lỗi khi sửa địa chỉ:', err);
+      alert(err?.message || 'Không thể sửa địa chỉ');
+    }
+  };
+
+  const handleDeleteAddress = async () => {
+    if (!formData.dia_chi) {
+      alert('Vui lòng chọn một địa chỉ để xóa');
+      return;
+    }
+
+    const currentItem = masterData.addresses.find((item) => item.ten_dia_chi === formData.dia_chi);
+    if (!currentItem) {
+      alert('Địa chỉ hiện tại không thuộc danh mục dropdown');
+      return;
+    }
+
+    const confirmed = window.confirm(`Xóa địa chỉ "${currentItem.ten_dia_chi}" khỏi dropdown?`);
+    if (!confirmed) return;
+
+    try {
+      const { error } = await supabase
+        .from('consultation_addresses')
+        .update({ dang_su_dung: false })
+        .eq('id', currentItem.id);
+
+      if (error) throw error;
+      setFormData((prev) => ({ ...prev, dia_chi: '' }));
+      await loadData();
+    } catch (err: any) {
+      console.error('Lỗi khi xóa địa chỉ:', err);
+      alert(err?.message || 'Không thể xóa địa chỉ');
+    }
+  };
+
   const handleAddSource = async () => {
     const tenNguon = window.prompt('Nhập tên nguồn khách mới:');
     if (!tenNguon || !tenNguon.trim()) return;
@@ -225,9 +357,7 @@ const ConsultationManager: React.FC = () => {
       return;
     }
 
-    const currentItem = masterData.sources.find(
-      (item) => item.id === formData.nguon_khach_hang_id
-    );
+    const currentItem = masterData.sources.find((item) => item.id === formData.nguon_khach_hang_id);
     if (!currentItem) return;
 
     const tenMoi = window.prompt('Sửa tên nguồn khách:', currentItem.ten_nguon);
@@ -254,14 +384,10 @@ const ConsultationManager: React.FC = () => {
       return;
     }
 
-    const currentItem = masterData.sources.find(
-      (item) => item.id === formData.nguon_khach_hang_id
-    );
+    const currentItem = masterData.sources.find((item) => item.id === formData.nguon_khach_hang_id);
     if (!currentItem) return;
 
-    const confirmed = window.confirm(
-      `Xóa nguồn khách "${currentItem.ten_nguon}" khỏi dropdown?`
-    );
+    const confirmed = window.confirm(`Xóa nguồn khách "${currentItem.ten_nguon}" khỏi dropdown?`);
     if (!confirmed) return;
 
     try {
@@ -310,9 +436,7 @@ const ConsultationManager: React.FC = () => {
       return;
     }
 
-    const currentItem = masterData.statuses.find(
-      (item) => item.id === formData.tinh_trang_id
-    );
+    const currentItem = masterData.statuses.find((item) => item.id === formData.tinh_trang_id);
     if (!currentItem) return;
 
     const tenMoi = window.prompt('Sửa tên tình trạng:', currentItem.ten_tinh_trang);
@@ -339,14 +463,10 @@ const ConsultationManager: React.FC = () => {
       return;
     }
 
-    const currentItem = masterData.statuses.find(
-      (item) => item.id === formData.tinh_trang_id
-    );
+    const currentItem = masterData.statuses.find((item) => item.id === formData.tinh_trang_id);
     if (!currentItem) return;
 
-    const confirmed = window.confirm(
-      `Xóa tình trạng "${currentItem.ten_tinh_trang}" khỏi dropdown?`
-    );
+    const confirmed = window.confirm(`Xóa tình trạng "${currentItem.ten_tinh_trang}" khỏi dropdown?`);
     if (!confirmed) return;
 
     try {
@@ -361,6 +481,81 @@ const ConsultationManager: React.FC = () => {
     } catch (err: any) {
       console.error('Lỗi khi xóa tình trạng:', err);
       alert(err?.message || 'Không thể xóa tình trạng');
+    }
+  };
+
+  const handleAddService = async () => {
+    const tenDichVu = window.prompt('Nhập tên dịch vụ mới:');
+    if (!tenDichVu || !tenDichVu.trim()) return;
+
+    try {
+      const { error } = await supabase.from('consultation_services').insert([
+        {
+          ten_dich_vu: tenDichVu.trim(),
+          mau_hien_thi: null,
+          thu_tu_hien_thi: masterData.services.length + 1,
+          dang_su_dung: true,
+        },
+      ]);
+      if (error) throw error;
+      await loadData();
+    } catch (err: any) {
+      console.error('Lỗi khi thêm dịch vụ:', err);
+      alert(err?.message || 'Không thể thêm dịch vụ');
+    }
+  };
+
+  const handleEditService = async () => {
+    if (!serviceManageId) {
+      alert('Vui lòng chọn một dịch vụ để sửa');
+      return;
+    }
+
+    const currentItem = masterData.services.find((item) => item.id === serviceManageId);
+    if (!currentItem) return;
+
+    const tenMoi = window.prompt('Sửa tên dịch vụ:', currentItem.ten_dich_vu);
+    if (!tenMoi || !tenMoi.trim()) return;
+
+    try {
+      const { error } = await supabase
+        .from('consultation_services')
+        .update({ ten_dich_vu: tenMoi.trim() })
+        .eq('id', currentItem.id);
+
+      if (error) throw error;
+      await loadData();
+    } catch (err: any) {
+      console.error('Lỗi khi sửa dịch vụ:', err);
+      alert(err?.message || 'Không thể sửa dịch vụ');
+    }
+  };
+
+  const handleDeleteService = async () => {
+    if (!serviceManageId) {
+      alert('Vui lòng chọn một dịch vụ để xóa');
+      return;
+    }
+
+    const currentItem = masterData.services.find((item) => item.id === serviceManageId);
+    if (!currentItem) return;
+
+    const confirmed = window.confirm(`Xóa dịch vụ "${currentItem.ten_dich_vu}" khỏi danh sách?`);
+    if (!confirmed) return;
+
+    try {
+      const { error } = await supabase
+        .from('consultation_services')
+        .update({ dang_su_dung: false })
+        .eq('id', currentItem.id);
+
+      if (error) throw error;
+      setSelectedServices((prev) => prev.filter((id) => id !== currentItem.id));
+      setServiceManageId('');
+      await loadData();
+    } catch (err: any) {
+      console.error('Lỗi khi xóa dịch vụ:', err);
+      alert(err?.message || 'Không thể xóa dịch vụ');
     }
   };
 
@@ -498,10 +693,7 @@ const ConsultationManager: React.FC = () => {
 
                 <tbody>
                   {data.map((item) => (
-                    <tr
-                      key={item.id}
-                      className="border-b border-gray-100 hover:bg-gray-50"
-                    >
+                    <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="px-4 py-3 whitespace-nowrap">{item.ngay_tu_van || ''}</td>
                       <td className="px-4 py-3">
                         <div className="font-medium text-gray-800">{item.ten_khach_hang || ''}</div>
@@ -582,7 +774,9 @@ const ConsultationManager: React.FC = () => {
 
             <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[75vh] overflow-y-auto">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ngày tư vấn</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Ngày tư vấn
+                </label>
                 <input
                   type="date"
                   value={formData.ngay_tu_van}
@@ -604,18 +798,53 @@ const ConsultationManager: React.FC = () => {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Địa chỉ</label>
-                <input
-                  type="text"
-                  value={formData.dia_chi}
-                  onChange={(e) => handleFormChange('dia_chi', e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                />
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Địa chỉ
+                </label>
+                <div className="flex gap-2">
+                  <select
+                    value={formData.dia_chi}
+                    onChange={(e) => handleFormChange('dia_chi', e.target.value)}
+                    className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+                  >
+                    <option value="">Chọn địa chỉ</option>
+                    {masterData.addresses.map((item) => (
+                      <option key={item.id} value={item.ten_dia_chi}>
+                        {item.ten_dia_chi}
+                      </option>
+                    ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={handleAddAddress}
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50"
+                    title="Thêm địa chỉ"
+                  >
+                    +
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleEditAddress}
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50"
+                  >
+                    Sửa
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeleteAddress}
+                    className="rounded-lg border border-red-300 text-red-500 px-3 py-2 text-sm hover:bg-red-50"
+                  >
+                    Xóa
+                  </button>
+                </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Số điện thoại</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Số điện thoại
+                </label>
                 <input
                   type="text"
                   value={formData.so_dien_thoai}
@@ -625,7 +854,9 @@ const ConsultationManager: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ngày dự định chụp</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Ngày dự định chụp
+                </label>
                 <input
                   type="date"
                   value={formData.ngay_du_dinh_chup}
@@ -635,7 +866,9 @@ const ConsultationManager: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ngày ăn hỏi</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Ngày ăn hỏi
+                </label>
                 <input
                   type="date"
                   value={formData.ngay_an_hoi}
@@ -645,7 +878,9 @@ const ConsultationManager: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ngày cưới</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Ngày cưới
+                </label>
                 <input
                   type="date"
                   value={formData.ngay_cuoi}
@@ -655,12 +890,14 @@ const ConsultationManager: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nguồn khách</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nguồn khách
+                </label>
                 <div className="flex gap-2">
                   <select
                     value={formData.nguon_khach_hang_id}
                     onChange={(e) => handleFormChange('nguon_khach_hang_id', e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+                    className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
                   >
                     <option value="">Chọn nguồn khách</option>
                     {masterData.sources.map((item) => (
@@ -669,19 +906,41 @@ const ConsultationManager: React.FC = () => {
                       </option>
                     ))}
                   </select>
-                  <button type="button" onClick={handleAddSource} className="rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50">+</button>
-                  <button type="button" onClick={handleEditSource} className="rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50">Sửa</button>
-                  <button type="button" onClick={handleDeleteSource} className="rounded-lg border border-red-300 text-red-600 px-3 py-2 text-sm hover:bg-red-50">Xóa</button>
+
+                  <button
+                    type="button"
+                    onClick={handleAddSource}
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50"
+                    title="Thêm nguồn khách"
+                  >
+                    +
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleEditSource}
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50"
+                  >
+                    Sửa
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeleteSource}
+                    className="rounded-lg border border-red-300 text-red-500 px-3 py-2 text-sm hover:bg-red-50"
+                  >
+                    Xóa
+                  </button>
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tình trạng</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Tình trạng
+                </label>
                 <div className="flex gap-2">
                   <select
                     value={formData.tinh_trang_id}
                     onChange={(e) => handleFormChange('tinh_trang_id', e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+                    className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
                   >
                     <option value="">Chọn tình trạng</option>
                     {masterData.statuses.map((item) => (
@@ -690,14 +949,36 @@ const ConsultationManager: React.FC = () => {
                       </option>
                     ))}
                   </select>
-                  <button type="button" onClick={handleAddStatus} className="rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50">+</button>
-                  <button type="button" onClick={handleEditStatus} className="rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50">Sửa</button>
-                  <button type="button" onClick={handleDeleteStatus} className="rounded-lg border border-red-300 text-red-600 px-3 py-2 text-sm hover:bg-red-50">Xóa</button>
+
+                  <button
+                    type="button"
+                    onClick={handleAddStatus}
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50"
+                    title="Thêm tình trạng"
+                  >
+                    +
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleEditStatus}
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50"
+                  >
+                    Sửa
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeleteStatus}
+                    className="rounded-lg border border-red-300 text-red-500 px-3 py-2 text-sm hover:bg-red-50"
+                  >
+                    Xóa
+                  </button>
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nhân viên tư vấn</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nhân viên tư vấn
+                </label>
                 <select
                   value={formData.nhan_vien_tu_van}
                   onChange={(e) => handleFormChange('nhan_vien_tu_van', e.target.value)}
@@ -713,7 +994,9 @@ const ConsultationManager: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tổng giá trị dự kiến</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Tổng giá trị dự kiến
+                </label>
                 <input
                   type="number"
                   value={formData.tong_gia_tri_du_kien}
@@ -724,37 +1007,82 @@ const ConsultationManager: React.FC = () => {
               </div>
 
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Dịch vụ quan tâm</label>
-                <div className="flex flex-wrap gap-2">
-                  {masterData.services.map((service) => {
-                    const isSelected = selectedServices.includes(service.id);
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Dịch vụ quan tâm
+                </label>
 
-                    return (
-                      <button
-                        key={service.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedServices((prev) =>
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-wrap gap-2">
+                    <select
+                      value={serviceManageId}
+                      onChange={(e) => setServiceManageId(e.target.value)}
+                      className="min-w-[240px] rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+                    >
+                      <option value="">Chọn hạng mục để sửa / xóa</option>
+                      {masterData.services.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.ten_dich_vu}
+                        </option>
+                      ))}
+                    </select>
+
+                    <button
+                      type="button"
+                      onClick={handleAddService}
+                      className="rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50"
+                      title="Thêm dịch vụ"
+                    >
+                      +
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleEditService}
+                      className="rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50"
+                    >
+                      Sửa
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDeleteService}
+                      className="rounded-lg border border-red-300 text-red-500 px-3 py-2 text-sm hover:bg-red-50"
+                    >
+                      Xóa
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {masterData.services.map((service) => {
+                      const isSelected = selectedServices.includes(service.id);
+
+                      return (
+                        <button
+                          key={service.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedServices((prev) =>
+                              isSelected
+                                ? prev.filter((id) => id !== service.id)
+                                : [...prev, service.id]
+                            );
+                          }}
+                          className={`px-3 py-1.5 rounded-full text-sm border ${
                             isSelected
-                              ? prev.filter((id) => id !== service.id)
-                              : [...prev, service.id]
-                          );
-                        }}
-                        className={`px-3 py-1.5 rounded-full text-sm border ${
-                          isSelected
-                            ? 'bg-blue-600 text-white border-blue-600'
-                            : 'bg-gray-100 text-gray-700 border-gray-300'
-                        }`}
-                      >
-                        {service.ten_dich_vu}
-                      </button>
-                    );
-                  })}
+                              ? 'bg-blue-600 text-white border-blue-600'
+                              : 'bg-gray-100 text-gray-700 border-gray-300'
+                          }`}
+                        >
+                          {service.ten_dich_vu}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ghi chú</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Ghi chú
+                </label>
                 <textarea
                   value={formData.ghi_chu}
                   onChange={(e) => handleFormChange('ghi_chu', e.target.value)}

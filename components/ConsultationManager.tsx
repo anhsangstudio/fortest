@@ -860,8 +860,9 @@ const ConsultationManager: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => {
-                          setShowAddressManager(false);
+                          setShowAddressManager((prev) => !prev);
                           setShowSourceManager(false);
+						  setShowBusinessManager(false);
                         }}
                         className="p-1 rounded-lg hover:bg-gray-100 text-slate-400 hover:text-slate-700"
                         title="Tùy chỉnh địa chỉ"
@@ -928,8 +929,9 @@ const ConsultationManager: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => {
+                          setShowSourceManager((prev) => !prev);
                           setShowAddressManager(false);
-                          setShowSourceManager(false);
+						  setShowBusinessManager(false);
                         }}
                         className="p-1 rounded-lg hover:bg-gray-100 text-slate-400 hover:text-slate-700"
                         title="Tùy chỉnh nguồn khách"

@@ -2,6 +2,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { fetchConsultationListData, supabase } from '../apiService';
 import type { ConsultationFilter, ConsultationLog } from '../types';
+import { Settings, Plus, Pencil, Trash2 } from 'lucide-react';
 
 type MasterDataState = {
   addresses: Array<{ id: string; ten_dia_chi: string }>;
@@ -58,6 +59,9 @@ const ConsultationManager: React.FC = () => {
 
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
   const [serviceManageId, setServiceManageId] = useState('');
+  const [showAddressManager, setShowAddressManager] = useState(false);
+  const [showSourceManager, setShowSourceManager] = useState(false);
+  const [showBusinessManager, setShowBusinessManager] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -846,37 +850,140 @@ const ConsultationManager: React.FC = () => {
                   />
             
                   {/* Địa chỉ */}
-                  <select
-                    value={formData.dia_chi}
-                    onChange={(e) =>
-                      handleFormChange('dia_chi', e.target.value)
-                    }
-                    className="p-3 bg-gray-50 border rounded-xl font-bold"
-                  >
-                    <option value="">Chọn địa chỉ</option>
-                    {masterData.addresses.map((a) => (
-                      <option key={a.id} value={a.ten_dia_chi}>
-                        {a.ten_dia_chi}
-                      </option>
-                    ))}
-                  </select>
+                  
+				  
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-bold text-slate-500 uppercase">
+                        Địa chỉ
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAddressManager((prev) => !prev);
+                          setShowSourceManager(false);
+                        }}
+                        className="p-1 rounded-lg hover:bg-gray-100 text-slate-400 hover:text-slate-700"
+                        title="Tùy chỉnh địa chỉ"
+                      >
+                        <Settings size={14} />
+                      </button>
+                    </div>
+                  
+                    <select
+                      value={formData.dia_chi}
+                      onChange={(e) => handleFormChange('dia_chi', e.target.value)}
+                      className="w-full p-3 bg-gray-50 border border-slate-200 rounded-xl font-bold"
+                    >
+                      <option value="">Chọn địa chỉ</option>
+                      {masterData.addresses.map((a) => (
+                        <option key={a.id} value={a.ten_dia_chi}>
+                          {a.ten_dia_chi}
+                        </option>
+                      ))}
+                    </select>
+                  
+                    {showAddressManager && (
+                      <div className="flex flex-wrap gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                        <button
+                          type="button"
+                          onClick={handleAddAddress}
+                          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-medium hover:bg-slate-100"
+                        >
+                          <Plus size={14} />
+                          Thêm
+                        </button>
+                  
+                        <button
+                          type="button"
+                          onClick={handleEditAddress}
+                          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-medium hover:bg-slate-100"
+                        >
+                          <Pencil size={14} />
+                          Sửa
+                        </button>
+                  
+                        <button
+                          type="button"
+                          onClick={handleDeleteAddress}
+                          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-red-300 bg-white text-red-500 text-sm font-medium hover:bg-red-50"
+                        >
+                          <Trash2 size={14} />
+                          Xóa
+                        </button>
+                      </div>
+                    )}
+                  </div>
+				  
+				  {/* Địa chỉ */}
             
                   {/* Nguồn */}
-                  <select
-                    value={formData.nguon_khach_hang_id}
-                    onChange={(e) =>
-                      handleFormChange('nguon_khach_hang_id', e.target.value)
-                    }
-                    className="p-3 bg-gray-50 border rounded-xl font-bold"
-                  >
-                    <option value="">Nguồn khách</option>
-                    {masterData.sources.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.ten_nguon}
-                      </option>
-                    ))}
-                  </select>
-            
+                  
+				  {/* Nguồn khách */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-bold text-slate-500 uppercase">
+                        Nguồn khách hàng
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowSourceManager((prev) => !prev);
+                          setShowAddressManager(false);
+                        }}
+                        className="p-1 rounded-lg hover:bg-gray-100 text-slate-400 hover:text-slate-700"
+                        title="Tùy chỉnh nguồn khách"
+                      >
+                        <Settings size={14} />
+                      </button>
+                    </div>
+                  
+                    <select
+                      value={formData.nguon_khach_hang_id}
+                      onChange={(e) => handleFormChange('nguon_khach_hang_id', e.target.value)}
+                      className="w-full p-3 bg-gray-50 border border-slate-200 rounded-xl font-bold"
+                    >
+                      <option value="">Chọn nguồn khách</option>
+                      {masterData.sources.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.ten_nguon}
+                        </option>
+                      ))}
+                    </select>
+                  
+                    {showSourceManager && (
+                      <div className="flex flex-wrap gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                        <button
+                          type="button"
+                          onClick={handleAddSource}
+                          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-medium hover:bg-slate-100"
+                        >
+                          <Plus size={14} />
+                          Thêm
+                        </button>
+                  
+                        <button
+                          type="button"
+                          onClick={handleEditSource}
+                          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-medium hover:bg-slate-100"
+                        >
+                          <Pencil size={14} />
+                          Sửa
+                        </button>
+                  
+                        <button
+                          type="button"
+                          onClick={handleDeleteSource}
+                          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-red-300 bg-white text-red-500 text-sm font-medium hover:bg-red-50"
+                        >
+                          <Trash2 size={14} />
+                          Xóa
+                        </button>
+                      </div>
+                    )}
+                  </div>
+				  
+                  {/* Nguồn */}
                 </div>
               </div>
             

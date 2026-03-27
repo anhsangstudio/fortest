@@ -887,17 +887,41 @@ const ConsultationManager: React.FC = () => {
                 </h3>
             
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <input type="date" value={formData.ngay_du_dinh_chup}
-                    onChange={(e)=>handleFormChange('ngay_du_dinh_chup', e.target.value)}
-                    className="p-3 border rounded-xl font-bold" />
-            
-                  <input type="date" value={formData.ngay_cuoi}
-                    onChange={(e)=>handleFormChange('ngay_cuoi', e.target.value)}
-                    className="p-3 border rounded-xl font-bold" />
-            
-                  <input type="date" value={formData.ngay_an_hoi}
-                    onChange={(e)=>handleFormChange('ngay_an_hoi', e.target.value)}
-                    className="p-3 border rounded-xl font-bold" />
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">
+                      Ngày dự định chụp
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.ngay_du_dinh_chup}
+                      onChange={(e) => handleFormChange('ngay_du_dinh_chup', e.target.value)}
+                      className="w-full p-3 border rounded-xl font-bold bg-white"
+                    />
+                  </div>
+                
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">
+                      Ngày cưới
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.ngay_cuoi}
+                      onChange={(e) => handleFormChange('ngay_cuoi', e.target.value)}
+                      className="w-full p-3 border rounded-xl font-bold bg-white"
+                    />
+                  </div>
+                
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">
+                      Ngày ăn hỏi
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.ngay_an_hoi}
+                      onChange={(e) => handleFormChange('ngay_an_hoi', e.target.value)}
+                      className="w-full p-3 border rounded-xl font-bold bg-white"
+                    />
+                  </div>
                 </div>
               </div>
             
@@ -972,21 +996,21 @@ const ConsultationManager: React.FC = () => {
     
             
 
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
+            <div className="flex items-center justify-center gap-4 px-6 py-5 border-t border-gray-200 bg-gray-50">
               <button
                 type="button"
                 onClick={closeCreateModal}
                 disabled={saving}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-white disabled:opacity-50"
+                className="min-w-[140px] h-12 rounded-xl bg-red-500 text-white px-6 text-base font-semibold hover:bg-red-600 disabled:opacity-50"
               >
                 Hủy
               </button>
-
+            
               <button
                 type="button"
                 onClick={handleCreate}
                 disabled={saving}
-                className="rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                className="min-w-[140px] h-12 rounded-xl bg-blue-600 text-white px-6 text-base font-semibold hover:bg-blue-700 disabled:opacity-50"
               >
                 {saving ? 'Đang lưu...' : 'Lưu'}
               </button>

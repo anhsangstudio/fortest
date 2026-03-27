@@ -690,7 +690,37 @@ const ConsultationManager: React.FC = () => {
   
   const isRejectStatus =
     selectedStatus?.ten_tinh_trang?.trim().toLowerCase() === 'khach tu choi';
-
+  
+  const handleEdit = (item: any) => {
+    setFormData({
+      ...formData,
+      ...item,
+    });
+  
+    setShowModal(true);
+  };
+  
+  const handleDelete = async (item: any) => {
+    const confirmDelete = window.confirm(
+      `Bạn có chắc muốn xóa khách "${item.ten_khach_hang}"?`
+    );
+  
+    if (!confirmDelete) return;
+  
+    try {
+      const { error } = await supabase
+        .from('consultation_logs')
+        .delete()
+        .eq('id', item.id);
+  
+      if (error) throw error;
+  
+      await loadData();
+    } catch (err: any) {
+      console.error(err);
+      alert('Không thể xóa dữ liệu');
+    }
+  };
 
   return (
     <div className="p-6 space-y-4">
@@ -822,6 +852,7 @@ const ConsultationManager: React.FC = () => {
 					<th className="px-4 py-3 font-semibold">Lý do từ chối</th>
                     <th className="px-4 py-3 font-semibold">Nhân viên tư vấn</th>
                     <th className="px-4 py-3 font-semibold text-right">Giá trị dự kiến</th>
+					<th className="px-4 py-3 font-semibold text-center">Hành động</th>
                   </tr>
                 </thead>
 
@@ -866,6 +897,29 @@ const ConsultationManager: React.FC = () => {
                       <td className="px-4 py-3 whitespace-nowrap">{item.nhan_vien_tu_van_ten || ''}</td>
                       <td className="px-4 py-3 whitespace-nowrap text-right font-medium">
                         {(item.tong_gia_tri_du_kien || 0).toLocaleString('vi-VN')}
+                      </td>
+					  <td className="px-4 py-3 whitespace-nowrap text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          
+                          {/* EDIT */}
+                          <button
+                            onClick={() => handleEdit(item)}
+                            className="p-2 rounded-lg hover:bg-blue-50 text-blue-500 hover:text-blue-700"
+                            title="Chỉnh sửa"
+                          >
+                            <Pencil size={16} />
+                          </button>
+                      
+                          {/* DELETE */}
+                          <button
+                            onClick={() => handleDelete(item)}
+                            className="p-2 rounded-lg hover:bg-red-50 text-red-500 hover:text-red-700"
+                            title="Xóa"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                      
+                        </div>
                       </td>
                     </tr>
                   ))}

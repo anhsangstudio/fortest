@@ -923,7 +923,7 @@ const ConsultationManager: React.FC = () => {
                       </td>
                     </tr>
                   ))}
-                </tbody>
+                <tr key={item.id} className="hover:bg-gray-50 transition">
               </table>
             </div>
 

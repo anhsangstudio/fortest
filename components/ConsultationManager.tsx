@@ -860,7 +860,6 @@ const ConsultationManager: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => {
-                          setShowBusinessManager((prev) => !prev);
                           setShowAddressManager(false);
                           setShowSourceManager(false);
                         }}
@@ -929,7 +928,6 @@ const ConsultationManager: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => {
-                          setShowBusinessManager((prev) => !prev);
                           setShowAddressManager(false);
                           setShowSourceManager(false);
                         }}

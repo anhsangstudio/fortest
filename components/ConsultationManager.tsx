@@ -1,7 +1,14 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { fetchConsultationListData } from '../apiService';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.1';
+import { fetchConsultationListData, supabase } from '../apiService';
 import type { ConsultationFilter, ConsultationLog } from '../types';
+
+type MasterDataState = {
+  sources: Array<{ id: string; ten_nguon: string }>;
+  statuses: Array<{ id: string; ten_tinh_trang: string }>;
+  rejectionReasons: Array<{ id: string; ten_ly_do: string }>;
+  services: Array<{ id: string; ten_dich_vu: string }>;
+  staffOptions: Array<{ id: string; name: string }>;
+};
 
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -21,24 +28,18 @@ const ConsultationManager: React.FC = () => {
     nguon_khach_hang_id: '',
     nhan_vien_tu_van: '',
   });
-  
-  const [masterData, setMasterData] = useState<{
-    sources: Array<{ id: string; ten_nguon: string }>;
-    statuses: Array<{ id: string; ten_tinh_trang: string }>;
-    rejectionReasons: Array<{ id: string; ten_ly_do: string }>;
-    services: Array<{ id: string; ten_dich_vu: string }>;
-    staffOptions: Array<{ id: string; name: string }>;
-  }>({
+
+  const [masterData, setMasterData] = useState<MasterDataState>({
     sources: [],
     statuses: [],
     rejectionReasons: [],
     services: [],
     staffOptions: [],
   });
-  
+
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  
+
   const [formData, setFormData] = useState({
     ngay_tu_van: new Date().toISOString().slice(0, 10),
     ten_khach_hang: '',
@@ -53,6 +54,8 @@ const ConsultationManager: React.FC = () => {
     tong_gia_tri_du_kien: '',
     ghi_chu: '',
   });
+
+  const [selectedServices, setSelectedServices] = useState<string[]>([]);
 
   const loadData = useCallback(async () => {
     try {
@@ -85,17 +88,14 @@ const ConsultationManager: React.FC = () => {
     setPage((prev) => Math.min(totalPages, prev + 1));
   };
 
-  const handleFilterChange = (
-    field: keyof ConsultationFilter,
-    value: string
-  ) => {
+  const handleFilterChange = (field: keyof ConsultationFilter, value: string) => {
     setPage(1);
     setFilters((prev) => ({
       ...prev,
       [field]: value,
     }));
   };
-  
+
   const resetFilters = () => {
     setPage(1);
     setFilters({
@@ -105,7 +105,7 @@ const ConsultationManager: React.FC = () => {
       nhan_vien_tu_van: '',
     });
   };
-  
+
   const resetForm = () => {
     setFormData({
       ngay_tu_van: new Date().toISOString().slice(0, 10),
@@ -121,37 +121,35 @@ const ConsultationManager: React.FC = () => {
       tong_gia_tri_du_kien: '',
       ghi_chu: '',
     });
+    setSelectedServices([]);
   };
-  
+
   const openCreateModal = () => {
     resetForm();
     setIsCreateModalOpen(true);
   };
-  
+
   const closeCreateModal = () => {
     if (saving) return;
     setIsCreateModalOpen(false);
   };
-  
-  const handleFormChange = (
-    field: keyof typeof formData,
-    value: string
-  ) => {
+
+  const handleFormChange = (field: keyof typeof formData, value: string) => {
     setFormData((prev) => ({
       ...prev,
       [field]: value,
     }));
   };
-  
+
   const handleCreate = async () => {
     if (!formData.ten_khach_hang.trim()) {
       alert('Vui lòng nhập tên khách hàng');
       return;
     }
-  
+
     try {
       setSaving(true);
-  
+
       const payload = {
         ngay_tu_van: formData.ngay_tu_van || null,
         ten_khach_hang: formData.ten_khach_hang.trim(),
@@ -168,13 +166,28 @@ const ConsultationManager: React.FC = () => {
           : 0,
         ghi_chu: formData.ghi_chu.trim() || null,
       };
-  
-      const { error } = await supabase
+
+      const { data: createdLog, error } = await supabase
         .from('consultation_logs')
-        .insert([payload]);
-  
+        .insert([payload])
+        .select()
+        .single();
+
       if (error) throw error;
-  
+
+      if (selectedServices.length > 0) {
+        const serviceRows = selectedServices.map((serviceId) => ({
+          consultation_log_id: createdLog.id,
+          service_id: serviceId,
+        }));
+
+        const { error: serviceError } = await supabase
+          .from('consultation_log_services')
+          .insert(serviceRows);
+
+        if (serviceError) throw serviceError;
+      }
+
       setIsCreateModalOpen(false);
       await loadData();
     } catch (err: any) {
@@ -185,6 +198,172 @@ const ConsultationManager: React.FC = () => {
     }
   };
 
+  const handleAddSource = async () => {
+    const tenNguon = window.prompt('Nhập tên nguồn khách mới:');
+    if (!tenNguon || !tenNguon.trim()) return;
+
+    try {
+      const { error } = await supabase.from('consultation_sources').insert([
+        {
+          ten_nguon: tenNguon.trim(),
+          mau_hien_thi: null,
+          thu_tu_hien_thi: masterData.sources.length + 1,
+          dang_su_dung: true,
+        },
+      ]);
+      if (error) throw error;
+      await loadData();
+    } catch (err: any) {
+      console.error('Lỗi khi thêm nguồn khách:', err);
+      alert(err?.message || 'Không thể thêm nguồn khách');
+    }
+  };
+
+  const handleEditSource = async () => {
+    if (!formData.nguon_khach_hang_id) {
+      alert('Vui lòng chọn một nguồn khách để sửa');
+      return;
+    }
+
+    const currentItem = masterData.sources.find(
+      (item) => item.id === formData.nguon_khach_hang_id
+    );
+    if (!currentItem) return;
+
+    const tenMoi = window.prompt('Sửa tên nguồn khách:', currentItem.ten_nguon);
+    if (!tenMoi || !tenMoi.trim()) return;
+
+    try {
+      const { error } = await supabase
+        .from('consultation_sources')
+        .update({ ten_nguon: tenMoi.trim() })
+        .eq('id', currentItem.id);
+
+      if (error) throw error;
+      await loadData();
+      setFormData((prev) => ({ ...prev, nguon_khach_hang_id: currentItem.id }));
+    } catch (err: any) {
+      console.error('Lỗi khi sửa nguồn khách:', err);
+      alert(err?.message || 'Không thể sửa nguồn khách');
+    }
+  };
+
+  const handleDeleteSource = async () => {
+    if (!formData.nguon_khach_hang_id) {
+      alert('Vui lòng chọn một nguồn khách để xóa');
+      return;
+    }
+
+    const currentItem = masterData.sources.find(
+      (item) => item.id === formData.nguon_khach_hang_id
+    );
+    if (!currentItem) return;
+
+    const confirmed = window.confirm(
+      `Xóa nguồn khách "${currentItem.ten_nguon}" khỏi dropdown?`
+    );
+    if (!confirmed) return;
+
+    try {
+      const { error } = await supabase
+        .from('consultation_sources')
+        .update({ dang_su_dung: false })
+        .eq('id', currentItem.id);
+
+      if (error) throw error;
+      setFormData((prev) => ({ ...prev, nguon_khach_hang_id: '' }));
+      await loadData();
+    } catch (err: any) {
+      console.error('Lỗi khi xóa nguồn khách:', err);
+      alert(err?.message || 'Không thể xóa nguồn khách');
+    }
+  };
+
+  const handleAddStatus = async () => {
+    const tenTinhTrang = window.prompt('Nhập tên tình trạng mới:');
+    if (!tenTinhTrang || !tenTinhTrang.trim()) return;
+
+    try {
+      const { error } = await supabase.from('consultation_statuses').insert([
+        {
+          ten_tinh_trang: tenTinhTrang.trim(),
+          mau_hien_thi: null,
+          nhom_trang_thai: 'dang_xu_ly',
+          thu_tu_hien_thi: masterData.statuses.length + 1,
+          dang_su_dung: true,
+          la_trang_thai_chot: false,
+          la_trang_thai_tu_choi: false,
+          la_trang_thai_dong: false,
+        },
+      ]);
+      if (error) throw error;
+      await loadData();
+    } catch (err: any) {
+      console.error('Lỗi khi thêm tình trạng:', err);
+      alert(err?.message || 'Không thể thêm tình trạng');
+    }
+  };
+
+  const handleEditStatus = async () => {
+    if (!formData.tinh_trang_id) {
+      alert('Vui lòng chọn một tình trạng để sửa');
+      return;
+    }
+
+    const currentItem = masterData.statuses.find(
+      (item) => item.id === formData.tinh_trang_id
+    );
+    if (!currentItem) return;
+
+    const tenMoi = window.prompt('Sửa tên tình trạng:', currentItem.ten_tinh_trang);
+    if (!tenMoi || !tenMoi.trim()) return;
+
+    try {
+      const { error } = await supabase
+        .from('consultation_statuses')
+        .update({ ten_tinh_trang: tenMoi.trim() })
+        .eq('id', currentItem.id);
+
+      if (error) throw error;
+      await loadData();
+      setFormData((prev) => ({ ...prev, tinh_trang_id: currentItem.id }));
+    } catch (err: any) {
+      console.error('Lỗi khi sửa tình trạng:', err);
+      alert(err?.message || 'Không thể sửa tình trạng');
+    }
+  };
+
+  const handleDeleteStatus = async () => {
+    if (!formData.tinh_trang_id) {
+      alert('Vui lòng chọn một tình trạng để xóa');
+      return;
+    }
+
+    const currentItem = masterData.statuses.find(
+      (item) => item.id === formData.tinh_trang_id
+    );
+    if (!currentItem) return;
+
+    const confirmed = window.confirm(
+      `Xóa tình trạng "${currentItem.ten_tinh_trang}" khỏi dropdown?`
+    );
+    if (!confirmed) return;
+
+    try {
+      const { error } = await supabase
+        .from('consultation_statuses')
+        .update({ dang_su_dung: false })
+        .eq('id', currentItem.id);
+
+      if (error) throw error;
+      setFormData((prev) => ({ ...prev, tinh_trang_id: '' }));
+      await loadData();
+    } catch (err: any) {
+      console.error('Lỗi khi xóa tình trạng:', err);
+      alert(err?.message || 'Không thể xóa tình trạng');
+    }
+  };
+
   return (
     <div className="p-6 space-y-4">
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
@@ -192,8 +371,7 @@ const ConsultationManager: React.FC = () => {
           <div>
             <h1 className="text-2xl font-bold text-gray-800">Nhật Ký Tư Vấn</h1>
             <p className="text-sm text-gray-500 mt-1">
-              Đang tải dữ liệu thật từ Supabase. Bước tiếp theo sẽ thêm filter,
-              form thêm mới và báo cáo.
+              Quản lý lead tư vấn, theo dõi tình trạng khách hàng và chuẩn bị dữ liệu cho báo cáo insight.
             </p>
           </div>
 
@@ -201,7 +379,7 @@ const ConsultationManager: React.FC = () => {
             <div className="text-sm text-gray-600">
               Tổng số dòng: <span className="font-semibold">{total}</span>
             </div>
-          
+
             <button
               type="button"
               onClick={openCreateModal}
@@ -212,8 +390,8 @@ const ConsultationManager: React.FC = () => {
           </div>
         </div>
       </div>
-	  
-	  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -227,7 +405,7 @@ const ConsultationManager: React.FC = () => {
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-      
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Tình trạng
@@ -245,16 +423,14 @@ const ConsultationManager: React.FC = () => {
               ))}
             </select>
           </div>
-      
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Nguồn khách
             </label>
             <select
               value={filters.nguon_khach_hang_id || ''}
-              onChange={(e) =>
-                handleFilterChange('nguon_khach_hang_id', e.target.value)
-              }
+              onChange={(e) => handleFilterChange('nguon_khach_hang_id', e.target.value)}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Tất cả</option>
@@ -265,16 +441,14 @@ const ConsultationManager: React.FC = () => {
               ))}
             </select>
           </div>
-      
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Nhân viên tư vấn
             </label>
             <select
               value={filters.nhan_vien_tu_van || ''}
-              onChange={(e) =>
-                handleFilterChange('nhan_vien_tu_van', e.target.value)
-              }
+              onChange={(e) => handleFilterChange('nhan_vien_tu_van', e.target.value)}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Tất cả</option>
@@ -285,7 +459,7 @@ const ConsultationManager: React.FC = () => {
               ))}
             </select>
           </div>
-      
+
           <div className="flex items-end">
             <button
               type="button"
@@ -328,25 +502,15 @@ const ConsultationManager: React.FC = () => {
                       key={item.id}
                       className="border-b border-gray-100 hover:bg-gray-50"
                     >
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {item.ngay_tu_van || ''}
-                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">{item.ngay_tu_van || ''}</td>
                       <td className="px-4 py-3">
-                        <div className="font-medium text-gray-800">
-                          {item.ten_khach_hang || ''}
-                        </div>
+                        <div className="font-medium text-gray-800">{item.ten_khach_hang || ''}</div>
                         {item.dia_chi ? (
-                          <div className="text-xs text-gray-500 mt-1">
-                            {item.dia_chi}
-                          </div>
+                          <div className="text-xs text-gray-500 mt-1">{item.dia_chi}</div>
                         ) : null}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {item.so_dien_thoai || ''}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {item.nguon_khach_hang_ten || ''}
-                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">{item.so_dien_thoai || ''}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">{item.nguon_khach_hang_ten || ''}</td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">
                           {(item.dich_vu_quan_tam_ten || []).length > 0 ? (
@@ -363,12 +527,8 @@ const ConsultationManager: React.FC = () => {
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {item.tinh_trang_ten || ''}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {item.nhan_vien_tu_van_ten || ''}
-                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">{item.tinh_trang_ten || ''}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">{item.nhan_vien_tu_van_ten || ''}</td>
                       <td className="px-4 py-3 whitespace-nowrap text-right font-medium">
                         {(item.tong_gia_tri_du_kien || 0).toLocaleString('vi-VN')}
                       </td>
@@ -405,224 +565,227 @@ const ConsultationManager: React.FC = () => {
           </>
         )}
       </div>
-	  {isCreateModalOpen && (
-	    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-	   	 <div className="w-full max-w-4xl rounded-2xl bg-white shadow-xl overflow-hidden">
-	   	 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-	   		 <h2 className="text-xl font-bold text-gray-800">
-	   		 Thêm mới nhật ký tư vấn
-	   		 </h2>
-	   		 <button
-	   		 type="button"
-	   		 onClick={closeCreateModal}
-	   		 className="text-gray-500 hover:text-gray-700"
-	   		 >
-	   		 Đóng
-	   		 </button>
-	   	 </div>
-	    
-	   	 <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[75vh] overflow-y-auto">
-	   		 <div>
-	   		 <label className="block text-sm font-medium text-gray-700 mb-1">
-	   			 Ngày tư vấn
-	   		 </label>
-	   		 <input
-	   			 type="date"
-	   			 value={formData.ngay_tu_van}
-	   			 onChange={(e) => handleFormChange('ngay_tu_van', e.target.value)}
-	   			 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-	   		 />
-	   		 </div>
-	    
-	   		 <div>
-	   		 <label className="block text-sm font-medium text-gray-700 mb-1">
-	   			 Tên khách hàng <span className="text-red-500">*</span>
-	   		 </label>
-	   		 <input
-	   			 type="text"
-	   			 value={formData.ten_khach_hang}
-	   			 onChange={(e) =>
-	   			 handleFormChange('ten_khach_hang', e.target.value)
-	   			 }
-	   			 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-	   			 placeholder="Nhập tên khách hàng"
-	   		 />
-	   		 </div>
-	    
-	   		 <div>
-	   		 <label className="block text-sm font-medium text-gray-700 mb-1">
-	   			 Địa chỉ
-	   		 </label>
-	   		 <input
-	   			 type="text"
-	   			 value={formData.dia_chi}
-	   			 onChange={(e) => handleFormChange('dia_chi', e.target.value)}
-	   			 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-	   		 />
-	   		 </div>
-	    
-	   		 <div>
-	   		 <label className="block text-sm font-medium text-gray-700 mb-1">
-	   			 Số điện thoại
-	   		 </label>
-	   		 <input
-	   			 type="text"
-	   			 value={formData.so_dien_thoai}
-	   			 onChange={(e) =>
-	   			 handleFormChange('so_dien_thoai', e.target.value)
-	   			 }
-	   			 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-	   		 />
-	   		 </div>
-	    
-	   		 <div>
-	   		 <label className="block text-sm font-medium text-gray-700 mb-1">
-	   			 Ngày dự định chụp
-	   		 </label>
-	   		 <input
-	   			 type="date"
-	   			 value={formData.ngay_du_dinh_chup}
-	   			 onChange={(e) =>
-	   			 handleFormChange('ngay_du_dinh_chup', e.target.value)
-	   			 }
-	   			 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-	   		 />
-	   		 </div>
-	    
-	   		 <div>
-	   		 <label className="block text-sm font-medium text-gray-700 mb-1">
-	   			 Ngày ăn hỏi
-	   		 </label>
-	   		 <input
-	   			 type="date"
-	   			 value={formData.ngay_an_hoi}
-	   			 onChange={(e) => handleFormChange('ngay_an_hoi', e.target.value)}
-	   			 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-	   		 />
-	   		 </div>
-	    
-	   		 <div>
-	   		 <label className="block text-sm font-medium text-gray-700 mb-1">
-	   			 Ngày cưới
-	   		 </label>
-	   		 <input
-	   			 type="date"
-	   			 value={formData.ngay_cuoi}
-	   			 onChange={(e) => handleFormChange('ngay_cuoi', e.target.value)}
-	   			 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-	   		 />
-	   		 </div>
-	    
-	   		 <div>
-	   		 <label className="block text-sm font-medium text-gray-700 mb-1">
-	   			 Nguồn khách
-	   		 </label>
-	   		 <select
-	   			 value={formData.nguon_khach_hang_id}
-	   			 onChange={(e) =>
-	   			 handleFormChange('nguon_khach_hang_id', e.target.value)
-	   			 }
-	   			 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
-	   		 >
-	   			 <option value="">Chọn nguồn khách</option>
-	   			 {masterData.sources.map((item) => (
-	   			 <option key={item.id} value={item.id}>
-	   				 {item.ten_nguon}
-	   			 </option>
-	   			 ))}
-	   		 </select>
-	   		 </div>
-	    
-	   		 <div>
-	   		 <label className="block text-sm font-medium text-gray-700 mb-1">
-	   			 Tình trạng
-	   		 </label>
-	   		 <select
-	   			 value={formData.tinh_trang_id}
-	   			 onChange={(e) =>
-	   			 handleFormChange('tinh_trang_id', e.target.value)
-	   			 }
-	   			 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
-	   		 >
-	   			 <option value="">Chọn tình trạng</option>
-	   			 {masterData.statuses.map((item) => (
-	   			 <option key={item.id} value={item.id}>
-	   				 {item.ten_tinh_trang}
-	   			 </option>
-	   			 ))}
-	   		 </select>
-	   		 </div>
-	    
-	   		 <div>
-	   		 <label className="block text-sm font-medium text-gray-700 mb-1">
-	   			 Nhân viên tư vấn
-	   		 </label>
-	   		 <select
-	   			 value={formData.nhan_vien_tu_van}
-	   			 onChange={(e) =>
-	   			 handleFormChange('nhan_vien_tu_van', e.target.value)
-	   			 }
-	   			 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
-	   		 >
-	   			 <option value="">Chọn nhân viên tư vấn</option>
-	   			 {masterData.staffOptions.map((item) => (
-	   			 <option key={item.id} value={item.id}>
-	   				 {item.name}
-	   			 </option>
-	   			 ))}
-	   		 </select>
-	   		 </div>
-	    
-	   		 <div>
-	   		 <label className="block text-sm font-medium text-gray-700 mb-1">
-	   			 Tổng giá trị dự kiến
-	   		 </label>
-	   		 <input
-	   			 type="number"
-	   			 value={formData.tong_gia_tri_du_kien}
-	   			 onChange={(e) =>
-	   			 handleFormChange('tong_gia_tri_du_kien', e.target.value)
-	   			 }
-	   			 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-	   			 placeholder="0"
-	   		 />
-	   		 </div>
-	    
-	   		 <div className="md:col-span-2">
-	   		 <label className="block text-sm font-medium text-gray-700 mb-1">
-	   			 Ghi chú
-	   		 </label>
-	   		 <textarea
-	   			 value={formData.ghi_chu}
-	   			 onChange={(e) => handleFormChange('ghi_chu', e.target.value)}
-	   			 rows={4}
-	   			 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-	   		 />
-	   		 </div>
-	   	 </div>
-	    
-	   	 <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
-	   		 <button
-	   		 type="button"
-	   		 onClick={closeCreateModal}
-	   		 disabled={saving}
-	   		 className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-white disabled:opacity-50"
-	   		 >
-	   		 Hủy
-	   		 </button>
-	    
-	   		 <button
-	   		 type="button"
-	   		 onClick={handleCreate}
-	   		 disabled={saving}
-	   		 className="rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-	   		 >
-	   		 {saving ? 'Đang lưu...' : 'Lưu'}
-	   		 </button>
-	   	 </div>
-	   	 </div>
-	    </div>
-	    )}
+
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-4xl rounded-2xl bg-white shadow-xl overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h2 className="text-xl font-bold text-gray-800">Thêm mới nhật ký tư vấn</h2>
+              <button
+                type="button"
+                onClick={closeCreateModal}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                Đóng
+              </button>
+            </div>
+
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[75vh] overflow-y-auto">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Ngày tư vấn</label>
+                <input
+                  type="date"
+                  value={formData.ngay_tu_van}
+                  onChange={(e) => handleFormChange('ngay_tu_van', e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Tên khách hàng <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.ten_khach_hang}
+                  onChange={(e) => handleFormChange('ten_khach_hang', e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  placeholder="Nhập tên khách hàng"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Địa chỉ</label>
+                <input
+                  type="text"
+                  value={formData.dia_chi}
+                  onChange={(e) => handleFormChange('dia_chi', e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Số điện thoại</label>
+                <input
+                  type="text"
+                  value={formData.so_dien_thoai}
+                  onChange={(e) => handleFormChange('so_dien_thoai', e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Ngày dự định chụp</label>
+                <input
+                  type="date"
+                  value={formData.ngay_du_dinh_chup}
+                  onChange={(e) => handleFormChange('ngay_du_dinh_chup', e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Ngày ăn hỏi</label>
+                <input
+                  type="date"
+                  value={formData.ngay_an_hoi}
+                  onChange={(e) => handleFormChange('ngay_an_hoi', e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Ngày cưới</label>
+                <input
+                  type="date"
+                  value={formData.ngay_cuoi}
+                  onChange={(e) => handleFormChange('ngay_cuoi', e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nguồn khách</label>
+                <div className="flex gap-2">
+                  <select
+                    value={formData.nguon_khach_hang_id}
+                    onChange={(e) => handleFormChange('nguon_khach_hang_id', e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+                  >
+                    <option value="">Chọn nguồn khách</option>
+                    {masterData.sources.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.ten_nguon}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="button" onClick={handleAddSource} className="rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50">+</button>
+                  <button type="button" onClick={handleEditSource} className="rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50">Sửa</button>
+                  <button type="button" onClick={handleDeleteSource} className="rounded-lg border border-red-300 text-red-600 px-3 py-2 text-sm hover:bg-red-50">Xóa</button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tình trạng</label>
+                <div className="flex gap-2">
+                  <select
+                    value={formData.tinh_trang_id}
+                    onChange={(e) => handleFormChange('tinh_trang_id', e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+                  >
+                    <option value="">Chọn tình trạng</option>
+                    {masterData.statuses.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.ten_tinh_trang}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="button" onClick={handleAddStatus} className="rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50">+</button>
+                  <button type="button" onClick={handleEditStatus} className="rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50">Sửa</button>
+                  <button type="button" onClick={handleDeleteStatus} className="rounded-lg border border-red-300 text-red-600 px-3 py-2 text-sm hover:bg-red-50">Xóa</button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nhân viên tư vấn</label>
+                <select
+                  value={formData.nhan_vien_tu_van}
+                  onChange={(e) => handleFormChange('nhan_vien_tu_van', e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+                >
+                  <option value="">Chọn nhân viên tư vấn</option>
+                  {masterData.staffOptions.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tổng giá trị dự kiến</label>
+                <input
+                  type="number"
+                  value={formData.tong_gia_tri_du_kien}
+                  onChange={(e) => handleFormChange('tong_gia_tri_du_kien', e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  placeholder="0"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Dịch vụ quan tâm</label>
+                <div className="flex flex-wrap gap-2">
+                  {masterData.services.map((service) => {
+                    const isSelected = selectedServices.includes(service.id);
+
+                    return (
+                      <button
+                        key={service.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedServices((prev) =>
+                            isSelected
+                              ? prev.filter((id) => id !== service.id)
+                              : [...prev, service.id]
+                          );
+                        }}
+                        className={`px-3 py-1.5 rounded-full text-sm border ${
+                          isSelected
+                            ? 'bg-blue-600 text-white border-blue-600'
+                            : 'bg-gray-100 text-gray-700 border-gray-300'
+                        }`}
+                      >
+                        {service.ten_dich_vu}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Ghi chú</label>
+                <textarea
+                  value={formData.ghi_chu}
+                  onChange={(e) => handleFormChange('ghi_chu', e.target.value)}
+                  rows={4}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
+              <button
+                type="button"
+                onClick={closeCreateModal}
+                disabled={saving}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-white disabled:opacity-50"
+              >
+                Hủy
+              </button>
+
+              <button
+                type="button"
+                onClick={handleCreate}
+                disabled={saving}
+                className="rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              >
+                {saving ? 'Đang lưu...' : 'Lưu'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

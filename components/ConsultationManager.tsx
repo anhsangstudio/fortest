@@ -43,6 +43,7 @@ const ConsultationManager: React.FC = () => {
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editingLogId, setEditingLogId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     ngay_tu_van: new Date().toISOString().slice(0, 10),
@@ -201,13 +202,80 @@ const ConsultationManager: React.FC = () => {
   const openCreateModal = () => {
     resetForm();
     setIsCreateModalOpen(true);
+	setEditingLogId(null);
   };
 
   const closeCreateModal = () => {
     if (saving) return;
     setIsCreateModalOpen(false);
   };
-
+  
+  const handleEdit = async (item: ConsultationLog) => {
+    try {
+      setEditingLogId(item.id);
+  
+      // lấy lại dịch vụ quan tâm của đúng log này
+      const { data: logServices, error: logServicesError } = await supabase
+        .from('consultation_log_services')
+        .select('service_id')
+        .eq('consultation_log_id', item.id);
+  
+      if (logServicesError) throw logServicesError;
+  
+      setFormData({
+        ngay_tu_van: item.ngay_tu_van || '',
+        ten_khach_hang: item.ten_khach_hang || '',
+        dia_chi: item.dia_chi || '',
+        so_dien_thoai: item.so_dien_thoai || '',
+        ngay_du_dinh_chup: item.ngay_du_dinh_chup || '',
+        ngay_an_hoi: item.ngay_an_hoi || '',
+        ngay_cuoi: item.ngay_cuoi || '',
+        nguon_khach_hang_id: item.nguon_khach_hang_id || '',
+        tinh_trang_id: item.tinh_trang_id || '',
+        ly_do_tu_choi_id: item.ly_do_tu_choi_id || '',
+        nhan_vien_tu_van: item.nhan_vien_tu_van || '',
+        tong_gia_tri_du_kien: String(item.tong_gia_tri_du_kien || ''),
+        ghi_chu: item.ghi_chu || '',
+      });
+  
+      setSelectedServices((logServices || []).map((row: any) => row.service_id));
+      setIsCreateModalOpen(true);
+    } catch (err: any) {
+      console.error('Lỗi khi mở dữ liệu để sửa:', err);
+      alert(err?.message || 'Không thể mở dữ liệu để chỉnh sửa');
+    }
+  };
+  
+  const handleDelete = async (item: ConsultationLog) => {
+    const confirmed = window.confirm(
+      `Bạn có chắc muốn xóa khách "${item.ten_khach_hang}" không?`
+    );
+    if (!confirmed) return;
+  
+    try {
+      // xóa bảng nối trước cho sạch dữ liệu
+      const { error: deleteServicesError } = await supabase
+        .from('consultation_log_services')
+        .delete()
+        .eq('consultation_log_id', item.id);
+  
+      if (deleteServicesError) throw deleteServicesError;
+  
+      const { error } = await supabase
+        .from('consultation_logs')
+        .delete()
+        .eq('id', item.id);
+  
+      if (error) throw error;
+  
+      await loadData();
+    } catch (err: any) {
+      console.error('Lỗi khi xóa nhật ký tư vấn:', err);
+      alert(err?.message || 'Không thể xóa dữ liệu');
+    }
+  };
+  
+  
    const handleFormChange = (field: keyof typeof formData, value: string) => {
      setFormData((prev) => {
        const next = {
@@ -259,29 +327,55 @@ const ConsultationManager: React.FC = () => {
         ghi_chu: formData.ghi_chu.trim() || null,
       };
 
+    let savedLogId = editingLogId;
+    
+    if (editingLogId) {
+      const { error } = await supabase
+        .from('consultation_logs')
+        .update(payload)
+        .eq('id', editingLogId);
+    
+      if (error) throw error;
+    } else {
       const { data: createdLog, error } = await supabase
         .from('consultation_logs')
         .insert([payload])
         .select()
         .single();
-
+    
       if (error) throw error;
-
-      if (selectedServices.length > 0) {
-        const serviceRows = selectedServices.map((serviceId) => ({
-          consultation_log_id: createdLog.id,
-          service_id: serviceId,
-        }));
-
-        const { error: serviceError } = await supabase
-          .from('consultation_log_services')
-          .insert(serviceRows);
-
-        if (serviceError) throw serviceError;
-      }
-
-      setIsCreateModalOpen(false);
-      await loadData();
+      savedLogId = createdLog.id;
+    }
+    
+    if (!savedLogId) {
+      throw new Error('Không xác định được bản ghi để lưu dịch vụ quan tâm');
+    }
+    
+    const { error: deleteOldServicesError } = await supabase
+      .from('consultation_log_services')
+      .delete()
+      .eq('consultation_log_id', savedLogId);
+    
+    if (deleteOldServicesError) throw deleteOldServicesError;
+    
+    if (selectedServices.length > 0) {
+      const serviceRows = selectedServices.map((serviceId) => ({
+        consultation_log_id: savedLogId,
+        service_id: serviceId,
+      }));
+    
+      const { error: serviceError } = await supabase
+        .from('consultation_log_services')
+        .insert(serviceRows);
+    
+      if (serviceError) throw serviceError;
+    }
+    
+    setIsCreateModalOpen(false);
+    resetForm();
+    await loadData();
+    
+    
     } catch (err: any) {
       console.error('Lỗi khi thêm mới nhật ký tư vấn:', err);
       alert(err?.message || 'Không thể thêm mới nhật ký tư vấn');
@@ -923,6 +1017,7 @@ const ConsultationManager: React.FC = () => {
                       </td>
                     </tr>
                   ))}
+                <tr key={item.id} className="hover:bg-gray-50 transition">
                 <tr key={item.id} className="hover:bg-gray-50 transition">
               </table>
             </div>

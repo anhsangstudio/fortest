@@ -771,326 +771,206 @@ const ConsultationManager: React.FC = () => {
                 Đóng
               </button>
             </div>
+			
+			<div className="p-6 space-y-8 max-h-[75vh] overflow-y-auto">
 
-            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[75vh] overflow-y-auto">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Ngày tư vấn
-                </label>
-                <input
-                  type="date"
-                  value={formData.ngay_tu_van}
-                  onChange={(e) => handleFormChange('ngay_tu_van', e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tên khách hàng <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.ten_khach_hang}
-                  onChange={(e) => handleFormChange('ten_khach_hang', e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                  placeholder="Nhập tên khách hàng"
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Địa chỉ
-                </label>
-                <div className="flex gap-2">
-                  <select
-                    value={formData.dia_chi}
-                    onChange={(e) => handleFormChange('dia_chi', e.target.value)}
-                    className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
-                  >
-                    <option value="">Chọn địa chỉ</option>
-                    {masterData.addresses.map((item) => (
-                      <option key={item.id} value={item.ten_dia_chi}>
-                        {item.ten_dia_chi}
-                      </option>
-                    ))}
-                  </select>
-
-                  <button
-                    type="button"
-                    onClick={handleAddAddress}
-                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50"
-                    title="Thêm địa chỉ"
-                  >
-                    +
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleEditAddress}
-                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50"
-                  >
-                    Sửa
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDeleteAddress}
-                    className="rounded-lg border border-red-300 text-red-500 px-3 py-2 text-sm hover:bg-red-50"
-                  >
-                    Xóa
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Số điện thoại
-                </label>
-                <input
-                  type="text"
-                  value={formData.so_dien_thoai}
-                  onChange={(e) => handleFormChange('so_dien_thoai', e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Ngày dự định chụp
-                </label>
-                <input
-                  type="date"
-                  value={formData.ngay_du_dinh_chup}
-                  onChange={(e) => handleFormChange('ngay_du_dinh_chup', e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Ngày ăn hỏi
-                </label>
-                <input
-                  type="date"
-                  value={formData.ngay_an_hoi}
-                  onChange={(e) => handleFormChange('ngay_an_hoi', e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Ngày cưới
-                </label>
-                <input
-                  type="date"
-                  value={formData.ngay_cuoi}
-                  onChange={(e) => handleFormChange('ngay_cuoi', e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nguồn khách
-                </label>
-                <div className="flex gap-2">
-                  <select
-                    value={formData.nguon_khach_hang_id}
-                    onChange={(e) => handleFormChange('nguon_khach_hang_id', e.target.value)}
-                    className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
-                  >
-                    <option value="">Chọn nguồn khách</option>
-                    {masterData.sources.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.ten_nguon}
-                      </option>
-                    ))}
-                  </select>
-
-                  <button
-                    type="button"
-                    onClick={handleAddSource}
-                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50"
-                    title="Thêm nguồn khách"
-                  >
-                    +
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleEditSource}
-                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50"
-                  >
-                    Sửa
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDeleteSource}
-                    className="rounded-lg border border-red-300 text-red-500 px-3 py-2 text-sm hover:bg-red-50"
-                  >
-                    Xóa
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tình trạng
-                </label>
-                <div className="flex gap-2">
-                  <select
-                    value={formData.tinh_trang_id}
-                    onChange={(e) => handleFormChange('tinh_trang_id', e.target.value)}
-                    className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
-                  >
-                    <option value="">Chọn tình trạng</option>
-                    {masterData.statuses.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.ten_tinh_trang}
-                      </option>
-                    ))}
-                  </select>
-
-                  <button
-                    type="button"
-                    onClick={handleAddStatus}
-                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50"
-                    title="Thêm tình trạng"
-                  >
-                    +
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleEditStatus}
-                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50"
-                  >
-                    Sửa
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDeleteStatus}
-                    className="rounded-lg border border-red-300 text-red-500 px-3 py-2 text-sm hover:bg-red-50"
-                  >
-                    Xóa
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nhân viên tư vấn
-                </label>
-                <select
-                  value={formData.nhan_vien_tu_van}
-                  onChange={(e) => handleFormChange('nhan_vien_tu_van', e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
-                >
-                  <option value="">Chọn nhân viên tư vấn</option>
-                  {masterData.staffOptions.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tổng giá trị dự kiến
-                </label>
-                <input
-                  type="number"
-                  value={formData.tong_gia_tri_du_kien}
-                  onChange={(e) => handleFormChange('tong_gia_tri_du_kien', e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                  placeholder="0"
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Dịch vụ quan tâm
-                </label>
-
-                <div className="flex flex-col gap-3">
-                  <div className="flex flex-wrap gap-2">
+              {/* ================= 1. NHÂN VIÊN ================= */}
+              <div className="space-y-4">
+                <h3 className="text-xs font-bold uppercase text-blue-600 tracking-widest flex items-center gap-2">
+                  👤 Thông tin nhân viên
+                </h3>
+            
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Nhân viên */}
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase">
+                      Nhân viên tư vấn
+                    </label>
                     <select
-                      value={serviceManageId}
-                      onChange={(e) => setServiceManageId(e.target.value)}
-                      className="min-w-[240px] rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+                      value={formData.nhan_vien_tu_van}
+                      onChange={(e) =>
+                        handleFormChange('nhan_vien_tu_van', e.target.value)
+                      }
+                      className="w-full mt-1 p-3 bg-gray-50 border rounded-xl font-bold"
                     >
-                      <option value="">Chọn hạng mục để sửa / xóa</option>
-                      {masterData.services.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.ten_dich_vu}
+                      <option value="">Chọn nhân viên</option>
+                      {masterData.staffOptions.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
                         </option>
                       ))}
                     </select>
-
-                    <button
-                      type="button"
-                      onClick={handleAddService}
-                      className="rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50"
-                      title="Thêm dịch vụ"
-                    >
-                      +
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleEditService}
-                      className="rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50"
-                    >
-                      Sửa
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleDeleteService}
-                      className="rounded-lg border border-red-300 text-red-500 px-3 py-2 text-sm hover:bg-red-50"
-                    >
-                      Xóa
-                    </button>
                   </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    {masterData.services.map((service) => {
-                      const isSelected = selectedServices.includes(service.id);
-
-                      return (
-                        <button
-                          key={service.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedServices((prev) =>
-                              isSelected
-                                ? prev.filter((id) => id !== service.id)
-                                : [...prev, service.id]
-                            );
-                          }}
-                          className={`px-3 py-1.5 rounded-full text-sm border ${
-                            isSelected
-                              ? 'bg-blue-600 text-white border-blue-600'
-                              : 'bg-gray-100 text-gray-700 border-gray-300'
-                          }`}
-                        >
-                          {service.ten_dich_vu}
-                        </button>
-                      );
-                    })}
+            
+                  {/* Ngày tư vấn */}
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase">
+                      Ngày tư vấn
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.ngay_tu_van}
+                      onChange={(e) =>
+                        handleFormChange('ngay_tu_van', e.target.value)
+                      }
+                      className="w-full mt-1 p-3 bg-gray-50 border rounded-xl font-bold"
+                    />
                   </div>
                 </div>
               </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Ghi chú
-                </label>
+            
+              {/* ================= 2. KHÁCH HÀNG ================= */}
+              <div className="space-y-4">
+                <h3 className="text-xs font-bold uppercase text-slate-600 tracking-widest">
+                  🧾 Thông tin khách hàng
+                </h3>
+            
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            
+                  <input
+                    placeholder="Tên khách hàng"
+                    value={formData.ten_khach_hang}
+                    onChange={(e) =>
+                      handleFormChange('ten_khach_hang', e.target.value)
+                    }
+                    className="p-3 bg-gray-50 border rounded-xl font-bold"
+                  />
+            
+                  <input
+                    placeholder="Số điện thoại"
+                    value={formData.so_dien_thoai}
+                    onChange={(e) =>
+                      handleFormChange('so_dien_thoai', e.target.value)
+                    }
+                    className="p-3 bg-gray-50 border rounded-xl font-bold"
+                  />
+            
+                  {/* Địa chỉ */}
+                  <select
+                    value={formData.dia_chi}
+                    onChange={(e) =>
+                      handleFormChange('dia_chi', e.target.value)
+                    }
+                    className="p-3 bg-gray-50 border rounded-xl font-bold"
+                  >
+                    <option value="">Chọn địa chỉ</option>
+                    {masterData.addresses.map((a) => (
+                      <option key={a.id} value={a.ten_dia_chi}>
+                        {a.ten_dia_chi}
+                      </option>
+                    ))}
+                  </select>
+            
+                  {/* Nguồn */}
+                  <select
+                    value={formData.nguon_khach_hang_id}
+                    onChange={(e) =>
+                      handleFormChange('nguon_khach_hang_id', e.target.value)
+                    }
+                    className="p-3 bg-gray-50 border rounded-xl font-bold"
+                  >
+                    <option value="">Nguồn khách</option>
+                    {masterData.sources.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.ten_nguon}
+                      </option>
+                    ))}
+                  </select>
+            
+                </div>
+              </div>
+            
+              {/* ================= 3. LỊCH ================= */}
+              <div className="space-y-4">
+                <h3 className="text-xs font-bold uppercase text-emerald-600 tracking-widest">
+                  📅 Lịch trình dự kiến
+                </h3>
+            
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <input type="date" value={formData.ngay_du_dinh_chup}
+                    onChange={(e)=>handleFormChange('ngay_du_dinh_chup', e.target.value)}
+                    className="p-3 border rounded-xl font-bold" />
+            
+                  <input type="date" value={formData.ngay_cuoi}
+                    onChange={(e)=>handleFormChange('ngay_cuoi', e.target.value)}
+                    className="p-3 border rounded-xl font-bold" />
+            
+                  <input type="date" value={formData.ngay_an_hoi}
+                    onChange={(e)=>handleFormChange('ngay_an_hoi', e.target.value)}
+                    className="p-3 border rounded-xl font-bold" />
+                </div>
+              </div>
+            
+              {/* ================= 4. KINH DOANH ================= */}
+              <div className="space-y-4">
+                <h3 className="text-xs font-bold uppercase text-purple-600 tracking-widest">
+                  💰 Thông tin kinh doanh
+                </h3>
+            
+                {/* dịch vụ */}
+                <div className="flex flex-wrap gap-2">
+                  {masterData.services.map((s) => {
+                    const isSelected = selectedServices.includes(s.id);
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => {
+                          setSelectedServices(prev =>
+                            isSelected
+                              ? prev.filter(i => i !== s.id)
+                              : [...prev, s.id]
+                          );
+                        }}
+                        className={`px-3 py-1 rounded-full text-sm ${
+                          isSelected
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-100'
+                        }`}
+                      >
+                        {s.ten_dich_vu}
+                      </button>
+                    );
+                  })}
+                </div>
+            
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <input
+                    type="number"
+                    placeholder="Tổng giá trị"
+                    value={formData.tong_gia_tri_du_kien}
+                    onChange={(e)=>handleFormChange('tong_gia_tri_du_kien', e.target.value)}
+                    className="p-3 border rounded-xl font-bold"
+                  />
+            
+                  <select
+                    value={formData.tinh_trang_id}
+                    onChange={(e)=>handleFormChange('tinh_trang_id', e.target.value)}
+                    className="p-3 border rounded-xl font-bold"
+                  >
+                    <option value="">Tình trạng</option>
+                    {masterData.statuses.map(s => (
+                      <option key={s.id} value={s.id}>{s.ten_tinh_trang}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            
+              {/* ================= 5. GHI CHÚ ================= */}
+              <div>
+                <h3 className="text-xs font-bold uppercase text-gray-500 mb-2">
+                  📝 Ghi chú
+                </h3>
+            
                 <textarea
                   value={formData.ghi_chu}
-                  onChange={(e) => handleFormChange('ghi_chu', e.target.value)}
-                  rows={4}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  onChange={(e)=>handleFormChange('ghi_chu', e.target.value)}
+                  className="w-full p-4 border rounded-xl"
                 />
               </div>
+            
             </div>
+    
+            
 
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
               <button

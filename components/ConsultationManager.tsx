@@ -901,123 +901,142 @@ const ConsultationManager: React.FC = () => {
           <div className="p-6 text-red-600">{error}</div>
         ) : data.length === 0 ? (
           <div className="p-6 text-gray-500">Chưa có dữ liệu nhật ký tư vấn.</div>
-        ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr className="text-left text-gray-700">
-                    <th className="px-4 py-3 font-semibold">Ngày tư vấn</th>
-                    <th className="px-4 py-3 font-semibold">Tên khách hàng</th>
-                    <th className="px-4 py-3 font-semibold">Số điện thoại</th>
-                    <th className="px-4 py-3 font-semibold">Nguồn khách</th>
-                    <th className="px-4 py-3 font-semibold">Dịch vụ quan tâm</th>
-                    <th className="px-4 py-3 font-semibold">Tình trạng</th>
-					<th className="px-4 py-3 font-semibold">Lý do từ chối</th>
-                    <th className="px-4 py-3 font-semibold">Nhân viên tư vấn</th>
-                    <th className="px-4 py-3 font-semibold text-right">Giá trị dự kiến</th>
-					<th className="px-4 py-3 font-semibold text-center">Hành động</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {data.map((item) => (
-                    <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="px-4 py-3 whitespace-nowrap">{item.ngay_tu_van || ''}</td>
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-gray-800">{item.ten_khach_hang || ''}</div>
-                        {item.dia_chi ? (
-                          <div className="text-xs text-gray-500 mt-1">{item.dia_chi}</div>
-                        ) : null}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">{item.so_dien_thoai || ''}</td>
-                      <td className="px-4 py-3 whitespace-nowrap">{item.nguon_khach_hang_ten || ''}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-1">
-                          {(item.dich_vu_quan_tam_ten || []).length > 0 ? (
-                            item.dich_vu_quan_tam_ten?.map((service) => (
-                              <span
-                                key={service}
-                                className="inline-flex items-center rounded-full bg-blue-50 text-blue-700 px-2 py-1 text-xs font-medium"
-                              >
-                                {service}
-                              </span>
-                            ))
-                          ) : (
-                            <span className="text-gray-400">---</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">{item.tinh_trang_ten || ''}</td>
-					  <td className="px-4 py-3 whitespace-nowrap">
-                        {item.ly_do_tu_choi_ten ? (
-                          <span className="inline-flex items-center rounded-full bg-red-50 text-red-600 px-2 py-1 text-xs font-medium">
-                            {item.ly_do_tu_choi_ten}
-                          </span>
-                        ) : (
-                          <span className="text-gray-300">---</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">{item.nhan_vien_tu_van_ten || ''}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-right font-medium">
-                        {(item.tong_gia_tri_du_kien || 0).toLocaleString('vi-VN')}
-                      </td>
-					  <td className="px-4 py-3 whitespace-nowrap text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          
-                          {/* EDIT */}
-                          <button
-                            onClick={() => handleEdit(item)}
-                            className="p-2 rounded-lg hover:bg-blue-50 text-blue-500 hover:text-blue-700"
-                            title="Chỉnh sửa"
-                          >
-                            <Pencil size={16} />
-                          </button>
-                      
-                          {/* DELETE */}
-                          <button
-                            onClick={() => handleDelete(item)}
-                            className="p-2 rounded-lg hover:bg-red-50 text-red-500 hover:text-red-700"
-                            title="Xóa"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                      
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-               
-                <tr key={item.id} className="hover:bg-gray-50 transition">
-              </table>
-            </div>
-
-            <div className="flex items-center justify-between px-4 py-3 bg-gray-50">
-              <div className="text-sm text-gray-600">
-                Trang <span className="font-semibold">{page}</span> /{' '}
-                <span className="font-semibold">{totalPages}</span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={goToPrevPage}
-                  disabled={page <= 1}
-                  className="px-3 py-2 rounded-lg border border-gray-300 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white"
-                >
-                  Trang trước
-                </button>
-
-                <button
-                  onClick={goToNextPage}
-                  disabled={page >= totalPages}
-                  className="px-3 py-2 rounded-lg border border-gray-300 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white"
-                >
-                  Trang sau
-                </button>
-              </div>
-            </div>
-          </>
-        )}
+           <>
+           <div className="overflow-x-auto">
+             <table className="min-w-full text-sm">
+               <thead className="bg-gray-50 border-b border-gray-200">
+                 <tr className="text-left text-gray-700">
+                   <th className="px-4 py-3 font-semibold">Ngày tư vấn</th>
+                   <th className="px-4 py-3 font-semibold">Tên khách hàng</th>
+                   <th className="px-4 py-3 font-semibold">Số điện thoại</th>
+                   <th className="px-4 py-3 font-semibold">Nguồn khách</th>
+                   <th className="px-4 py-3 font-semibold">Dịch vụ quan tâm</th>
+                   <th className="px-4 py-3 font-semibold">Tình trạng</th>
+                   <th className="px-4 py-3 font-semibold">Lý do từ chối</th>
+                   <th className="px-4 py-3 font-semibold">Nhân viên tư vấn</th>
+                   <th className="px-4 py-3 font-semibold text-right">Giá trị dự kiến</th>
+                   <th className="px-4 py-3 font-semibold text-center">Hành động</th>
+                 </tr>
+               </thead>
+         
+               <tbody>
+                 {data.map((item) => (
+                   <tr
+                     key={item.id}
+                     className="border-b border-gray-100 hover:bg-gray-50 transition"
+                   >
+                     <td className="px-4 py-3 whitespace-nowrap">
+                       {item.ngay_tu_van || ''}
+                     </td>
+         
+                     <td className="px-4 py-3">
+                       <div className="font-medium text-gray-800">
+                         {item.ten_khach_hang || ''}
+                       </div>
+                       {item.dia_chi ? (
+                         <div className="text-xs text-gray-500 mt-1">{item.dia_chi}</div>
+                       ) : null}
+                     </td>
+         
+                     <td className="px-4 py-3 whitespace-nowrap">
+                       {item.so_dien_thoai || ''}
+                     </td>
+         
+                     <td className="px-4 py-3 whitespace-nowrap">
+                       {item.nguon_khach_hang_ten || ''}
+                     </td>
+         
+                     <td className="px-4 py-3">
+                       <div className="flex flex-wrap gap-1">
+                         {(item.dich_vu_quan_tam_ten || []).length > 0 ? (
+                           item.dich_vu_quan_tam_ten?.map((service) => (
+                             <span
+                               key={service}
+                               className="inline-flex items-center rounded-full bg-blue-50 text-blue-700 px-2 py-1 text-xs font-medium"
+                             >
+                               {service}
+                             </span>
+                           ))
+                         ) : (
+                           <span className="text-gray-400">---</span>
+                         )}
+                       </div>
+                     </td>
+         
+                     <td className="px-4 py-3 whitespace-nowrap">
+                       {item.tinh_trang_ten || ''}
+                     </td>
+         
+                     <td className="px-4 py-3 whitespace-nowrap">
+                       {item.ly_do_tu_choi_ten ? (
+                         <span className="inline-flex items-center rounded-full bg-red-50 text-red-600 px-2 py-1 text-xs font-medium">
+                           {item.ly_do_tu_choi_ten}
+                         </span>
+                       ) : (
+                         <span className="text-gray-300">---</span>
+                       )}
+                     </td>
+         
+                     <td className="px-4 py-3 whitespace-nowrap">
+                       {item.nhan_vien_tu_van_ten || ''}
+                     </td>
+         
+                     <td className="px-4 py-3 whitespace-nowrap text-right font-medium">
+                       {(item.tong_gia_tri_du_kien || 0).toLocaleString('vi-VN')}
+                     </td>
+         
+                     <td className="px-4 py-3 whitespace-nowrap text-center">
+                       <div className="flex items-center justify-center gap-2">
+                         <button
+                           type="button"
+                           onClick={() => handleEdit(item)}
+                           className="p-2 rounded-lg hover:bg-blue-50 text-blue-500 hover:text-blue-700"
+                           title="Chỉnh sửa"
+                         >
+                           <Pencil size={16} />
+                         </button>
+         
+                         <button
+                           type="button"
+                           onClick={() => handleDelete(item)}
+                           className="p-2 rounded-lg hover:bg-red-50 text-red-500 hover:text-red-700"
+                           title="Xóa"
+                         >
+                           <Trash2 size={16} />
+                         </button>
+                       </div>
+                     </td>
+                   </tr>
+                 ))}
+               </tbody>
+             </table>
+           </div>
+         
+           <div className="flex items-center justify-between px-4 py-3 bg-gray-50">
+             <div className="text-sm text-gray-600">
+               Trang <span className="font-semibold">{page}</span> /{' '}
+               <span className="font-semibold">{totalPages}</span>
+             </div>
+         
+             <div className="flex items-center gap-2">
+               <button
+                 onClick={goToPrevPage}
+                 disabled={page <= 1}
+                 className="px-3 py-2 rounded-lg border border-gray-300 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white"
+               >
+                 Trang trước
+               </button>
+         
+               <button
+                 onClick={goToNextPage}
+                 disabled={page >= totalPages}
+                 className="px-3 py-2 rounded-lg border border-gray-300 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white"
+               >
+                 Trang sau
+               </button>
+             </div>
+           </div>
+         </>
       </div>
 
       {isCreateModalOpen && (

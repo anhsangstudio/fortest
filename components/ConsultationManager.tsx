@@ -860,7 +860,8 @@ const ConsultationManager: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => {
-                          setShowAddressManager((prev) => !prev);
+                          setShowBusinessManager((prev) => !prev);
+                          setShowAddressManager(false);
                           setShowSourceManager(false);
                         }}
                         className="p-1 rounded-lg hover:bg-gray-100 text-slate-400 hover:text-slate-700"
@@ -928,8 +929,9 @@ const ConsultationManager: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => {
-                          setShowSourceManager((prev) => !prev);
+                          setShowBusinessManager((prev) => !prev);
                           setShowAddressManager(false);
+                          setShowSourceManager(false);
                         }}
                         className="p-1 rounded-lg hover:bg-gray-100 text-slate-400 hover:text-slate-700"
                         title="Tùy chỉnh nguồn khách"
@@ -1034,9 +1036,68 @@ const ConsultationManager: React.FC = () => {
             
               {/* ================= 4. KINH DOANH ================= */}
               <div className="space-y-4">
-                <h3 className="text-xs font-bold uppercase text-purple-600 tracking-widest">
-                  💰 Thông tin kinh doanh
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-bold uppercase text-purple-600 tracking-widest">
+                    💰 Quan tâm dịch vụ
+                  </h3>
+                
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowBusinessManager((prev) => !prev);
+                      setShowAddressManager(false);
+                      setShowSourceManager(false);
+                    }}
+                    className="p-1 rounded-lg hover:bg-gray-100 text-slate-400 hover:text-slate-700"
+                    title="Tùy chỉnh dịch vụ quan tâm"
+                  >
+                    <Settings size={14} />
+                  </button>
+                </div>
+				
+				{showBusinessManager && (
+                  <div className="flex flex-wrap gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                    <select
+                      value={serviceManageId}
+                      onChange={(e) => setServiceManageId(e.target.value)}
+                      className="min-w-[240px] rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white"
+                    >
+                      <option value="">Chọn dịch vụ để sửa / xóa</option>
+                      {masterData.services.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.ten_dich_vu}
+                        </option>
+                      ))}
+                    </select>
+                
+                    <button
+                      type="button"
+                      onClick={handleAddService}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-medium hover:bg-slate-100"
+                    >
+                      <Plus size={14} />
+                      Thêm
+                    </button>
+                
+                    <button
+                      type="button"
+                      onClick={handleEditService}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-medium hover:bg-slate-100"
+                    >
+                      <Pencil size={14} />
+                      Sửa
+                    </button>
+                
+                    <button
+                      type="button"
+                      onClick={handleDeleteService}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-red-300 bg-white text-red-500 text-sm font-medium hover:bg-red-50"
+                    >
+                      <Trash2 size={14} />
+                      Xóa
+                    </button>
+                  </div>
+                )}
             
                 {/* dịch vụ */}
                 <div className="flex flex-wrap gap-2">

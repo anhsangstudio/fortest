@@ -208,15 +208,34 @@ const ConsultationManager: React.FC = () => {
     setIsCreateModalOpen(false);
   };
 
-  const handleFormChange = (field: keyof typeof formData, value: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-  };
+   const handleFormChange = (field: keyof typeof formData, value: string) => {
+     setFormData((prev) => {
+       const next = {
+         ...prev,
+         [field]: value,
+       };
+   
+       if (field === 'tinh_trang_id') {
+         const nextStatus = masterData.statuses.find((item) => item.id === value);
+         const isNextRejectStatus =
+           nextStatus?.ten_tinh_trang?.trim().toLowerCase() === 'khach tu choi';
+   
+         if (!isNextRejectStatus) {
+           next.ly_do_tu_choi_id = '';
+         }
+       }
+   
+       return next;
+     });
+   };
 
   const handleCreate = async () => {
     if (!formData.ten_khach_hang.trim()) {
+      alert('Vui lòng nhập tên khách hàng');
+      return;
+    }
+	
+	if (!formData.ten_khach_hang.trim()) {
       alert('Vui lòng nhập tên khách hàng');
       return;
     }
@@ -664,6 +683,14 @@ const ConsultationManager: React.FC = () => {
       alert(err?.message || 'Không thể xóa lý do từ chối');
     }
   };
+
+  const selectedStatus = masterData.statuses.find(
+    (item) => item.id === formData.tinh_trang_id
+  );
+  
+  const isRejectStatus =
+    selectedStatus?.ten_tinh_trang?.trim().toLowerCase() === 'khach tu choi';
+
 
   return (
     <div className="p-6 space-y-4">
@@ -1250,7 +1277,8 @@ const ConsultationManager: React.FC = () => {
               </div>
               
 			  {/* ================= 5. LÝ DO TỪ CHỐI ================= */}
-			  
+			  {isRejectStatus && (
+               ...toàn bộ block section lý do từ chối...
 			  <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <h3 className="text-xs font-bold uppercase text-rose-500 tracking-widest">
@@ -1342,6 +1370,7 @@ const ConsultationManager: React.FC = () => {
                   })}
                 </div>
               </div>
+			  )}
 			  
               {/* ================= 6. GHI CHÚ ================= */}
               <div>

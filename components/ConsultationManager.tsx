@@ -1128,7 +1128,6 @@ const ConsultationManager: React.FC = () => {
           </div>
         
           {reportSummary.funnel.length === 0 ? (
-
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
               {funnelWithRate.map((item) => (
                 <div
@@ -1158,7 +1157,6 @@ const ConsultationManager: React.FC = () => {
                 </div>
               ))}
             </div>
-
           )}
         </div>
 

@@ -871,7 +871,10 @@ const ConsultationManager: React.FC = () => {
             : item
         )
       );
-
+	  
+      if (isRejectStatus) {
+        alert('Bạn đã chuyển sang trạng thái "Khách từ chối". Hãy bấm Chỉnh sửa để chọn lý do từ chối.');
+      }
 
     } catch (err: any) {
       console.error('Lỗi khi cập nhật nhanh tình trạng:', err);

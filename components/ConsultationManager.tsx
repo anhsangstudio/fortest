@@ -873,7 +873,20 @@ const ConsultationManager: React.FC = () => {
       );
 	  
       if (isRejectStatus) {
-        alert('Bạn đã chuyển sang trạng thái "Khách từ chối". Hãy bấm Chỉnh sửa để chọn lý do từ chối.');
+        const updatedItem = data.find((item) => item.id === logId);
+      
+        alert('Bạn đã chuyển sang trạng thái "Khách từ chối". Hệ thống sẽ mở form chỉnh sửa để bạn chọn lý do từ chối.');
+      
+        if (updatedItem) {
+          await handleEdit({
+            ...updatedItem,
+            tinh_trang_id: newStatusId,
+            tinh_trang_ten:
+              masterData.statuses.find((status) => status.id === newStatusId)?.ten_tinh_trang || '',
+            ly_do_tu_choi_id: null,
+            ly_do_tu_choi_ten: null,
+          });
+        }
       }
 
     } catch (err: any) {

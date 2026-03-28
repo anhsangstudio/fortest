@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useCallback } from 'react';
 import { fetchConsultationListData, supabase } from '../apiService';
 import type { ConsultationFilter, ConsultationLog } from '../types';
@@ -38,11 +37,12 @@ const ConsultationManager: React.FC = () => {
     statuses: [],
     services: [],
     staffOptions: [],
-	rejectionReasons: [],
+    rejectionReasons: [],
   });
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editingLogId, setEditingLogId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     ngay_tu_van: new Date().toISOString().slice(0, 10),
@@ -54,7 +54,7 @@ const ConsultationManager: React.FC = () => {
     ngay_cuoi: '',
     nguon_khach_hang_id: '',
     tinh_trang_id: '',
-	ly_do_tu_choi_id: '',
+    ly_do_tu_choi_id: '',
     nhan_vien_tu_van: '',
     tong_gia_tri_du_kien: '',
     ghi_chu: '',
@@ -81,7 +81,7 @@ const ConsultationManager: React.FC = () => {
           .eq('dang_su_dung', true)
           .order('thu_tu_hien_thi', { ascending: true })
           .order('ten_dia_chi', { ascending: true }),
-		supabase
+        supabase
           .from('consultation_rejection_reasons')
           .select('id, ten_ly_do')
           .eq('dang_su_dung', true)
@@ -100,7 +100,7 @@ const ConsultationManager: React.FC = () => {
       ]);
 
       if (addressesRes.error) throw addressesRes.error;
-	  if (rejectionReasonsRes.error) throw rejectionReasonsRes.error;
+      if (rejectionReasonsRes.error) throw rejectionReasonsRes.error;
       if (servicesRes.error) throw servicesRes.error;
       if (staffRes.error) throw staffRes.error;
 
@@ -124,7 +124,7 @@ const ConsultationManager: React.FC = () => {
           id: item.id,
           ten_dia_chi: item.ten_dia_chi,
         })),
-		rejectionReasons: (rejectionReasonsRes.data || []).map((item: any) => ({
+        rejectionReasons: (rejectionReasonsRes.data || []).map((item: any) => ({
           id: item.id,
           ten_ly_do: item.ten_ly_do,
         })),
@@ -189,13 +189,15 @@ const ConsultationManager: React.FC = () => {
       ngay_cuoi: '',
       nguon_khach_hang_id: '',
       tinh_trang_id: '',
-	  ly_do_tu_choi_id: '',
+      ly_do_tu_choi_id: '',
       nhan_vien_tu_van: '',
       tong_gia_tri_du_kien: '',
       ghi_chu: '',
     });
     setSelectedServices([]);
     setServiceManageId('');
+    setRejectReasonManageId('');
+    setEditingLogId(null);
   };
 
   const openCreateModal = () => {
@@ -208,35 +210,41 @@ const ConsultationManager: React.FC = () => {
     setIsCreateModalOpen(false);
   };
 
-   const handleFormChange = (field: keyof typeof formData, value: string) => {
-     setFormData((prev) => {
-       const next = {
-         ...prev,
-         [field]: value,
-       };
-   
-       if (field === 'tinh_trang_id') {
-         const nextStatus = masterData.statuses.find((item) => item.id === value);
-         const isNextRejectStatus =
-           nextStatus?.ten_tinh_trang?.trim().toLowerCase() === 'khach tu choi';
-   
-         if (!isNextRejectStatus) {
-           next.ly_do_tu_choi_id = '';
-         }
-       }
-   
-       return next;
-     });
-   };
+  const handleFormChange = (field: keyof typeof formData, value: string) => {
+    setFormData((prev) => {
+      const next = {
+        ...prev,
+        [field]: value,
+      };
+
+      if (field === 'tinh_trang_id') {
+        const nextStatus = masterData.statuses.find((item) => item.id === value);
+        const isNextRejectStatus =
+          nextStatus?.ten_tinh_trang?.trim().toLowerCase() === 'khach tu choi';
+
+        if (!isNextRejectStatus) {
+          next.ly_do_tu_choi_id = '';
+        }
+      }
+
+      return next;
+    });
+  };
 
   const handleCreate = async () => {
     if (!formData.ten_khach_hang.trim()) {
       alert('Vui lòng nhập tên khách hàng');
       return;
     }
-	
-	if (!formData.ten_khach_hang.trim()) {
-      alert('Vui lòng nhập tên khách hàng');
+
+    const selectedStatus = masterData.statuses.find(
+      (item) => item.id === formData.tinh_trang_id
+    );
+    const isRejectStatus =
+      selectedStatus?.ten_tinh_trang?.trim().toLowerCase() === 'khach tu choi';
+
+    if (isRejectStatus && !formData.ly_do_tu_choi_id) {
+      alert('Vui lòng chọn lý do từ chối');
       return;
     }
 
@@ -253,23 +261,46 @@ const ConsultationManager: React.FC = () => {
         ngay_cuoi: formData.ngay_cuoi || null,
         nguon_khach_hang_id: formData.nguon_khach_hang_id || null,
         tinh_trang_id: formData.tinh_trang_id || null,
-		ly_do_tu_choi_id: formData.ly_do_tu_choi_id || null,
+        ly_do_tu_choi_id: formData.ly_do_tu_choi_id || null,
         nhan_vien_tu_van: formData.nhan_vien_tu_van || null,
         tong_gia_tri_du_kien: formData.tong_gia_tri_du_kien ? Number(formData.tong_gia_tri_du_kien) : 0,
         ghi_chu: formData.ghi_chu.trim() || null,
       };
 
-      const { data: createdLog, error } = await supabase
-        .from('consultation_logs')
-        .insert([payload])
-        .select()
-        .single();
+      let savedLogId = editingLogId;
 
-      if (error) throw error;
+      if (editingLogId) {
+        const { error } = await supabase
+          .from('consultation_logs')
+          .update(payload)
+          .eq('id', editingLogId);
+
+        if (error) throw error;
+      } else {
+        const { data: createdLog, error } = await supabase
+          .from('consultation_logs')
+          .insert([payload])
+          .select()
+          .single();
+
+        if (error) throw error;
+        savedLogId = createdLog.id;
+      }
+
+      if (!savedLogId) {
+        throw new Error('Không xác định được bản ghi để lưu dịch vụ quan tâm');
+      }
+
+      const { error: deleteOldServicesError } = await supabase
+        .from('consultation_log_services')
+        .delete()
+        .eq('consultation_log_id', savedLogId);
+
+      if (deleteOldServicesError) throw deleteOldServicesError;
 
       if (selectedServices.length > 0) {
         const serviceRows = selectedServices.map((serviceId) => ({
-          consultation_log_id: createdLog.id,
+          consultation_log_id: savedLogId,
           service_id: serviceId,
         }));
 
@@ -281,6 +312,7 @@ const ConsultationManager: React.FC = () => {
       }
 
       setIsCreateModalOpen(false);
+      resetForm();
       await loadData();
     } catch (err: any) {
       console.error('Lỗi khi thêm mới nhật ký tư vấn:', err);
@@ -599,11 +631,11 @@ const ConsultationManager: React.FC = () => {
       alert(err?.message || 'Không thể xóa dịch vụ');
     }
   };
-  
+
   const handleAddRejectReason = async () => {
     const tenLyDo = window.prompt('Nhập lý do từ chối mới:');
     if (!tenLyDo || !tenLyDo.trim()) return;
-  
+
     try {
       const { error } = await supabase
         .from('consultation_rejection_reasons')
@@ -614,7 +646,7 @@ const ConsultationManager: React.FC = () => {
             dang_su_dung: true,
           },
         ]);
-  
+
       if (error) throw error;
       await loadData();
     } catch (err: any) {
@@ -622,27 +654,27 @@ const ConsultationManager: React.FC = () => {
       alert(err?.message || 'Không thể thêm lý do từ chối');
     }
   };
-  
+
   const handleEditRejectReason = async () => {
     if (!rejectReasonManageId) {
       alert('Vui lòng chọn một lý do để sửa');
       return;
     }
-  
+
     const currentItem = masterData.rejectionReasons.find(
       (item) => item.id === rejectReasonManageId
     );
     if (!currentItem) return;
-  
+
     const tenMoi = window.prompt('Sửa lý do từ chối:', currentItem.ten_ly_do);
     if (!tenMoi || !tenMoi.trim()) return;
-  
+
     try {
       const { error } = await supabase
         .from('consultation_rejection_reasons')
         .update({ ten_ly_do: tenMoi.trim() })
         .eq('id', currentItem.id);
-  
+
       if (error) throw error;
       await loadData();
     } catch (err: any) {
@@ -650,31 +682,31 @@ const ConsultationManager: React.FC = () => {
       alert(err?.message || 'Không thể sửa lý do từ chối');
     }
   };
-  
+
   const handleDeleteRejectReason = async () => {
     if (!rejectReasonManageId) {
       alert('Vui lòng chọn một lý do để xóa');
       return;
     }
-  
+
     const currentItem = masterData.rejectionReasons.find(
       (item) => item.id === rejectReasonManageId
     );
     if (!currentItem) return;
-  
+
     const confirmed = window.confirm(
       `Xóa lý do "${currentItem.ten_ly_do}" khỏi danh sách?`
     );
     if (!confirmed) return;
-  
+
     try {
       const { error } = await supabase
         .from('consultation_rejection_reasons')
         .update({ dang_su_dung: false })
         .eq('id', currentItem.id);
-  
+
       if (error) throw error;
-  
+
       setFormData((prev) => ({ ...prev, ly_do_tu_choi_id: '' }));
       setRejectReasonManageId('');
       await loadData();
@@ -687,38 +719,70 @@ const ConsultationManager: React.FC = () => {
   const selectedStatus = masterData.statuses.find(
     (item) => item.id === formData.tinh_trang_id
   );
-  
+
   const isRejectStatus =
     selectedStatus?.ten_tinh_trang?.trim().toLowerCase() === 'khach tu choi';
-  
-  const handleEdit = (item: any) => {
-    setFormData({
-      ...formData,
-      ...item,
-    });
-  
-    setShowModal(true);
-  };
-  
-  const handleDelete = async (item: any) => {
-    const confirmDelete = window.confirm(
-      `Bạn có chắc muốn xóa khách "${item.ten_khach_hang}"?`
-    );
-  
-    if (!confirmDelete) return;
-  
+
+  const handleEdit = async (item: ConsultationLog) => {
     try {
+      setEditingLogId(item.id);
+
+      const { data: logServices, error: logServicesError } = await supabase
+        .from('consultation_log_services')
+        .select('service_id')
+        .eq('consultation_log_id', item.id);
+
+      if (logServicesError) throw logServicesError;
+
+      setFormData({
+        ngay_tu_van: item.ngay_tu_van || '',
+        ten_khach_hang: item.ten_khach_hang || '',
+        dia_chi: item.dia_chi || '',
+        so_dien_thoai: item.so_dien_thoai || '',
+        ngay_du_dinh_chup: item.ngay_du_dinh_chup || '',
+        ngay_an_hoi: item.ngay_an_hoi || '',
+        ngay_cuoi: item.ngay_cuoi || '',
+        nguon_khach_hang_id: item.nguon_khach_hang_id || '',
+        tinh_trang_id: item.tinh_trang_id || '',
+        ly_do_tu_choi_id: item.ly_do_tu_choi_id || '',
+        nhan_vien_tu_van: item.nhan_vien_tu_van || '',
+        tong_gia_tri_du_kien: String(item.tong_gia_tri_du_kien || ''),
+        ghi_chu: item.ghi_chu || '',
+      });
+
+      setSelectedServices((logServices || []).map((row: any) => row.service_id));
+      setIsCreateModalOpen(true);
+    } catch (err: any) {
+      console.error('Lỗi khi mở dữ liệu để sửa:', err);
+      alert(err?.message || 'Không thể mở dữ liệu để chỉnh sửa');
+    }
+  };
+
+  const handleDelete = async (item: ConsultationLog) => {
+    const confirmed = window.confirm(
+      `Bạn có chắc muốn xóa khách "${item.ten_khach_hang}" không?`
+    );
+    if (!confirmed) return;
+
+    try {
+      const { error: deleteServicesError } = await supabase
+        .from('consultation_log_services')
+        .delete()
+        .eq('consultation_log_id', item.id);
+
+      if (deleteServicesError) throw deleteServicesError;
+
       const { error } = await supabase
         .from('consultation_logs')
         .delete()
         .eq('id', item.id);
-  
+
       if (error) throw error;
-  
+
       await loadData();
     } catch (err: any) {
-      console.error(err);
-      alert('Không thể xóa dữ liệu');
+      console.error('Lỗi khi xóa nhật ký tư vấn:', err);
+      alert(err?.message || 'Không thể xóa dữ liệu');
     }
   };
 
@@ -849,25 +913,37 @@ const ConsultationManager: React.FC = () => {
                     <th className="px-4 py-3 font-semibold">Nguồn khách</th>
                     <th className="px-4 py-3 font-semibold">Dịch vụ quan tâm</th>
                     <th className="px-4 py-3 font-semibold">Tình trạng</th>
-					<th className="px-4 py-3 font-semibold">Lý do từ chối</th>
+                    <th className="px-4 py-3 font-semibold">Lý do từ chối</th>
                     <th className="px-4 py-3 font-semibold">Nhân viên tư vấn</th>
                     <th className="px-4 py-3 font-semibold text-right">Giá trị dự kiến</th>
-					<th className="px-4 py-3 font-semibold text-center">Hành động</th>
+                    <th className="px-4 py-3 font-semibold text-center">Hành động</th>
                   </tr>
                 </thead>
 
                 <tbody>
                   {data.map((item) => (
-                    <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="px-4 py-3 whitespace-nowrap">{item.ngay_tu_van || ''}</td>
+                    <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50 transition">
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {item.ngay_tu_van || ''}
+                      </td>
+
                       <td className="px-4 py-3">
-                        <div className="font-medium text-gray-800">{item.ten_khach_hang || ''}</div>
+                        <div className="font-medium text-gray-800">
+                          {item.ten_khach_hang || ''}
+                        </div>
                         {item.dia_chi ? (
                           <div className="text-xs text-gray-500 mt-1">{item.dia_chi}</div>
                         ) : null}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap">{item.so_dien_thoai || ''}</td>
-                      <td className="px-4 py-3 whitespace-nowrap">{item.nguon_khach_hang_ten || ''}</td>
+
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {item.so_dien_thoai || ''}
+                      </td>
+
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {item.nguon_khach_hang_ten || ''}
+                      </td>
+
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">
                           {(item.dich_vu_quan_tam_ten || []).length > 0 ? (
@@ -884,8 +960,12 @@ const ConsultationManager: React.FC = () => {
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap">{item.tinh_trang_ten || ''}</td>
-					  <td className="px-4 py-3 whitespace-nowrap">
+
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {item.tinh_trang_ten || ''}
+                      </td>
+
+                      <td className="px-4 py-3 whitespace-nowrap">
                         {item.ly_do_tu_choi_ten ? (
                           <span className="inline-flex items-center rounded-full bg-red-50 text-red-600 px-2 py-1 text-xs font-medium">
                             {item.ly_do_tu_choi_ten}
@@ -894,31 +974,34 @@ const ConsultationManager: React.FC = () => {
                           <span className="text-gray-300">---</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap">{item.nhan_vien_tu_van_ten || ''}</td>
+
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {item.nhan_vien_tu_van_ten || ''}
+                      </td>
+
                       <td className="px-4 py-3 whitespace-nowrap text-right font-medium">
                         {(item.tong_gia_tri_du_kien || 0).toLocaleString('vi-VN')}
                       </td>
-					  <td className="px-4 py-3 whitespace-nowrap text-center">
+
+                      <td className="px-4 py-3 whitespace-nowrap text-center">
                         <div className="flex items-center justify-center gap-2">
-                          
-                          {/* EDIT */}
                           <button
+                            type="button"
                             onClick={() => handleEdit(item)}
                             className="p-2 rounded-lg hover:bg-blue-50 text-blue-500 hover:text-blue-700"
                             title="Chỉnh sửa"
                           >
                             <Pencil size={16} />
                           </button>
-                      
-                          {/* DELETE */}
+
                           <button
+                            type="button"
                             onClick={() => handleDelete(item)}
                             className="p-2 rounded-lg hover:bg-red-50 text-red-500 hover:text-red-700"
                             title="Xóa"
                           >
                             <Trash2 size={16} />
                           </button>
-                      
                         </div>
                       </td>
                     </tr>
@@ -959,7 +1042,9 @@ const ConsultationManager: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-4xl rounded-2xl bg-white shadow-xl overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <h2 className="text-xl font-bold text-gray-800">Thêm mới nhật ký tư vấn</h2>
+              <h2 className="text-xl font-bold text-gray-800">
+                {editingLogId ? 'Chỉnh sửa nhật ký tư vấn' : 'Thêm mới nhật ký tư vấn'}
+              </h2>
               <button
                 type="button"
                 onClick={closeCreateModal}
@@ -968,17 +1053,16 @@ const ConsultationManager: React.FC = () => {
                 Đóng
               </button>
             </div>
-			
-			<div className="p-6 space-y-8 max-h-[75vh] overflow-y-auto">
+
+            <div className="p-6 space-y-8 max-h-[75vh] overflow-y-auto">
 
               {/* ================= 1. NHÂN VIÊN ================= */}
               <div className="space-y-4">
                 <h3 className="text-xs font-bold uppercase text-blue-600 tracking-widest flex items-center gap-2">
                   👤 Thông tin nhân viên
                 </h3>
-            
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Nhân viên */}
                   <div>
                     <label className="text-xs font-bold text-gray-500 uppercase">
                       Nhân viên tư vấn
@@ -998,8 +1082,7 @@ const ConsultationManager: React.FC = () => {
                       ))}
                     </select>
                   </div>
-            
-                  {/* Ngày tư vấn */}
+
                   <div>
                     <label className="text-xs font-bold text-gray-500 uppercase">
                       Ngày tư vấn
@@ -1015,15 +1098,15 @@ const ConsultationManager: React.FC = () => {
                   </div>
                 </div>
               </div>
-            
+
               {/* ================= 2. KHÁCH HÀNG ================= */}
               <div className="space-y-4">
                 <h3 className="text-xs font-bold uppercase text-slate-600 tracking-widest">
                   🧾 Thông tin khách hàng
                 </h3>
-            
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            
+
                   <input
                     placeholder="Tên khách hàng"
                     value={formData.ten_khach_hang}
@@ -1032,7 +1115,7 @@ const ConsultationManager: React.FC = () => {
                     }
                     className="p-3 bg-gray-50 border rounded-xl font-bold"
                   />
-            
+
                   <input
                     placeholder="Số điện thoại"
                     value={formData.so_dien_thoai}
@@ -1041,10 +1124,7 @@ const ConsultationManager: React.FC = () => {
                     }
                     className="p-3 bg-gray-50 border rounded-xl font-bold"
                   />
-            
-                  {/* Địa chỉ */}
-                  
-				  
+
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <label className="text-xs font-bold text-slate-500 uppercase">
@@ -1055,7 +1135,7 @@ const ConsultationManager: React.FC = () => {
                         onClick={() => {
                           setShowAddressManager((prev) => !prev);
                           setShowSourceManager(false);
-						  setShowBusinessManager(false);
+                          setShowBusinessManager(false);
                         }}
                         className="p-1 rounded-lg hover:bg-gray-100 text-slate-400 hover:text-slate-700"
                         title="Tùy chỉnh địa chỉ"
@@ -1063,7 +1143,7 @@ const ConsultationManager: React.FC = () => {
                         <Settings size={14} />
                       </button>
                     </div>
-                  
+
                     <select
                       value={formData.dia_chi}
                       onChange={(e) => handleFormChange('dia_chi', e.target.value)}
@@ -1076,7 +1156,7 @@ const ConsultationManager: React.FC = () => {
                         </option>
                       ))}
                     </select>
-                  
+
                     {showAddressManager && (
                       <div className="flex flex-wrap gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
                         <button
@@ -1087,7 +1167,7 @@ const ConsultationManager: React.FC = () => {
                           <Plus size={14} />
                           Thêm
                         </button>
-                  
+
                         <button
                           type="button"
                           onClick={handleEditAddress}
@@ -1096,7 +1176,7 @@ const ConsultationManager: React.FC = () => {
                           <Pencil size={14} />
                           Sửa
                         </button>
-                  
+
                         <button
                           type="button"
                           onClick={handleDeleteAddress}
@@ -1108,12 +1188,7 @@ const ConsultationManager: React.FC = () => {
                       </div>
                     )}
                   </div>
-				  
-				  {/* Địa chỉ */}
-            
-                  {/* Nguồn */}
-                  
-				  {/* Nguồn khách */}
+
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <label className="text-xs font-bold text-slate-500 uppercase">
@@ -1124,7 +1199,7 @@ const ConsultationManager: React.FC = () => {
                         onClick={() => {
                           setShowSourceManager((prev) => !prev);
                           setShowAddressManager(false);
-						  setShowBusinessManager(false);
+                          setShowBusinessManager(false);
                         }}
                         className="p-1 rounded-lg hover:bg-gray-100 text-slate-400 hover:text-slate-700"
                         title="Tùy chỉnh nguồn khách"
@@ -1132,7 +1207,7 @@ const ConsultationManager: React.FC = () => {
                         <Settings size={14} />
                       </button>
                     </div>
-                  
+
                     <select
                       value={formData.nguon_khach_hang_id}
                       onChange={(e) => handleFormChange('nguon_khach_hang_id', e.target.value)}
@@ -1145,7 +1220,7 @@ const ConsultationManager: React.FC = () => {
                         </option>
                       ))}
                     </select>
-                  
+
                     {showSourceManager && (
                       <div className="flex flex-wrap gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
                         <button
@@ -1156,7 +1231,7 @@ const ConsultationManager: React.FC = () => {
                           <Plus size={14} />
                           Thêm
                         </button>
-                  
+
                         <button
                           type="button"
                           onClick={handleEditSource}
@@ -1165,7 +1240,7 @@ const ConsultationManager: React.FC = () => {
                           <Pencil size={14} />
                           Sửa
                         </button>
-                  
+
                         <button
                           type="button"
                           onClick={handleDeleteSource}
@@ -1177,17 +1252,15 @@ const ConsultationManager: React.FC = () => {
                       </div>
                     )}
                   </div>
-				  
-                  {/* Nguồn */}
                 </div>
               </div>
-            
+
               {/* ================= 3. LỊCH ================= */}
               <div className="space-y-4">
                 <h3 className="text-xs font-bold uppercase text-emerald-600 tracking-widest">
                   📅 Lịch trình dự kiến
                 </h3>
-            
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-gray-500 uppercase mb-2">
@@ -1200,7 +1273,7 @@ const ConsultationManager: React.FC = () => {
                       className="w-full p-3 border rounded-xl font-bold bg-white"
                     />
                   </div>
-                
+
                   <div>
                     <label className="block text-xs font-bold text-gray-500 uppercase mb-2">
                       Ngày cưới
@@ -1212,7 +1285,7 @@ const ConsultationManager: React.FC = () => {
                       className="w-full p-3 border rounded-xl font-bold bg-white"
                     />
                   </div>
-                
+
                   <div>
                     <label className="block text-xs font-bold text-gray-500 uppercase mb-2">
                       Ngày ăn hỏi
@@ -1226,14 +1299,14 @@ const ConsultationManager: React.FC = () => {
                   </div>
                 </div>
               </div>
-            
+
               {/* ================= 4. KINH DOANH ================= */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <h3 className="text-xs font-bold uppercase text-purple-600 tracking-widest">
                     💰 Quan tâm dịch vụ
                   </h3>
-                
+
                   <button
                     type="button"
                     onClick={() => {
@@ -1247,8 +1320,8 @@ const ConsultationManager: React.FC = () => {
                     <Settings size={14} />
                   </button>
                 </div>
-				
-				{showBusinessManager && (
+
+                {showBusinessManager && (
                   <div className="flex flex-wrap gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
                     <select
                       value={serviceManageId}
@@ -1262,7 +1335,7 @@ const ConsultationManager: React.FC = () => {
                         </option>
                       ))}
                     </select>
-                
+
                     <button
                       type="button"
                       onClick={handleAddService}
@@ -1271,7 +1344,7 @@ const ConsultationManager: React.FC = () => {
                       <Plus size={14} />
                       Thêm
                     </button>
-                
+
                     <button
                       type="button"
                       onClick={handleEditService}
@@ -1280,7 +1353,7 @@ const ConsultationManager: React.FC = () => {
                       <Pencil size={14} />
                       Sửa
                     </button>
-                
+
                     <button
                       type="button"
                       onClick={handleDeleteService}
@@ -1291,14 +1364,14 @@ const ConsultationManager: React.FC = () => {
                     </button>
                   </div>
                 )}
-            
-                {/* dịch vụ */}
+
                 <div className="flex flex-wrap gap-2">
                   {masterData.services.map((s) => {
                     const isSelected = selectedServices.includes(s.id);
                     return (
                       <button
                         key={s.id}
+                        type="button"
                         onClick={() => {
                           setSelectedServices(prev =>
                             isSelected
@@ -1317,7 +1390,7 @@ const ConsultationManager: React.FC = () => {
                     );
                   })}
                 </div>
-            
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <input
                     type="number"
@@ -1326,7 +1399,7 @@ const ConsultationManager: React.FC = () => {
                     onChange={(e)=>handleFormChange('tong_gia_tri_du_kien', e.target.value)}
                     className="p-3 border rounded-xl font-bold"
                   />
-            
+
                   <select
                     value={formData.tinh_trang_id}
                     onChange={(e)=>handleFormChange('tinh_trang_id', e.target.value)}
@@ -1339,118 +1412,116 @@ const ConsultationManager: React.FC = () => {
                   </select>
                 </div>
               </div>
-              
-			  {/* ================= 5. LÝ DO TỪ CHỐI ================= */}
-			  {isRejectStatus && (
-			  <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-xs font-bold uppercase text-rose-500 tracking-widest">
-                    🚫 Lý do từ chối
-                  </h3>
-              
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowRejectReasonManager((prev) => !prev);
-                      setShowBusinessManager(false);
-                      setShowAddressManager(false);
-                      setShowSourceManager(false);
-                    }}
-                    className="p-1 rounded-lg hover:bg-gray-100 text-slate-400 hover:text-slate-700"
-                    title="Tùy chỉnh lý do từ chối"
-                  >
-                    <Settings size={14} />
-                  </button>
-                </div>
-              
-                {showRejectReasonManager && (
-                  <div className="flex flex-wrap gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                    <select
-                      value={rejectReasonManageId}
-                      onChange={(e) => setRejectReasonManageId(e.target.value)}
-                      className="min-w-[240px] rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white"
-                    >
-                      <option value="">Chọn lý do để sửa / xóa</option>
-                      {masterData.rejectionReasons.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.ten_ly_do}
-                        </option>
-                      ))}
-                    </select>
-              
+
+              {/* ================= 5. LÝ DO TỪ CHỐI ================= */}
+              {isRejectStatus && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xs font-bold uppercase text-rose-500 tracking-widest">
+                      🚫 Lý do từ chối
+                    </h3>
+
                     <button
                       type="button"
-                      onClick={handleAddRejectReason}
-                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-medium hover:bg-slate-100"
+                      onClick={() => {
+                        setShowRejectReasonManager((prev) => !prev);
+                        setShowBusinessManager(false);
+                        setShowAddressManager(false);
+                        setShowSourceManager(false);
+                      }}
+                      className="p-1 rounded-lg hover:bg-gray-100 text-slate-400 hover:text-slate-700"
+                      title="Tùy chỉnh lý do từ chối"
                     >
-                      <Plus size={14} />
-                      Thêm
-                    </button>
-              
-                    <button
-                      type="button"
-                      onClick={handleEditRejectReason}
-                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-medium hover:bg-slate-100"
-                    >
-                      <Pencil size={14} />
-                      Sửa
-                    </button>
-              
-                    <button
-                      type="button"
-                      onClick={handleDeleteRejectReason}
-                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-red-300 bg-white text-red-500 text-sm font-medium hover:bg-red-50"
-                    >
-                      <Trash2 size={14} />
-                      Xóa
+                      <Settings size={14} />
                     </button>
                   </div>
-                )}
-              
-                <div className="flex flex-wrap gap-2">
-                  {masterData.rejectionReasons.map((item) => {
-                    const isSelected = formData.ly_do_tu_choi_id === item.id;
-              
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() =>
-                          handleFormChange(
-                            'ly_do_tu_choi_id',
-                            isSelected ? '' : item.id
-                          )
-                        }
-                        className={`px-3 py-1 rounded-full text-sm ${
-                          isSelected
-                            ? 'bg-rose-500 text-white'
-                            : 'bg-gray-100 text-gray-700'
-                        }`}
+
+                  {showRejectReasonManager && (
+                    <div className="flex flex-wrap gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                      <select
+                        value={rejectReasonManageId}
+                        onChange={(e) => setRejectReasonManageId(e.target.value)}
+                        className="min-w-[240px] rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white"
                       >
-                        {item.ten_ly_do}
+                        <option value="">Chọn lý do để sửa / xóa</option>
+                        {masterData.rejectionReasons.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.ten_ly_do}
+                          </option>
+                        ))}
+                      </select>
+
+                      <button
+                        type="button"
+                        onClick={handleAddRejectReason}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-medium hover:bg-slate-100"
+                      >
+                        <Plus size={14} />
+                        Thêm
                       </button>
-                    );
-                  })}
+
+                      <button
+                        type="button"
+                        onClick={handleEditRejectReason}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-medium hover:bg-slate-100"
+                      >
+                        <Pencil size={14} />
+                        Sửa
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleDeleteRejectReason}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-red-300 bg-white text-red-500 text-sm font-medium hover:bg-red-50"
+                      >
+                        <Trash2 size={14} />
+                        Xóa
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-2">
+                    {masterData.rejectionReasons.map((item) => {
+                      const isSelected = formData.ly_do_tu_choi_id === item.id;
+
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() =>
+                            handleFormChange(
+                              'ly_do_tu_choi_id',
+                              isSelected ? '' : item.id
+                            )
+                          }
+                          className={`px-3 py-1 rounded-full text-sm ${
+                            isSelected
+                              ? 'bg-rose-500 text-white'
+                              : 'bg-gray-100 text-gray-700'
+                          }`}
+                        >
+                          {item.ten_ly_do}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-			  )}
-			  
+              )}
+
               {/* ================= 6. GHI CHÚ ================= */}
               <div>
                 <h3 className="text-xs font-bold uppercase text-gray-500 mb-2">
                   📝 Ghi chú
                 </h3>
-            
+
                 <textarea
                   value={formData.ghi_chu}
                   onChange={(e)=>handleFormChange('ghi_chu', e.target.value)}
                   className="w-full p-4 border rounded-xl"
                 />
               </div>
-            
+
             </div>
-    
-            
 
             <div className="flex items-center justify-center gap-4 px-6 py-5 border-t border-gray-200 bg-gray-50">
               <button
@@ -1461,14 +1532,14 @@ const ConsultationManager: React.FC = () => {
               >
                 Hủy
               </button>
-            
+
               <button
                 type="button"
                 onClick={handleCreate}
                 disabled={saving}
                 className="min-w-[140px] h-12 rounded-xl bg-blue-600 text-white px-6 text-base font-semibold hover:bg-blue-700 disabled:opacity-50"
               >
-                {saving ? 'Đang lưu...' : 'Lưu'}
+                {saving ? 'Đang lưu...' : editingLogId ? 'Cập nhật' : 'Lưu'}
               </button>
             </div>
           </div>

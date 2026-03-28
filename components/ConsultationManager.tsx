@@ -762,6 +762,7 @@ const ConsultationManager: React.FC = () => {
 
   const handleEdit = async (item: ConsultationLog) => {
     try {
+	  setSelectedRowId(item.id);
       setEditingLogId(item.id);
 
       const { data: logServices, error: logServicesError } = await supabase
@@ -827,6 +828,7 @@ const ConsultationManager: React.FC = () => {
     const previousStatusId = quickStatusMap[logId] || '';
   
     try {
+	  setSelectedRowId(logId);
       setQuickStatusSavingId(logId);
   
       setQuickStatusMap((prev) => ({

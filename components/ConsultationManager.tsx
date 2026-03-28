@@ -32,6 +32,7 @@ const ConsultationManager: React.FC = () => {
     total_rejected: 0,
     total_pipeline_value: 0,
     total_closed: 0,
+    by_status: [] as Array<{ label: string; total: number }>,
   });
   
   
@@ -111,6 +112,7 @@ const ConsultationManager: React.FC = () => {
         total_rejected: data?.total_rejected || 0,
         total_pipeline_value: data?.total_pipeline_value || 0,
         total_closed: data?.total_closed || 0,
+        by_status: data?.by_status || [],
       });
     } catch (err: any) {
       console.error('Lỗi khi tải báo cáo tổng quan:', err);
@@ -1084,6 +1086,40 @@ const ConsultationManager: React.FC = () => {
             </div>
           </div>
         </div>
+		
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-semibold text-gray-800">
+              Breakdown theo tình trạng
+            </h3>
+            <span className="text-sm text-gray-400">
+              {reportSummary.by_status.length} nhóm
+            </span>
+          </div>
+        
+          {reportSummary.by_status.length === 0 ? (
+            <div className="text-sm text-gray-500">
+              Chưa có dữ liệu theo tình trạng trong khoảng thời gian này.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {reportSummary.by_status.map((item) => (
+                <div
+                  key={item.label}
+                  className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-4 py-3"
+                >
+                  <div className="text-sm font-medium text-gray-700">
+                    {item.label}
+                  </div>
+                  <div className="text-sm font-bold text-gray-900">
+                    {item.total.toLocaleString('vi-VN')}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>		
+		
       </div>
     )}
 

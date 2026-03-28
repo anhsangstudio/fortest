@@ -883,8 +883,8 @@ const ConsultationManager: React.FC = () => {
             tinh_trang_id: newStatusId,
             tinh_trang_ten:
               masterData.statuses.find((status) => status.id === newStatusId)?.ten_tinh_trang || '',
-            ly_do_tu_choi_id: null,
-            ly_do_tu_choi_ten: null,
+            ly_do_tu_choi_id: updatedItem.ly_do_tu_choi_id || '',
+            ly_do_tu_choi_ten: updatedItem.ly_do_tu_choi_ten || '',
           });
         }
       }

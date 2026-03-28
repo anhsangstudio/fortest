@@ -982,6 +982,13 @@ const ConsultationManager: React.FC = () => {
     rate: totalLeads > 0 ? (item.total / totalLeads) * 100 : 0,
   }));
 
+  const sortedStatusBreakdown = [...reportSummary.by_status].sort((a, b) => {
+    if (b.total !== a.total) return b.total - a.total;
+    return a.label.localeCompare(b.label, 'vi');
+  });
+
+  const maxStatusTotal = sortedStatusBreakdown[0]?.total || 0;
+
   return (
     <div className="p-6 space-y-4">
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
@@ -1176,38 +1183,95 @@ const ConsultationManager: React.FC = () => {
 
 		
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-semibold text-gray-800">
-              Breakdown theo tình trạng
-            </h3>
-            <span className="text-sm text-gray-400">
-              {reportSummary.by_status.length} nhóm
-            </span>
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <div>
+              <h3 className="text-base font-semibold text-gray-800">
+                Breakdown theo tình trạng
+              </h3>
+              <p className="text-sm text-gray-500 mt-1">
+                Phân bố lead theo từng trạng thái để nhìn nhanh mức độ tập trung pipeline.
+              </p>
+            </div>
+
+            <div className="shrink-0 rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 text-right">
+              <div className="text-xs uppercase tracking-wide text-gray-400">
+                Tổng nhóm
+              </div>
+              <div className="text-xl font-bold text-gray-900 mt-1">
+                {sortedStatusBreakdown.length}
+              </div>
+            </div>
           </div>
-        
-          {reportSummary.by_status.length === 0 ? (
+
+          {sortedStatusBreakdown.length === 0 ? (
             <div className="text-sm text-gray-500">
               Chưa có dữ liệu theo tình trạng trong khoảng thời gian này.
             </div>
           ) : (
-            <div className="space-y-3">
-              {reportSummary.by_status.map((item) => (
-                <div
-                  key={item.label}
-                  className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-4 py-3"
-                >
-                  <div className="text-sm font-medium text-gray-700">
-                    {item.label}
-                  </div>
-                  <div className="text-sm font-bold text-gray-900">
-                    {item.total.toLocaleString('vi-VN')}
-                  </div>
-                </div>
-              ))}
+            <div className="overflow-hidden rounded-2xl border border-gray-200">
+              <div className="grid grid-cols-12 bg-gray-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                <div className="col-span-1">#</div>
+                <div className="col-span-5">Tình trạng</div>
+                <div className="col-span-2 text-right">SL</div>
+                <div className="col-span-2 text-right">Tỷ lệ</div>
+                <div className="col-span-2 text-right">Xu hướng</div>
+              </div>
+
+              <div className="divide-y divide-gray-100 bg-white">
+                {sortedStatusBreakdown.map((item, index) => {
+                  const rate = totalLeads > 0 ? (item.total / totalLeads) * 100 : 0;
+                  const width = maxStatusTotal > 0 ? (item.total / maxStatusTotal) * 100 : 0;
+
+                  return (
+                    <div
+                      key={item.label}
+                      className="grid grid-cols-12 items-center px-4 py-4 hover:bg-gray-50 transition"
+                    >
+                      <div className="col-span-1">
+                        <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-blue-50 text-xs font-bold text-blue-600">
+                          {index + 1}
+                        </div>
+                      </div>
+
+                      <div className="col-span-5 pr-4">
+                        <div className="text-sm font-semibold text-gray-800">
+                          {item.label}
+                        </div>
+                        <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                          <div
+                            className="h-full rounded-full bg-blue-500 transition-all"
+                            style={{ width: `${Math.min(width, 100)}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="col-span-2 text-right text-base font-bold text-gray-900">
+                        {item.total.toLocaleString('vi-VN')}
+                      </div>
+
+                      <div className="col-span-2 text-right text-sm font-medium text-gray-500">
+                        {rate.toFixed(1)}%
+                      </div>
+
+                      <div className="col-span-2 flex justify-end">
+                        <span className={`inline-flex min-w-[72px] justify-center rounded-full px-3 py-1 text-xs font-semibold ${
+                          rate >= 50
+                            ? 'bg-emerald-50 text-emerald-600'
+                            : rate >= 20
+                            ? 'bg-amber-50 text-amber-600'
+                            : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          {rate >= 50 ? 'Cao' : rate >= 20 ? 'Trung bình' : 'Thấp'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
-        </div>		
-		
+        </div>
+
       </div>
     )}
 

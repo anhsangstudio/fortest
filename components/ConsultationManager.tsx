@@ -237,11 +237,17 @@ const ConsultationManager: React.FC = () => {
       return;
     }
 
-    const selectedStatus = masterData.statuses.find(
-      (item) => item.id === formData.tinh_trang_id
-    );
-    const isRejectStatus =
-      selectedStatus?.ten_tinh_trang?.trim().toLowerCase() === 'khach tu choi';
+   const selectedStatus = masterData.statuses.find(
+     (item) => item.id === formData.tinh_trang_id
+   );
+   
+   const normalizedStatusName = selectedStatus?.ten_tinh_trang
+     ?.trim()
+     .toLowerCase()
+     .normalize('NFD')
+     .replace(/[\u0300-\u036f]/g, '');
+   
+   const isRejectStatus = normalizedStatusName === 'khach tu choi';
 
     if (isRejectStatus && !formData.ly_do_tu_choi_id) {
       alert('Vui lòng chọn lý do từ chối');

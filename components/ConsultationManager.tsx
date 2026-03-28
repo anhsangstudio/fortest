@@ -96,7 +96,7 @@ const ConsultationManager: React.FC = () => {
   const [showRejectReasonManager, setShowRejectReasonManager] = useState(false);
   const [rejectReasonManageId, setRejectReasonManageId] = useState('');
 
-  const loadReportSummary = useCallback(async (fromDate?: string, toDate?: string) => {
+  setReportSummary({
     try {
       const finalFromDate = fromDate || reportDateRange.from;
       const finalToDate = toDate || reportDateRange.to;
@@ -116,6 +116,8 @@ const ConsultationManager: React.FC = () => {
         by_status: data?.by_status || [],
         funnel: data?.funnel || [],
       });
+
+
     } catch (err: any) {
       console.error('Lỗi khi tải báo cáo tổng quan:', err);
     }
@@ -954,16 +956,6 @@ const ConsultationManager: React.FC = () => {
     }
   };
 
-  const closedRate =
-    reportSummary.total_leads > 0
-      ? (reportSummary.total_closed / reportSummary.total_leads) * 100
-      : 0;
-  
-  const rejectedRate =
-    reportSummary.total_leads > 0
-      ? (reportSummary.total_rejected / reportSummary.total_leads) * 100
-      : 0;
-
   const funnelOrder = [
     'Khách mới',
     'Đã hỏi thăm lần 1',
@@ -975,7 +967,7 @@ const ConsultationManager: React.FC = () => {
     'Studio kín lịch không nhận',
     'Spam không trả lời',
   ];
-  
+
   const normalizedFunnel = funnelOrder.map((stage) => {
     const found = reportSummary.funnel.find((f) => f.label === stage);
     return {
@@ -983,14 +975,13 @@ const ConsultationManager: React.FC = () => {
       total: found ? found.total : 0,
     };
   });
-  
-  const normalizedFunnel = funnelOrder.map((stage) => {
-    const found = reportSummary.funnel.find((f) => f.label === stage);
-    return {
-      label: stage,
-      total: found ? found.total : 0,
-    };
-  });
+
+  const totalLeads = reportSummary.total_leads || 0;
+
+  const funnelWithRate = normalizedFunnel.map((item) => ({
+    ...item,
+    rate: totalLeads > 0 ? (item.total / totalLeads) * 100 : 0,
+  }));
 
 
   return (
@@ -1150,11 +1141,9 @@ const ConsultationManager: React.FC = () => {
                   className="rounded-xl border border-gray-100 bg-gray-50 p-4"
                 >
                   <div className="text-sm text-gray-500">{item.label}</div>
-            
                   <div className="text-2xl font-bold text-gray-800 mt-2">
                     {item.total.toLocaleString('vi-VN')}
                   </div>
-            
                   <div className="text-sm text-gray-500 mt-1">
                     {item.rate.toFixed(1)}%
                   </div>
@@ -1284,6 +1273,7 @@ const ConsultationManager: React.FC = () => {
         </div>
       </div>
     )}
+	{activeTab === 'danh_sach' && (
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         {loading ? (
           <div className="p-6 text-gray-600">Đang tải dữ liệu...</div>
@@ -1452,6 +1442,9 @@ const ConsultationManager: React.FC = () => {
           </>
         )}
       </div>
+
+      </div>
+    )}
 
       {isCreateModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

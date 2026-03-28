@@ -26,6 +26,12 @@ const ConsultationManager: React.FC = () => {
   const [pageSize] = useState(DEFAULT_PAGE_SIZE);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const [reportSummary, setReportSummary] = useState({
+    total_leads: 0,
+    total_rejected: 0,
+    total_pipeline_value: 0,
+    total_closed: 0,
+  });
 
   const [filters, setFilters] = useState<Partial<ConsultationFilter>>({
     tu_khoa: '',
@@ -74,6 +80,33 @@ const ConsultationManager: React.FC = () => {
   const [showBusinessManager, setShowBusinessManager] = useState(false);
   const [showRejectReasonManager, setShowRejectReasonManager] = useState(false);
   const [rejectReasonManageId, setRejectReasonManageId] = useState('');
+
+  const loadReportSummary = useCallback(async () => {
+    try {
+      const today = new Date();
+      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  
+      const fromDate = firstDayOfMonth.toISOString().slice(0, 10);
+      const toDate = today.toISOString().slice(0, 10);
+  
+      const { data, error } = await supabase.rpc('consultation_report_summary', {
+        p_from: fromDate,
+        p_to: toDate,
+      });
+  
+      if (error) throw error;
+  
+      setReportSummary({
+        total_leads: data?.total_leads || 0,
+        total_rejected: data?.total_rejected || 0,
+        total_pipeline_value: data?.total_pipeline_value || 0,
+        total_closed: data?.total_closed || 0,
+      });
+    } catch (err: any) {
+      console.error('Lỗi khi tải báo cáo tổng quan:', err);
+    }
+  }, []);
+
 
   const loadData = useCallback(async () => {
     try {
@@ -157,7 +190,8 @@ const ConsultationManager: React.FC = () => {
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+    loadReportSummary();
+  }, [loadData, loadReportSummary]);
   
   useEffect(() => {
     const nextMap: Record<string, string> = {};
@@ -929,6 +963,36 @@ const ConsultationManager: React.FC = () => {
             >
               Thêm mới
             </button>
+          </div>
+        </div>
+      </div>
+	  
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+          <div className="text-sm text-gray-500">Tổng lead tháng này</div>
+          <div className="text-2xl font-bold text-gray-800 mt-2">
+            {reportSummary.total_leads.toLocaleString('vi-VN')}
+          </div>
+        </div>
+      
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+          <div className="text-sm text-gray-500">Khách từ chối</div>
+          <div className="text-2xl font-bold text-red-600 mt-2">
+            {reportSummary.total_rejected.toLocaleString('vi-VN')}
+          </div>
+        </div>
+      
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+          <div className="text-sm text-gray-500">Tổng giá trị dự kiến</div>
+          <div className="text-2xl font-bold text-blue-600 mt-2">
+            {reportSummary.total_pipeline_value.toLocaleString('vi-VN')}
+          </div>
+        </div>
+      
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+          <div className="text-sm text-gray-500">Lead đã có tình trạng</div>
+          <div className="text-2xl font-bold text-emerald-600 mt-2">
+            {reportSummary.total_closed.toLocaleString('vi-VN')}
           </div>
         </div>
       </div>

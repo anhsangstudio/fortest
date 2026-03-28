@@ -17,6 +17,7 @@ const DEFAULT_PAGE_SIZE = 20;
 const ConsultationManager: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'danh_sach' | 'bao_cao'>('danh_sach');
 
   const [data, setData] = useState<ConsultationLog[]>([]);
   const [quickStatusMap, setQuickStatusMap] = useState<Record<string, string>>({});
@@ -967,6 +968,34 @@ const ConsultationManager: React.FC = () => {
         </div>
       </div>
 	  
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-2">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab('danh_sach')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium ${
+              activeTab === 'danh_sach'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Danh sách
+          </button>
+      
+          <button
+            type="button"
+            onClick={() => setActiveTab('bao_cao')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium ${
+              activeTab === 'bao_cao'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Báo Cáo
+          </button>
+        </div>
+      </div>
+	{activeTab === 'bao_cao' && (  
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
           <div className="text-sm text-gray-500">Tổng lead tháng này</div>
@@ -996,7 +1025,8 @@ const ConsultationManager: React.FC = () => {
           </div>
         </div>
       </div>
-
+    )}  
+	{activeTab === 'danh_sach' && (
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
           <div>
@@ -1077,7 +1107,7 @@ const ConsultationManager: React.FC = () => {
           </div>
         </div>
       </div>
-
+    )}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         {loading ? (
           <div className="p-6 text-gray-600">Đang tải dữ liệu...</div>

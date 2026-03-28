@@ -1128,28 +1128,37 @@ const ConsultationManager: React.FC = () => {
           </div>
         
           {reportSummary.funnel.length === 0 ? (
-            <div className="text-sm text-gray-500">
-              Chưa có dữ liệu funnel trong khoảng thời gian này.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
               {funnelWithRate.map((item) => (
                 <div
                   key={item.label}
-                  className="rounded-xl border border-gray-100 bg-gray-50 p-4"
+                  className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm"
                 >
-                  <div className="text-sm text-gray-500">{item.label}</div>
-          
-                  <div className="text-2xl font-bold text-gray-800 mt-2">
-                    {item.total.toLocaleString('vi-VN')}
+                  <div className="text-xs font-medium text-gray-500 leading-5 min-h-[32px]">
+                    {item.label}
                   </div>
-          
-                  <div className="text-sm text-gray-500 mt-2">
-                    {item.rate.toFixed(1)}%
+            
+                  <div className="mt-2 flex items-end justify-between gap-3">
+                    <div className="text-2xl font-bold text-gray-800">
+                      {item.total.toLocaleString('vi-VN')}
+                    </div>
+            
+                    <div className="text-sm font-medium text-gray-500">
+                      {item.rate.toFixed(1)}%
+                    </div>
+                  </div>
+            
+                  <div className="mt-3 h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-blue-500 transition-all"
+                      style={{ width: `${Math.min(item.rate, 100)}%` }}
+                    />
                   </div>
                 </div>
               ))}
             </div>
+
           )}
         </div>
 

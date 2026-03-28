@@ -22,6 +22,7 @@ const ConsultationManager: React.FC = () => {
   const [quickStatusMap, setQuickStatusMap] = useState<Record<string, string>>({});
   const [quickStatusSavingId, setQuickStatusSavingId] = useState<string | null>(null);
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
+  const [quickServiceMap, setQuickServiceMap] = useState<Record<string, string[]>>({});
   const [page, setPage] = useState(1);
   const [pageSize] = useState(DEFAULT_PAGE_SIZE);
   const [total, setTotal] = useState(0);
@@ -168,6 +169,23 @@ const ConsultationManager: React.FC = () => {
   
     setQuickStatusMap(nextMap);
   }, [data]);
+  
+  useEffect(() => {
+    const nextMap: Record<string, string[]> = {};
+  
+    data.forEach((item) => {
+      const selectedServiceIds =
+        masterData.services
+          .filter((service) =>
+            (item.dich_vu_quan_tam_ten || []).includes(service.ten_dich_vu)
+          )
+          .map((service) => service.id);
+  
+      nextMap[item.id] = selectedServiceIds;
+    });
+  
+    setQuickServiceMap(nextMap);
+  }, [data, masterData.services]);
 
   const goToPrevPage = () => {
     setPage((prev) => Math.max(1, prev - 1));
@@ -1070,17 +1088,41 @@ const ConsultationManager: React.FC = () => {
                         {item.nguon_khach_hang_ten || ''}
                       </td>
 
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <div className="flex flex-wrap gap-1">
-                          {(item.dich_vu_quan_tam_ten || []).length > 0 ? (
-                            item.dich_vu_quan_tam_ten?.map((service) => (
-                              <span
-                                key={service}
-                                className="inline-flex items-center rounded-full bg-blue-50 text-blue-700 px-2 py-1 text-xs font-medium"
-                              >
-                                {service}
-                              </span>
-                            ))
+                          {masterData.services.length > 0 ? (
+                            masterData.services.map((service) => {
+                              const isSelected = (quickServiceMap[item.id] || []).includes(service.id);
+                      
+                              return (
+                                <button
+                                  key={service.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedRowId(item.id);
+                      
+                                    setQuickServiceMap((prev) => {
+                                      const currentServices = prev[item.id] || [];
+                                      const nextServices = currentServices.includes(service.id)
+                                        ? currentServices.filter((id) => id !== service.id)
+                                        : [...currentServices, service.id];
+                      
+                                      return {
+                                        ...prev,
+                                        [item.id]: nextServices,
+                                      };
+                                    });
+                                  }}
+                                  className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium border transition ${
+                                    isSelected
+                                      ? 'bg-blue-600 text-white border-blue-600'
+                                      : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                                  }`}
+                                >
+                                  {service.ten_dich_vu}
+                                </button>
+                              );
+                            })
                           ) : (
                             <span className="text-gray-400">---</span>
                           )}

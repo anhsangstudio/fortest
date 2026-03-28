@@ -982,7 +982,6 @@ const ConsultationManager: React.FC = () => {
     rate: totalLeads > 0 ? (item.total / totalLeads) * 100 : 0,
   }));
 
-
   return (
     <div className="p-6 space-y-4">
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
@@ -1133,39 +1132,49 @@ const ConsultationManager: React.FC = () => {
               Chưa có dữ liệu funnel trong khoảng thời gian này.
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-              {funnelWithRate.map((item) => (
-                <div
-                  key={item.label}
-                  className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm"
-                >
-                  <div className="text-xs font-medium text-gray-500 leading-5 min-h-[32px]">
-                    {item.label}
-                  </div>
-
-                  <div className="mt-2 flex items-end justify-between gap-3">
-                    <div className="text-2xl font-bold text-gray-800">
-                      {item.total.toLocaleString('vi-VN')}
-                    </div>
-
-                    <div className="text-sm font-medium text-gray-500">
-                      {item.rate.toFixed(1)}%
-                    </div>
-                  </div>
-
-                  <div className="mt-3 h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+            <div className="w-full xl:w-1/4">
+              <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+                <div className="divide-y divide-gray-100">
+                  {funnelWithRate.map((item) => (
                     <div
-                      className="h-full rounded-full bg-blue-500 transition-all"
-                      style={{ width: `${Math.min(item.rate, 100)}%` }}
-                    />
-                  </div>
+                      key={item.label}
+                      className="px-4 py-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                            Giai đoạn
+                          </div>
+                          <div className="mt-1 text-sm font-semibold text-gray-800 break-words">
+                            {item.label}
+                          </div>
+                        </div>
+
+                        <div className="shrink-0 text-right">
+                          <div className="text-xl font-bold text-gray-900">
+                            {item.total.toLocaleString('vi-VN')}
+                          </div>
+                          <div className="mt-1 text-xs font-medium text-gray-500">
+                            {item.rate.toFixed(1)}%
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                        <div
+                          className="h-full rounded-full bg-blue-500 transition-all"
+                          style={{ width: `${Math.min(item.rate, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              </div>
             </div>
           )}
         </div>
 
-
+		
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-base font-semibold text-gray-800">

@@ -33,7 +33,19 @@ const ConsultationManager: React.FC = () => {
     total_pipeline_value: 0,
     total_closed: 0,
   });
-
+  
+  
+  const today = new Date().toISOString().slice(0, 10);
+  const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+    .toISOString()
+    .slice(0, 10);
+  
+  const [reportDateRange, setReportDateRange] = useState({
+    from: firstDayOfMonth,
+    to: today,
+  });
+  
+  
   const [filters, setFilters] = useState<Partial<ConsultationFilter>>({
     tu_khoa: '',
     tinh_trang_id: '',
@@ -82,17 +94,14 @@ const ConsultationManager: React.FC = () => {
   const [showRejectReasonManager, setShowRejectReasonManager] = useState(false);
   const [rejectReasonManageId, setRejectReasonManageId] = useState('');
 
-  const loadReportSummary = useCallback(async () => {
+  const loadReportSummary = useCallback(async (fromDate?: string, toDate?: string) => {
     try {
-      const today = new Date();
-      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-  
-      const fromDate = firstDayOfMonth.toISOString().slice(0, 10);
-      const toDate = today.toISOString().slice(0, 10);
+      const finalFromDate = fromDate || reportDateRange.from;
+      const finalToDate = toDate || reportDateRange.to;
   
       const { data, error } = await supabase.rpc('consultation_report_summary', {
-        p_from: fromDate,
-        p_to: toDate,
+        p_from: finalFromDate,
+        p_to: finalToDate,
       });
   
       if (error) throw error;
@@ -106,7 +115,7 @@ const ConsultationManager: React.FC = () => {
     } catch (err: any) {
       console.error('Lỗi khi tải báo cáo tổng quan:', err);
     }
-  }, []);
+  }, [reportDateRange]);
 
 
   const loadData = useCallback(async () => {
@@ -995,37 +1004,90 @@ const ConsultationManager: React.FC = () => {
           </button>
         </div>
       </div>
-	{activeTab === 'bao_cao' && (  
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+
+    {activeTab === 'bao_cao' && (
+      <div className="space-y-4">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-          <div className="text-sm text-gray-500">Tổng lead tháng này</div>
-          <div className="text-2xl font-bold text-gray-800 mt-2">
-            {reportSummary.total_leads.toLocaleString('vi-VN')}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Từ ngày
+              </label>
+              <input
+                type="date"
+                value={reportDateRange.from}
+                onChange={(e) =>
+                  setReportDateRange((prev) => ({
+                    ...prev,
+                    from: e.target.value,
+                  }))
+                }
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+    
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Đến ngày
+              </label>
+              <input
+                type="date"
+                value={reportDateRange.to}
+                onChange={(e) =>
+                  setReportDateRange((prev) => ({
+                    ...prev,
+                    to: e.target.value,
+                  }))
+                }
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+    
+            <div className="flex items-end">
+              <button
+                type="button"
+                onClick={() => loadReportSummary()}
+                className="w-full rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-medium hover:bg-blue-700"
+              >
+                Xem báo cáo
+              </button>
+            </div>
           </div>
         </div>
-      
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-          <div className="text-sm text-gray-500">Khách từ chối</div>
-          <div className="text-2xl font-bold text-red-600 mt-2">
-            {reportSummary.total_rejected.toLocaleString('vi-VN')}
+    
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+            <div className="text-sm text-gray-500">Tổng lead</div>
+            <div className="text-2xl font-bold text-gray-800 mt-2">
+              {reportSummary.total_leads.toLocaleString('vi-VN')}
+            </div>
           </div>
-        </div>
-      
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-          <div className="text-sm text-gray-500">Tổng giá trị dự kiến</div>
-          <div className="text-2xl font-bold text-blue-600 mt-2">
-            {reportSummary.total_pipeline_value.toLocaleString('vi-VN')}
+    
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+            <div className="text-sm text-gray-500">Khách từ chối</div>
+            <div className="text-2xl font-bold text-red-600 mt-2">
+              {reportSummary.total_rejected.toLocaleString('vi-VN')}
+            </div>
           </div>
-        </div>
-      
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-          <div className="text-sm text-gray-500">Lead đã có tình trạng</div>
-          <div className="text-2xl font-bold text-emerald-600 mt-2">
-            {reportSummary.total_closed.toLocaleString('vi-VN')}
+    
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+            <div className="text-sm text-gray-500">Tổng giá trị dự kiến</div>
+            <div className="text-2xl font-bold text-blue-600 mt-2">
+              {reportSummary.total_pipeline_value.toLocaleString('vi-VN')}
+            </div>
+          </div>
+    
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+            <div className="text-sm text-gray-500">Lead đã có tình trạng</div>
+            <div className="text-2xl font-bold text-emerald-600 mt-2">
+              {reportSummary.total_closed.toLocaleString('vi-VN')}
+            </div>
           </div>
         </div>
       </div>
-    )}  
+    )}
+
+ 
 	{activeTab === 'danh_sach' && (
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">

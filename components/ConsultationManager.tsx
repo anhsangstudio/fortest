@@ -21,6 +21,7 @@ const ConsultationManager: React.FC = () => {
   const [data, setData] = useState<ConsultationLog[]>([]);
   const [quickStatusMap, setQuickStatusMap] = useState<Record<string, string>>({});
   const [quickStatusSavingId, setQuickStatusSavingId] = useState<string | null>(null);
+  const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(DEFAULT_PAGE_SIZE);
   const [total, setTotal] = useState(0);
@@ -1039,7 +1040,13 @@ const ConsultationManager: React.FC = () => {
 
                 <tbody>
                   {data.map((item) => (
-                    <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50 transition">
+                    <tr
+                      key={item.id}
+                      onClick={() => setSelectedRowId(item.id)}
+                      className={`border-b border-gray-100 transition cursor-pointer ${
+                        selectedRowId === item.id ? 'bg-blue-50' : 'hover:bg-gray-50'
+                      }`}
+                    >
                       <td className="px-4 py-3 whitespace-nowrap">
                         {item.ngay_tu_van || ''}
                       </td>

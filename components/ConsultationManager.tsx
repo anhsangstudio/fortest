@@ -833,11 +833,26 @@ const ConsultationManager: React.FC = () => {
         [logId]: newStatusId,
       }));
   
+      const selectedStatus = masterData.statuses.find(
+        (status) => status.id === newStatusId
+      );
+      
+      const normalizedStatusName = selectedStatus?.ten_tinh_trang
+        ?.trim()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+      
+      const isRejectStatus = normalizedStatusName === 'khach tu choi';
+      
+      const updatePayload = {
+        tinh_trang_id: newStatusId || null,
+        ly_do_tu_choi_id: isRejectStatus ? undefined : null,
+      };
+      
       const { error } = await supabase
         .from('consultation_logs')
-        .update({
-          tinh_trang_id: newStatusId || null,
-        })
+        .update(updatePayload)
         .eq('id', logId);
   
       if (error) throw error;
@@ -850,10 +865,14 @@ const ConsultationManager: React.FC = () => {
                 tinh_trang_id: newStatusId || null,
                 tinh_trang_ten:
                   masterData.statuses.find((status) => status.id === newStatusId)?.ten_tinh_trang || '',
+                ly_do_tu_choi_id: isRejectStatus ? item.ly_do_tu_choi_id : null,
+                ly_do_tu_choi_ten: isRejectStatus ? item.ly_do_tu_choi_ten : null,
               }
             : item
         )
       );
+
+
     } catch (err: any) {
       console.error('Lỗi khi cập nhật nhanh tình trạng:', err);
   

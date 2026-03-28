@@ -986,7 +986,20 @@ const ConsultationManager: React.FC = () => {
                       </td>
 
                       <td className="px-4 py-3 whitespace-nowrap">
-                        {item.tinh_trang_ten || ''}
+                        <select
+                          value={item.tinh_trang_id || ''}
+                          onChange={(e) => {
+                            console.log('Đổi tình trạng cho dòng:', item.id, '->', e.target.value);
+                          }}
+                          className="min-w-[160px] rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">Chọn tình trạng</option>
+                          {masterData.statuses.map((status) => (
+                            <option key={status.id} value={status.id}>
+                              {status.ten_tinh_trang}
+                            </option>
+                          ))}
+                        </select>
                       </td>
 
                       <td className="px-4 py-3 whitespace-nowrap">

@@ -20,6 +20,7 @@ const ConsultationManager: React.FC = () => {
 
   const [data, setData] = useState<ConsultationLog[]>([]);
   const [quickStatusMap, setQuickStatusMap] = useState<Record<string, string>>({});
+  const [quickStatusSavingId, setQuickStatusSavingId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(DEFAULT_PAGE_SIZE);
   const [total, setTotal] = useState(0);
@@ -821,6 +822,52 @@ const ConsultationManager: React.FC = () => {
     }
   };
 
+  const handleQuickStatusChange = async (logId: string, newStatusId: string) => {
+    const previousStatusId = quickStatusMap[logId] || '';
+  
+    try {
+      setQuickStatusSavingId(logId);
+  
+      setQuickStatusMap((prev) => ({
+        ...prev,
+        [logId]: newStatusId,
+      }));
+  
+      const { error } = await supabase
+        .from('consultation_logs')
+        .update({
+          tinh_trang_id: newStatusId || null,
+        })
+        .eq('id', logId);
+  
+      if (error) throw error;
+  
+      setData((prev) =>
+        prev.map((item) =>
+          item.id === logId
+            ? {
+                ...item,
+                tinh_trang_id: newStatusId || null,
+                tinh_trang_ten:
+                  masterData.statuses.find((status) => status.id === newStatusId)?.ten_tinh_trang || '',
+              }
+            : item
+        )
+      );
+    } catch (err: any) {
+      console.error('Lỗi khi cập nhật nhanh tình trạng:', err);
+  
+      setQuickStatusMap((prev) => ({
+        ...prev,
+        [logId]: previousStatusId,
+      }));
+  
+      alert(err?.message || 'Không thể cập nhật tình trạng');
+    } finally {
+      setQuickStatusSavingId(null);
+    }
+  };
+
   return (
     <div className="p-6 space-y-4">
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
@@ -999,17 +1046,9 @@ const ConsultationManager: React.FC = () => {
                       <td className="px-4 py-3 whitespace-nowrap">
                         <select
                           value={quickStatusMap[item.id] || ''}
-                          onChange={(e) => {
-                            const newStatusId = e.target.value;
-                      
-                            setQuickStatusMap((prev) => ({
-                              ...prev,
-                              [item.id]: newStatusId,
-                            }));
-                      
-                            console.log('Đổi tình trạng cho dòng:', item.id, '->', newStatusId);
-                          }}
-                          className="min-w-[160px] rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          onChange={(e) => handleQuickStatusChange(item.id, e.target.value)}
+                          disabled={quickStatusSavingId === item.id}
+                          className="min-w-[160px] rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
                         >
                           <option value="">Chọn tình trạng</option>
                           {masterData.statuses.map((status) => (

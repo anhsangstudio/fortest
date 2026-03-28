@@ -33,6 +33,7 @@ const ConsultationManager: React.FC = () => {
     total_pipeline_value: 0,
     total_closed: 0,
     by_status: [] as Array<{ label: string; total: number }>,
+    funnel: [] as Array<{ label: string; total: number }>,
   });
   
   
@@ -95,7 +96,7 @@ const ConsultationManager: React.FC = () => {
   const [showRejectReasonManager, setShowRejectReasonManager] = useState(false);
   const [rejectReasonManageId, setRejectReasonManageId] = useState('');
 
-  const loadReportSummary = useCallback(async (fromDate?: string, toDate?: string) => {
+  setReportSummary({
     try {
       const finalFromDate = fromDate || reportDateRange.from;
       const finalToDate = toDate || reportDateRange.to;
@@ -113,7 +114,10 @@ const ConsultationManager: React.FC = () => {
         total_pipeline_value: data?.total_pipeline_value || 0,
         total_closed: data?.total_closed || 0,
         by_status: data?.by_status || [],
+        funnel: data?.funnel || [],
       });
+
+
     } catch (err: any) {
       console.error('Lỗi khi tải báo cáo tổng quan:', err);
     }
@@ -1086,6 +1090,38 @@ const ConsultationManager: React.FC = () => {
             </div>
           </div>
         </div>
+		
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-semibold text-gray-800">
+              Funnel cơ bản
+            </h3>
+            <span className="text-sm text-gray-400">
+              {reportSummary.funnel.length} bước
+            </span>
+          </div>
+        
+          {reportSummary.funnel.length === 0 ? (
+            <div className="text-sm text-gray-500">
+              Chưa có dữ liệu funnel trong khoảng thời gian này.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {reportSummary.funnel.map((item) => (
+                <div
+                  key={item.label}
+                  className="rounded-xl border border-gray-100 bg-gray-50 p-4"
+                >
+                  <div className="text-sm text-gray-500">{item.label}</div>
+                  <div className="text-2xl font-bold text-gray-800 mt-2">
+                    {item.total.toLocaleString('vi-VN')}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
 		
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
           <div className="flex items-center justify-between mb-4">

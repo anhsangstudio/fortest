@@ -965,22 +965,23 @@ const ConsultationManager: React.FC = () => {
     'Studio kín lịch không nhận',
     'Spam không trả lời',
   ];
-  
+
   const normalizedFunnel = funnelOrder.map((stage) => {
     const found = reportSummary.funnel.find((item) => item.label === stage);
-  
+
     return {
       label: stage,
       total: found ? found.total : 0,
     };
   });
-  
+
   const totalLeads = reportSummary.total_leads || 0;
-  
+
   const funnelWithRate = normalizedFunnel.map((item) => ({
     ...item,
     rate: totalLeads > 0 ? (item.total / totalLeads) * 100 : 0,
   }));
+
 
   return (
     <div className="p-6 space-y-4">
@@ -1126,8 +1127,12 @@ const ConsultationManager: React.FC = () => {
               {reportSummary.funnel.length} bước
             </span>
           </div>
-        
+
           {reportSummary.funnel.length === 0 ? (
+            <div className="text-sm text-gray-500">
+              Chưa có dữ liệu funnel trong khoảng thời gian này.
+            </div>
+          ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
               {funnelWithRate.map((item) => (
                 <div
@@ -1137,17 +1142,17 @@ const ConsultationManager: React.FC = () => {
                   <div className="text-xs font-medium text-gray-500 leading-5 min-h-[32px]">
                     {item.label}
                   </div>
-            
+
                   <div className="mt-2 flex items-end justify-between gap-3">
                     <div className="text-2xl font-bold text-gray-800">
                       {item.total.toLocaleString('vi-VN')}
                     </div>
-            
+
                     <div className="text-sm font-medium text-gray-500">
                       {item.rate.toFixed(1)}%
                     </div>
                   </div>
-            
+
                   <div className="mt-3 h-2 w-full rounded-full bg-gray-100 overflow-hidden">
                     <div
                       className="h-full rounded-full bg-blue-500 transition-all"
@@ -1160,7 +1165,7 @@ const ConsultationManager: React.FC = () => {
           )}
         </div>
 
-		
+
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-base font-semibold text-gray-800">

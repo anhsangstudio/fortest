@@ -964,6 +964,35 @@ const ConsultationManager: React.FC = () => {
       ? (reportSummary.total_rejected / reportSummary.total_leads) * 100
       : 0;
 
+  const funnelOrder = [
+    'Khách mới',
+    'Đã hỏi thăm lần 1',
+    'Đã hỏi thăm lần 2',
+    'Đã hỏi thăm lần 3',
+    'Đã hẹn qua Studio',
+    'Đã chốt',
+    'Khách từ chối',
+    'Studio kín lịch không nhận',
+    'Spam không trả lời',
+  ];
+  
+  const normalizedFunnel = funnelOrder.map((stage) => {
+    const found = reportSummary.funnel.find((f) => f.label === stage);
+    return {
+      label: stage,
+      total: found ? found.total : 0,
+    };
+  });
+  
+  const normalizedFunnel = funnelOrder.map((stage) => {
+    const found = reportSummary.funnel.find((f) => f.label === stage);
+    return {
+      label: stage,
+      total: found ? found.total : 0,
+    };
+  });
+
+
   return (
     <div className="p-6 space-y-4">
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
@@ -1115,32 +1144,22 @@ const ConsultationManager: React.FC = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {reportSummary.funnel.map((item) => {
-                const rate =
-                  item.label === 'Đã có tình trạng'
-                    ? closedRate
-                    : item.label === 'Khách từ chối'
-                    ? rejectedRate
-                    : null;
-              
-                return (
-                  <div
-                    key={item.label}
-                    className="rounded-xl border border-gray-100 bg-gray-50 p-4"
-                  >
-                    <div className="text-sm text-gray-500">{item.label}</div>
-                    <div className="text-2xl font-bold text-gray-800 mt-2">
-                      {item.total.toLocaleString('vi-VN')}
-                    </div>
-              
-                    {rate !== null && (
-                      <div className="text-sm text-gray-500 mt-2">
-                        {rate.toFixed(1)}%
-                      </div>
-                    )}
+              {funnelWithRate.map((item) => (
+                <div
+                  key={item.label}
+                  className="rounded-xl border border-gray-100 bg-gray-50 p-4"
+                >
+                  <div className="text-sm text-gray-500">{item.label}</div>
+            
+                  <div className="text-2xl font-bold text-gray-800 mt-2">
+                    {item.total.toLocaleString('vi-VN')}
                   </div>
-                );
-              })}
+            
+                  <div className="text-sm text-gray-500 mt-1">
+                    {item.rate.toFixed(1)}%
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>

@@ -219,9 +219,15 @@ const ConsultationManager: React.FC = () => {
 
       if (field === 'tinh_trang_id') {
         const nextStatus = masterData.statuses.find((item) => item.id === value);
-        const isNextRejectStatus =
-          nextStatus?.ten_tinh_trang?.trim().toLowerCase() === 'khach tu choi';
-
+      
+        const normalizedStatusName = nextStatus?.ten_tinh_trang
+          ?.trim()
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '');
+      
+        const isNextRejectStatus = normalizedStatusName === 'khach tu choi';
+      
         if (!isNextRejectStatus) {
           next.ly_do_tu_choi_id = '';
         }

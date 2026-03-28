@@ -59,6 +59,10 @@ const ConsultationManager: React.FC = () => {
     tong_gia_tri_du_kien: '',
     ghi_chu: '',
   });
+  
+  const [formErrors, setFormErrors] = useState({
+    ly_do_tu_choi: false,
+  });
 
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
   const [serviceManageId, setServiceManageId] = useState('');
@@ -256,6 +260,7 @@ const ConsultationManager: React.FC = () => {
     const isRejectStatus = normalizedStatusName === 'khach tu choi';
     
     if (isRejectStatus && !formData.ly_do_tu_choi_id) {
+      setFormErrors({ ly_do_tu_choi: true });
       alert('Vui lòng chọn lý do từ chối');
       return;
     }
@@ -1499,7 +1504,11 @@ const ConsultationManager: React.FC = () => {
                     </div>
                   )}
 
-                  <div className="flex flex-wrap gap-2">
+                  <div
+                    className={`flex flex-wrap gap-2 p-2 rounded-xl ${
+                      formErrors.ly_do_tu_choi ? 'border border-red-500' : ''
+                    }`}
+                  >
                     {masterData.rejectionReasons.map((item) => {
                       const isSelected = formData.ly_do_tu_choi_id === item.id;
 
@@ -1507,12 +1516,17 @@ const ConsultationManager: React.FC = () => {
                         <button
                           key={item.id}
                           type="button"
-                          onClick={() =>
+                          onClick={() => {
                             handleFormChange(
                               'ly_do_tu_choi_id',
                               isSelected ? '' : item.id
-                            )
-                          }
+                            );
+                          
+                            setFormErrors(prev => ({
+                              ...prev,
+                              ly_do_tu_choi: false,
+                            }));
+                          }}
                           className={`px-3 py-1 rounded-full text-sm ${
                             isSelected
                               ? 'bg-rose-500 text-white'

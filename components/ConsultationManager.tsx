@@ -722,12 +722,19 @@ const ConsultationManager: React.FC = () => {
     }
   };
 
-  const selectedStatus = masterData.statuses.find(
-    (item) => item.id === formData.tinh_trang_id
-  );
+   const selectedStatus = masterData.statuses.find(
+     (item) => item.id === formData.tinh_trang_id
+   );
+   
+   const normalizedStatusName = selectedStatus?.ten_tinh_trang
+     ?.trim()
+     .toLowerCase()
+     .normalize('NFD')
+     .replace(/[\u0300-\u036f]/g, '');
+   
+   const isRejectStatus = normalizedStatusName === 'khach tu choi';
 
-  const isRejectStatus =
-    selectedStatus?.ten_tinh_trang?.trim().toLowerCase() === 'khach tu choi';
+
 
   const handleEdit = async (item: ConsultationLog) => {
     try {

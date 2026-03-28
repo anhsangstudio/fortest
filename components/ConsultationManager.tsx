@@ -1090,6 +1090,7 @@ const ConsultationManager: React.FC = () => {
                       <td className="px-4 py-3 whitespace-nowrap">
                         <select
                           value={quickStatusMap[item.id] || ''}
+						  onClick={(e) => e.stopPropagation()}
                           onChange={(e) => handleQuickStatusChange(item.id, e.target.value)}
                           disabled={quickStatusSavingId === item.id}
                           className="min-w-[160px] rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
@@ -1125,7 +1126,10 @@ const ConsultationManager: React.FC = () => {
                         <div className="flex items-center justify-center gap-2">
                           <button
                             type="button"
-                            onClick={() => handleEdit(item)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEdit(item);
+                            }}
                             className="p-2 rounded-lg hover:bg-blue-50 text-blue-500 hover:text-blue-700"
                             title="Chỉnh sửa"
                           >
@@ -1134,7 +1138,10 @@ const ConsultationManager: React.FC = () => {
 
                           <button
                             type="button"
-                            onClick={() => handleDelete(item)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(item);
+                            }}
                             className="p-2 rounded-lg hover:bg-red-50 text-red-500 hover:text-red-700"
                             title="Xóa"
                           >

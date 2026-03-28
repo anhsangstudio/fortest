@@ -19,6 +19,7 @@ const ConsultationManager: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const [data, setData] = useState<ConsultationLog[]>([]);
+  const [quickStatusMap, setQuickStatusMap] = useState<Record<string, string>>({});
   const [page, setPage] = useState(1);
   const [pageSize] = useState(DEFAULT_PAGE_SIZE);
   const [total, setTotal] = useState(0);
@@ -155,6 +156,16 @@ const ConsultationManager: React.FC = () => {
   useEffect(() => {
     loadData();
   }, [loadData]);
+  
+  useEffect(() => {
+    const nextMap: Record<string, string> = {};
+  
+    data.forEach((item) => {
+      nextMap[item.id] = item.tinh_trang_id || '';
+    });
+  
+    setQuickStatusMap(nextMap);
+  }, [data]);
 
   const goToPrevPage = () => {
     setPage((prev) => Math.max(1, prev - 1));
@@ -987,9 +998,16 @@ const ConsultationManager: React.FC = () => {
 
                       <td className="px-4 py-3 whitespace-nowrap">
                         <select
-                          value={item.tinh_trang_id || ''}
+                          value={quickStatusMap[item.id] || ''}
                           onChange={(e) => {
-                            console.log('Đổi tình trạng cho dòng:', item.id, '->', e.target.value);
+                            const newStatusId = e.target.value;
+                      
+                            setQuickStatusMap((prev) => ({
+                              ...prev,
+                              [item.id]: newStatusId,
+                            }));
+                      
+                            console.log('Đổi tình trạng cho dòng:', item.id, '->', newStatusId);
                           }}
                           className="min-w-[160px] rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >

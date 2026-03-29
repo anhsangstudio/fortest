@@ -35,6 +35,14 @@ const ConsultationManager: React.FC = () => {
     by_status: [] as Array<{ label: string; total: number }>,
     funnel: [] as Array<{ label: string; total: number }>,
   });
+
+  const [serviceBreakdown, setServiceBreakdown] = useState<
+    Array<{ label: string; total: number; rate: number }>
+  >([]);
+
+  const [sourceBreakdown, setSourceBreakdown] = useState<
+    Array<{ label: string; total: number; rate: number }>
+  >([]);
   
   
   const today = new Date().toISOString().slice(0, 10);
@@ -205,7 +213,9 @@ const ConsultationManager: React.FC = () => {
   useEffect(() => {
     loadData();
     loadReportSummary();
-  }, [loadData, loadReportSummary]);
+    loadServiceBreakdown();
+    loadSourceBreakdown();
+  }, [loadData, loadReportSummary, loadServiceBreakdown, loadSourceBreakdown]);
   
   useEffect(() => {
     const nextMap: Record<string, string> = {};
@@ -1085,7 +1095,10 @@ const ConsultationManager: React.FC = () => {
             <div className="flex items-end">
               <button
                 type="button"
-                onClick={() => loadReportSummary()}
+                onClick={() => {
+                  loadReportSummary();
+                  loadServiceBreakdown();
+                }}
                 className="w-full rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-medium hover:bg-blue-700"
               >
                 Xem báo cáo
@@ -1182,6 +1195,116 @@ const ConsultationManager: React.FC = () => {
         </div>
 
 		
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-semibold text-gray-800">
+                Mức độ quan tâm dịch vụ
+              </h3>
+              <span className="text-sm text-gray-400">
+                {serviceBreakdown.length} dịch vụ
+              </span>
+            </div>
+
+            {serviceBreakdown.length === 0 ? (
+              <div className="text-sm text-gray-500">
+                Chưa có dữ liệu dịch vụ trong khoảng thời gian này.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {serviceBreakdown.map((item, index) => (
+                  <div
+                    key={item.label}
+                    className="rounded-xl border border-gray-100 bg-gray-50 p-4"
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-50 text-blue-600 text-sm font-bold shrink-0">
+                          {index + 1}
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-gray-800 truncate">
+                            {item.label}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {item.total.toLocaleString('vi-VN')} lead
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-sm font-bold text-gray-800 shrink-0">
+                        {item.rate.toFixed(1)}%
+                      </div>
+                    </div>
+
+                    <div className="mt-3 h-2 w-full rounded-full bg-gray-200 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-blue-500 transition-all"
+                        style={{ width: `${Math.min(item.rate, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-semibold text-gray-800">
+                Breakdown theo nguồn khách hàng
+              </h3>
+              <span className="text-sm text-gray-400">
+                {sourceBreakdown.length} nguồn
+              </span>
+            </div>
+
+            {sourceBreakdown.length === 0 ? (
+              <div className="text-sm text-gray-500">
+                Chưa có dữ liệu nguồn khách hàng trong khoảng thời gian này.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {sourceBreakdown.map((item, index) => (
+                  <div
+                    key={item.label}
+                    className="rounded-xl border border-gray-100 bg-gray-50 p-4"
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 text-sm font-bold shrink-0">
+                          {index + 1}
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-gray-800 truncate">
+                            {item.label}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {item.total.toLocaleString('vi-VN')} lead
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-sm font-bold text-gray-800 shrink-0">
+                        {item.rate.toFixed(1)}%
+                      </div>
+                    </div>
+
+                    <div className="mt-3 h-2 w-full rounded-full bg-gray-200 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-emerald-500 transition-all"
+                        style={{ width: `${Math.min(item.rate, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
           <div className="flex items-center justify-between gap-4 mb-4">
             <div>

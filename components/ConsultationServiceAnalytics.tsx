@@ -4,7 +4,10 @@ import {
   AlertTriangle,
   BarChart3,
   CheckCircle2,
+  Copy,
+  Download,
   Filter,
+  Printer,
   RefreshCw,
   Target,
   TrendingDown,
@@ -227,6 +230,7 @@ const ConsultationServiceAnalytics: React.FC = () => {
   const [selectedStaffName, setSelectedStaffName] = useState<string>('');
   const [selectedSourceName, setSelectedSourceName] = useState<string>('');
   const [selectedAddressName, setSelectedAddressName] = useState<string>('');
+  const [exportMessage, setExportMessage] = useState<string>('');
 
   const totalLeads = useMemo(
     () => serviceData.reduce((sum, item) => sum + Number(item.tong_lead || 0), 0),
@@ -1322,6 +1326,113 @@ const ConsultationServiceAnalytics: React.FC = () => {
     addressNeedFixMost,
   ]);
 
+
+  const executiveReportText = useMemo(() => {
+    const lines: string[] = [];
+
+    lines.push('BÁO CÁO ĐIỀU HÀNH - PHÂN TÍCH DỊCH VỤ');
+    lines.push(`Khoảng thời gian: ${dateRange.from || '--'} đến ${dateRange.to || '--'}`);
+    lines.push('');
+
+    lines.push('1. Chỉ số tổng quan');
+    lines.push(`- Tổng lead thị trường: ${formatNumber(totalLeads)}`);
+    lines.push(`- Lead đã chốt: ${formatNumber(totalWonLeads)}`);
+    lines.push(`- Tỷ lệ đáp ứng nhu cầu: ${formatPercent(overallResponseRate)}`);
+    lines.push(`- Dịch vụ được quan tâm nhất: ${mostInterestedService?.ten_dich_vu || '--'}`);
+    lines.push('');
+
+    lines.push('2. 5 kết luận quan trọng');
+    (executiveConclusions.length ? executiveConclusions : [{ tieu_de: 'Chưa có dữ liệu', noi_dung: 'Chưa đủ dữ liệu để kết luận.' }]).forEach((item, index) => {
+      lines.push(`${index + 1}. ${item.tieu_de}: ${item.noi_dung}`);
+    });
+    lines.push('');
+
+    lines.push('3. 5 hành động nên làm');
+    (executiveActions.length ? executiveActions : [{ tieu_de: 'Chưa có hành động', noi_dung: 'Chưa đủ dữ liệu để đề xuất hành động.' }]).forEach((item, index) => {
+      lines.push(`${index + 1}. ${item.tieu_de}: ${item.noi_dung}`);
+    });
+    lines.push('');
+
+    lines.push('4. 5 rủi ro cần theo dõi');
+    (executiveRisks.length ? executiveRisks : [{ tieu_de: 'Chưa có rủi ro nổi bật', noi_dung: 'Chưa đủ dữ liệu để cảnh báo rủi ro.' }]).forEach((item, index) => {
+      lines.push(`${index + 1}. ${item.tieu_de}: ${item.noi_dung}`);
+    });
+    lines.push('');
+
+    if (marketingDecisionRows.length > 0) {
+      lines.push('5. Quyết định marketing gợi ý');
+      marketingDecisionRows.slice(0, 5).forEach((item, index) => {
+        lines.push(
+          `${index + 1}. [${item.nhom_quyet_dinh}] ${item.tieu_de} | Đối tượng: ${item.doi_tuong} | Dịch vụ: ${item.dich_vu} | Chỉ số: ${item.chi_so_chinh} | Hành động: ${item.hanh_dong}`
+        );
+      });
+      lines.push('');
+    }
+
+    return lines.join('\n');
+  }, [
+    dateRange.from,
+    dateRange.to,
+    executiveConclusions,
+    executiveActions,
+    executiveRisks,
+    totalLeads,
+    totalWonLeads,
+    overallResponseRate,
+    mostInterestedService,
+    marketingDecisionRows,
+  ]);
+
+  const handleCopyExecutiveReport = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(executiveReportText);
+      setExportMessage('Đã sao chép tóm tắt điều hành.');
+      window.setTimeout(() => setExportMessage(''), 2500);
+    } catch (err) {
+      console.error('Không thể sao chép báo cáo điều hành:', err);
+      setExportMessage('Không sao chép được. Hãy thử lại trên trình duyệt cho phép clipboard.');
+      window.setTimeout(() => setExportMessage(''), 3000);
+    }
+  }, [executiveReportText]);
+
+  const handlePrintExecutiveReport = useCallback(() => {
+    const escapedReport = executiveReportText
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\n/g, '<br />');
+
+    const printWindow = window.open('', '_blank', 'width=1024,height=768');
+
+    if (!printWindow) {
+      setExportMessage('Trình duyệt đang chặn cửa sổ in báo cáo.');
+      window.setTimeout(() => setExportMessage(''), 3000);
+      return;
+    }
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Bao cao dieu hanh - Phan tich dich vu</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 32px; color: #111827; line-height: 1.6; }
+            h1 { font-size: 24px; margin-bottom: 12px; }
+            .meta { color: #6b7280; margin-bottom: 24px; }
+            .report { white-space: normal; font-size: 14px; }
+          </style>
+        </head>
+        <body>
+          <h1>Báo cáo điều hành - Phân tích dịch vụ</h1>
+          <div class="meta">Xuất từ hệ thống Ánh Sáng Studio</div>
+          <div class="report">${escapedReport}</div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  }, [executiveReportText]);
+
   useEffect(() => {
     loadData();
   }, [loadData]);
@@ -1426,6 +1537,54 @@ const ConsultationServiceAnalytics: React.FC = () => {
         </div>
       </div>
 
+
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <Download size={18} className="text-gray-500" />
+              <h2 className="text-base font-semibold text-gray-800">Xuất báo cáo điều hành</h2>
+            </div>
+            <p className="mt-2 text-sm leading-6 text-gray-600">
+              Dùng khối này để sao chép nhanh tóm tắt điều hành hoặc in trực tiếp ra PDF phục vụ họp nội bộ.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <button
+              type="button"
+              onClick={handleCopyExecutiveReport}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+            >
+              <Copy size={16} />
+              Sao chép tóm tắt
+            </button>
+
+            <button
+              type="button"
+              onClick={handlePrintExecutiveReport}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-700"
+            >
+              <Printer size={16} />
+              In / lưu PDF
+            </button>
+          </div>
+        </div>
+
+        {exportMessage && (
+          <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+            {exportMessage}
+          </div>
+        )}
+
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="text-sm font-semibold text-slate-800">Tóm tắt sẽ được xuất</div>
+          <div className="mt-2 text-sm leading-6 text-slate-700">
+            Gồm chỉ số tổng quan, kết luận quan trọng, hành động nên làm, rủi ro cần theo dõi và các quyết định marketing nổi bật nhất.
+          </div>
+        </div>
+      </div>
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
         <div className="mb-4 flex items-center gap-2">
           <Filter size={18} className="text-gray-500" />

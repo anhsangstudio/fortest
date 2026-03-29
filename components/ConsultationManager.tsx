@@ -873,6 +873,7 @@ const ConsultationManager: React.FC = () => {
       )}
 
       {activeTab === 'danh_sach' && (
+      <>
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
           <div>
@@ -1098,6 +1099,7 @@ const ConsultationManager: React.FC = () => {
         )}
       </div>
 
+      </>
       )}
 
       {isCreateModalOpen && (

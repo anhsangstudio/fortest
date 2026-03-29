@@ -11,6 +11,12 @@ type FunnelConversionRow = {
   conversion_from_start: number;
 };
 
+type RecommendationItem = {
+  level: 'critical' | 'warning' | 'positive' | 'neutral';
+  title: string;
+  message: string;
+};
+
 const formatPercent = (value?: number | null) => {
   const safeValue = Number(value || 0);
   return `${safeValue.toFixed(1)}%`;
@@ -24,6 +30,28 @@ const clampPercent = (value?: number | null) => {
   const n = Number(value || 0);
   if (!Number.isFinite(n)) return 0;
   return Math.max(0, Math.min(100, n));
+};
+
+const recommendationStyleMap: Record<
+  RecommendationItem['level'],
+  { container: string; title: string }
+> = {
+  critical: {
+    container: 'border-red-200 bg-red-50',
+    title: 'text-red-800',
+  },
+  warning: {
+    container: 'border-amber-200 bg-amber-50',
+    title: 'text-amber-800',
+  },
+  positive: {
+    container: 'border-emerald-200 bg-emerald-50',
+    title: 'text-emerald-800',
+  },
+  neutral: {
+    container: 'border-slate-200 bg-slate-50',
+    title: 'text-slate-800',
+  },
 };
 
 const getToday = () => new Date().toISOString().slice(0, 10);
@@ -83,6 +111,70 @@ const largestDropPercent = useMemo(() => {
 
   return drop > 0 ? drop : 0;
 }, [largestDropStage]);
+
+const recommendations = useMemo<RecommendationItem[]>(() => {
+  if (!funnelData.length || !firstStage || !finalStage) {
+    return [];
+  }
+
+  const items: RecommendationItem[] = [];
+  const startLeads = Number(firstStage.total_leads || 0);
+  const endLeads = Number(finalStage.total_leads || 0);
+
+  if (overallConversion < 20) {
+    items.push({
+      level: 'critical',
+      title: 'Tỷ lệ chuyển đổi tổng thể đang thấp',
+      message: `Tỷ lệ từ đầu đến cuối funnel hiện chỉ đạt ${formatPercent(
+        overallConversion
+      )}. Cần ưu tiên rà soát chất lượng tư vấn, tốc độ phản hồi và quy trình follow-up.`,
+    });
+  }
+
+  if (largestDropStage && largestDropPercent >= 40) {
+    items.push({
+      level: 'warning',
+      title: `Điểm nghẽn lớn tại giai đoạn "${largestDropStage.stage_label}"`,
+      message: `Lead rơi khoảng ${formatPercent(
+        largestDropPercent
+      )} so với bước trước. Nên kiểm tra lại script tư vấn, cách xử lý phản đối và chất lượng bàn giao sang bước này.`,
+    });
+  }
+
+  if (startLeads >= 20 && endLeads <= startLeads * 0.2) {
+    items.push({
+      level: 'warning',
+      title: 'Lead đầu vào có nhưng thất thoát mạnh ở giữa hoặc cuối funnel',
+      message: `Đầu funnel có ${formatNumber(
+        startLeads
+      )} lead nhưng giai đoạn cuối chỉ còn ${formatNumber(
+        endLeads
+      )}. Nên kiểm tra các bước follow-up trung gian thay vì chỉ tăng thêm lead mới.`,
+    });
+  }
+
+  if (overallConversion >= 50) {
+    items.push({
+      level: 'positive',
+      title: 'Funnel đang giữ lead tương đối tốt',
+      message: `Tỷ lệ từ đầu đến cuối đạt ${formatPercent(
+        overallConversion
+      )}. Có thể xem đây là baseline tốt để tiếp tục tối ưu các giai đoạn rơi nhẹ.`,
+    });
+  }
+
+  if (items.length === 0) {
+    items.push({
+      level: 'neutral',
+      title: 'Chưa có cảnh báo nổi bật',
+      message:
+        'Funnel hiện chưa xuất hiện tín hiệu bất thường rõ rệt theo các rule cơ bản. Nên tiếp tục theo dõi xu hướng theo tuần và theo tháng.',
+    });
+  }
+
+  return items;
+}, [funnelData, firstStage, finalStage, overallConversion, largestDropStage, largestDropPercent]);
+
 
   const loadFunnelData = useCallback(async () => {
     try {
@@ -302,9 +394,47 @@ const largestDropPercent = useMemo(() => {
   )}
 </div>
       
-      
 
-      {/* Funnel Conversion */}
+{/* Recommendation rule-based */}
+<div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+  <div className="mb-4 flex items-center gap-2">
+    <BarChart3 size={18} className="text-gray-500" />
+    <h2 className="text-base font-semibold text-gray-800">
+      Khuyến nghị hành động
+    </h2>
+  </div>
+
+  {!loading && !error && funnelData.length === 0 && (
+    <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-sm text-gray-500">
+      Chưa có dữ liệu để đưa ra khuyến nghị.
+    </div>
+  )}
+
+  {!loading && !error && recommendations.length > 0 && (
+    <div className="space-y-4">
+      {recommendations.map((item, index) => {
+        const style = recommendationStyleMap[item.level];
+
+        return (
+          <div
+            key={`${item.title}-${index}`}
+            className={`rounded-2xl border p-4 ${style.container}`}
+          >
+            <div className={`text-sm font-semibold ${style.title}`}>
+              {item.title}
+            </div>
+            <div className="mt-2 text-sm leading-6 text-gray-700">
+              {item.message}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  )}
+</div>      
+
+      
+            {/* Funnel Conversion */}
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
         <div className="mb-4 flex items-center gap-2">
           <BarChart3 size={18} className="text-gray-500" />

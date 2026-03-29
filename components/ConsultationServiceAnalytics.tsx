@@ -70,6 +70,9 @@ const recommendationStyleMap: Record<
   },
 };
 
+const NGUONG_NHU_CAU_CAO = 15;
+const NGUONG_TY_LE_CHOT_TOT = 25;
+
 const getToday = () => new Date().toISOString().slice(0, 10);
 
 const getFirstDayOfMonth = () => {
@@ -150,6 +153,101 @@ const ConsultationServiceAnalytics: React.FC = () => {
     );
   }, [serviceData]);
 
+  const serviceDataWithGap = useMemo(() => {
+    return serviceData.map((item) => {
+      const tongLead = Number(item.tong_lead || 0);
+      const leadDaChot = Number(item.lead_da_chot || 0);
+      const leadChuaDapUng = Math.max(0, tongLead - leadDaChot);
+      const tyLeChuaDapUng = tongLead > 0 ? (leadChuaDapUng / tongLead) * 100 : 0;
+
+      return {
+        ...item,
+        lead_chua_dap_ung: leadChuaDapUng,
+        ty_le_chua_dap_ung: tyLeChuaDapUng,
+      };
+    });
+  }, [serviceData]);
+
+  const dichVuNhuCauCaoChotTot = useMemo(() => {
+    return serviceDataWithGap.filter(
+      (item) =>
+        Number(item.ty_trong_nhu_cau || 0) >= NGUONG_NHU_CAU_CAO &&
+        Number(item.ty_le_chot || 0) >= NGUONG_TY_LE_CHOT_TOT
+    );
+  }, [serviceDataWithGap]);
+
+  const dichVuNhuCauCaoChotKem = useMemo(() => {
+    return serviceDataWithGap.filter(
+      (item) =>
+        Number(item.ty_trong_nhu_cau || 0) >= NGUONG_NHU_CAU_CAO &&
+        Number(item.ty_le_chot || 0) < NGUONG_TY_LE_CHOT_TOT
+    );
+  }, [serviceDataWithGap]);
+
+  const dichVuNhuCauThapChotTot = useMemo(() => {
+    return serviceDataWithGap.filter(
+      (item) =>
+        Number(item.ty_trong_nhu_cau || 0) < NGUONG_NHU_CAU_CAO &&
+        Number(item.ty_le_chot || 0) >= NGUONG_TY_LE_CHOT_TOT
+    );
+  }, [serviceDataWithGap]);
+
+  const dichVuNhuCauThapChotKem = useMemo(() => {
+    return serviceDataWithGap.filter(
+      (item) =>
+        Number(item.ty_trong_nhu_cau || 0) < NGUONG_NHU_CAU_CAO &&
+        Number(item.ty_le_chot || 0) < NGUONG_TY_LE_CHOT_TOT
+    );
+  }, [serviceDataWithGap]);
+
+  const dichVuMatCoHoiNhieuNhat = useMemo(() => {
+    if (!serviceDataWithGap.length) return null;
+
+    return (
+      [...serviceDataWithGap]
+        .filter((item) => Number(item.tong_lead || 0) > 0)
+        .sort((a, b) => {
+          const matB = Number(b.lead_chua_dap_ung || 0);
+          const matA = Number(a.lead_chua_dap_ung || 0);
+
+          if (matB !== matA) return matB - matA;
+
+          const nhuCauB = Number(b.ty_trong_nhu_cau || 0);
+          const nhuCauA = Number(a.ty_trong_nhu_cau || 0);
+
+          return nhuCauB - nhuCauA;
+        })[0] || null
+    );
+  }, [serviceDataWithGap]);
+
+  const nhanDinhBanDoChienLuoc = useMemo(() => {
+    if (!serviceData.length) {
+      return 'Chưa có dữ liệu để lập bản đồ chiến lược dịch vụ.';
+    }
+
+    if (dichVuNhuCauCaoChotKem.length > 0) {
+      return `Ưu tiên lớn nhất hiện tại là nhóm dịch vụ có nhu cầu cao nhưng chốt kém. Nhóm này đang có ${formatNumber(
+        dichVuNhuCauCaoChotKem.length
+      )} dịch vụ và là nơi studio dễ mất cơ hội kinh doanh nhất.`;
+    }
+
+    if (dichVuNhuCauCaoChotTot.length > 0 && dichVuNhuCauThapChotTot.length > 0) {
+      return 'Studio đang có cả dịch vụ chủ lực lẫn dịch vụ ngách bán tốt. Đây là thời điểm phù hợp để vừa giữ dịch vụ mạnh, vừa mở rộng quảng bá cho nhóm ngách có tỷ lệ chốt cao.';
+    }
+
+    if (dichVuNhuCauThapChotKem.length > 0) {
+      return 'Có một số dịch vụ vừa nhu cầu thấp vừa chốt kém. Nên rà soát lại gói sản phẩm, cách trình bày hoặc mức độ ưu tiên đầu tư cho nhóm này.';
+    }
+
+    return 'Bản đồ chiến lược hiện chưa cho thấy điểm nghẽn quá lớn. Nên tiếp tục theo dõi sự dịch chuyển nhu cầu giữa các dịch vụ theo tháng.';
+  }, [
+    serviceData,
+    dichVuNhuCauCaoChotKem,
+    dichVuNhuCauCaoChotTot,
+    dichVuNhuCauThapChotTot,
+    dichVuNhuCauThapChotKem,
+  ]);
+
   const recommendations = useMemo<RecommendationItem[]>(() => {
     if (!serviceData.length) return [];
 
@@ -196,6 +294,16 @@ const ConsultationServiceAnalytics: React.FC = () => {
       });
     }
 
+    if (dichVuMatCoHoiNhieuNhat && Number(dichVuMatCoHoiNhieuNhat.lead_chua_dap_ung || 0) >= 5) {
+      items.push({
+        level: 'warning',
+        title: `Dịch vụ "${dichVuMatCoHoiNhieuNhat.ten_dich_vu}" đang làm mất cơ hội nhiều nhất`,
+        message: `Hiện còn khoảng ${formatNumber(
+          dichVuMatCoHoiNhieuNhat.lead_chua_dap_ung
+        )} lead chưa chuyển thành chốt ở dịch vụ này. Đây là khu vực cần ưu tiên xử lý để tăng khả năng đáp ứng nhu cầu thị trường.`,
+      });
+    }
+
     if (!items.length) {
       items.push({
         level: 'neutral',
@@ -206,7 +314,7 @@ const ConsultationServiceAnalytics: React.FC = () => {
     }
 
     return items;
-  }, [serviceData, tyLeDapUngToanBo, dichVuCoCoHoiTangTruong, dichVuQuanTamNhieuNhat]);
+  }, [serviceData, tyLeDapUngToanBo, dichVuCoCoHoiTangTruong, dichVuQuanTamNhieuNhat, dichVuMatCoHoiNhieuNhat]);
 
   const danhSachThang = useMemo(() => {
     return [...new Set(serviceTrendData.map((item) => item.thang))];
@@ -544,6 +652,190 @@ const ConsultationServiceAnalytics: React.FC = () => {
         )}
       </div>
 
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="mb-4 flex items-center gap-2">
+          <BarChart3 size={18} className="text-gray-500" />
+          <h2 className="text-base font-semibold text-gray-800">Bản đồ chiến lược dịch vụ</h2>
+        </div>
+
+        {!loading && !error && serviceData.length === 0 && (
+          <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-sm text-gray-500">
+            Chưa có dữ liệu để phân nhóm chiến lược dịch vụ.
+          </div>
+        )}
+
+        {!loading && !error && serviceData.length > 0 && (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+              <div className="text-sm font-semibold text-blue-800">Nhận định chiến lược</div>
+              <div className="mt-2 text-sm leading-6 text-blue-900">{nhanDinhBanDoChienLuoc}</div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="text-sm font-semibold text-emerald-800">Nhu cầu cao + chốt tốt</div>
+                  <div className="text-sm font-bold text-emerald-900">
+                    {formatNumber(dichVuNhuCauCaoChotTot.length)} dịch vụ
+                  </div>
+                </div>
+                <div className="mt-2 text-sm leading-6 text-emerald-900">
+                  Nhóm dịch vụ chủ lực. Nên giữ chất lượng, bảo vệ tỷ lệ chốt và cân nhắc tăng đầu tư truyền thông.
+                </div>
+                <div className="mt-4 space-y-3">
+                  {dichVuNhuCauCaoChotTot.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-emerald-200 bg-white/70 px-4 py-3 text-sm text-emerald-800">
+                      Chưa có dịch vụ nào rơi vào nhóm này.
+                    </div>
+                  ) : (
+                    dichVuNhuCauCaoChotTot.map((item) => (
+                      <div key={`cao-tot-${item.dich_vu_id}`} className="rounded-xl border border-emerald-200 bg-white/80 p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <div className="text-sm font-semibold text-gray-900">{item.ten_dich_vu}</div>
+                            <div className="mt-1 text-sm text-gray-600">
+                              Nhu cầu {formatPercent(item.ty_trong_nhu_cau)} • Tỷ lệ chốt {formatPercent(item.ty_le_chot)}
+                            </div>
+                          </div>
+                          <div className="text-right text-sm text-gray-600">
+                            <div>{formatNumber(item.tong_lead)} lead</div>
+                            <div>{formatNumber(item.lead_chua_dap_ung)} chưa đáp ứng</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="text-sm font-semibold text-red-800">Nhu cầu cao + chốt kém</div>
+                  <div className="text-sm font-bold text-red-900">
+                    {formatNumber(dichVuNhuCauCaoChotKem.length)} dịch vụ
+                  </div>
+                </div>
+                <div className="mt-2 text-sm leading-6 text-red-900">
+                  Đây là vùng mất cơ hội lớn nhất. Nên ưu tiên xem lại gói dịch vụ, giá bán, cách tư vấn và quy trình theo dõi lại khách.
+                </div>
+                <div className="mt-4 space-y-3">
+                  {dichVuNhuCauCaoChotKem.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-red-200 bg-white/70 px-4 py-3 text-sm text-red-800">
+                      Hiện chưa có dịch vụ nào rơi vào nhóm rủi ro cao này.
+                    </div>
+                  ) : (
+                    dichVuNhuCauCaoChotKem.map((item) => (
+                      <div key={`cao-kem-${item.dich_vu_id}`} className="rounded-xl border border-red-200 bg-white/80 p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <div className="text-sm font-semibold text-gray-900">{item.ten_dich_vu}</div>
+                            <div className="mt-1 text-sm text-gray-600">
+                              Nhu cầu {formatPercent(item.ty_trong_nhu_cau)} • Tỷ lệ chốt {formatPercent(item.ty_le_chot)}
+                            </div>
+                          </div>
+                          <div className="text-right text-sm text-gray-600">
+                            <div>{formatNumber(item.tong_lead)} lead</div>
+                            <div>{formatNumber(item.lead_chua_dap_ung)} chưa đáp ứng</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="text-sm font-semibold text-blue-800">Nhu cầu thấp + chốt tốt</div>
+                  <div className="text-sm font-bold text-blue-900">
+                    {formatNumber(dichVuNhuCauThapChotTot.length)} dịch vụ
+                  </div>
+                </div>
+                <div className="mt-2 text-sm leading-6 text-blue-900">
+                  Đây là nhóm ngách tiềm năng. Nên cân nhắc đẩy truyền thông đúng tệp để mở rộng số lead.
+                </div>
+                <div className="mt-4 space-y-3">
+                  {dichVuNhuCauThapChotTot.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-blue-200 bg-white/70 px-4 py-3 text-sm text-blue-800">
+                      Chưa có dịch vụ ngách nào đang bán tốt rõ ràng.
+                    </div>
+                  ) : (
+                    dichVuNhuCauThapChotTot.map((item) => (
+                      <div key={`thap-tot-${item.dich_vu_id}`} className="rounded-xl border border-blue-200 bg-white/80 p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <div className="text-sm font-semibold text-gray-900">{item.ten_dich_vu}</div>
+                            <div className="mt-1 text-sm text-gray-600">
+                              Nhu cầu {formatPercent(item.ty_trong_nhu_cau)} • Tỷ lệ chốt {formatPercent(item.ty_le_chot)}
+                            </div>
+                          </div>
+                          <div className="text-right text-sm text-gray-600">
+                            <div>{formatNumber(item.tong_lead)} lead</div>
+                            <div>{formatNumber(item.lead_chua_dap_ung)} chưa đáp ứng</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="text-sm font-semibold text-slate-800">Nhu cầu thấp + chốt kém</div>
+                  <div className="text-sm font-bold text-slate-900">
+                    {formatNumber(dichVuNhuCauThapChotKem.length)} dịch vụ
+                  </div>
+                </div>
+                <div className="mt-2 text-sm leading-6 text-slate-900">
+                  Nhóm này nên được rà soát lại mức ưu tiên đầu tư, thông điệp truyền thông và cấu trúc gói sản phẩm.
+                </div>
+                <div className="mt-4 space-y-3">
+                  {dichVuNhuCauThapChotKem.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-slate-200 bg-white/70 px-4 py-3 text-sm text-slate-700">
+                      Hiện chưa có dịch vụ nào nằm trong nhóm hiệu quả thấp toàn diện.
+                    </div>
+                  ) : (
+                    dichVuNhuCauThapChotKem.map((item) => (
+                      <div key={`thap-kem-${item.dich_vu_id}`} className="rounded-xl border border-slate-200 bg-white/80 p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <div className="text-sm font-semibold text-gray-900">{item.ten_dich_vu}</div>
+                            <div className="mt-1 text-sm text-gray-600">
+                              Nhu cầu {formatPercent(item.ty_trong_nhu_cau)} • Tỷ lệ chốt {formatPercent(item.ty_le_chot)}
+                            </div>
+                          </div>
+                          <div className="text-right text-sm text-gray-600">
+                            <div>{formatNumber(item.tong_lead)} lead</div>
+                            <div>{formatNumber(item.lead_chua_dap_ung)} chưa đáp ứng</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <div className="text-sm font-semibold text-amber-800">Dịch vụ đang làm mất cơ hội nhiều nhất</div>
+              <div className="mt-2 text-sm leading-6 text-amber-900">
+                {dichVuMatCoHoiNhieuNhat ? (
+                  <>
+                    <strong>{dichVuMatCoHoiNhieuNhat.ten_dich_vu}</strong> hiện còn khoảng{' '}
+                    <strong>{formatNumber(dichVuMatCoHoiNhieuNhat.lead_chua_dap_ung)}</strong> lead chưa chuyển thành chốt,
+                    tương đương <strong>{formatPercent(dichVuMatCoHoiNhieuNhat.ty_le_chua_dap_ung)}</strong> nhu cầu của riêng dịch vụ này.
+                  </>
+                ) : (
+                  'Chưa có đủ dữ liệu để xác định dịch vụ mất cơ hội nhiều nhất.'
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
         <div className="mb-4 flex items-center gap-2">
           <BarChart3 size={18} className="text-gray-500" />
@@ -746,6 +1038,12 @@ const ConsultationServiceAnalytics: React.FC = () => {
                       Tỷ lệ chốt
                     </th>
                     <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Chưa đáp ứng
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      % chưa đáp ứng
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Tỷ trọng nhu cầu
                     </th>
                     <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -785,6 +1083,18 @@ const ConsultationServiceAnalytics: React.FC = () => {
 
                       <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
                         {formatPercent(item.ty_le_chot)}
+                      </td>
+
+                      <td className="px-4 py-3 text-right text-sm text-gray-700">
+                        {formatNumber(Math.max(0, Number(item.tong_lead || 0) - Number(item.lead_da_chot || 0)))}
+                      </td>
+
+                      <td className="px-4 py-3 text-right text-sm text-gray-700">
+                        {formatPercent(
+                          Number(item.tong_lead || 0) > 0
+                            ? ((Number(item.tong_lead || 0) - Number(item.lead_da_chot || 0)) / Number(item.tong_lead || 0)) * 100
+                            : 0
+                        )}
                       </td>
 
                       <td className="px-4 py-3 text-right text-sm text-gray-700">

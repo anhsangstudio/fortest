@@ -9,6 +9,7 @@ import {
   Target,
   TrendingDown,
   TrendingUp,
+  Users,
 } from 'lucide-react';
 import { supabase } from '../apiService';
 
@@ -56,6 +57,19 @@ type ServiceFunnelRow = {
   total_leads: number;
   conversion_from_previous: number;
   conversion_from_start: number;
+};
+
+type ServiceStaffPerformanceRow = {
+  dich_vu_id: string;
+  ten_dich_vu: string;
+  nhan_vien_tu_van: string;
+  tong_lead: number;
+  lead_da_chot: number;
+  lead_tu_choi: number;
+  lead_dang_xu_ly: number;
+  ty_le_chot: number;
+  tong_gia_tri_du_kien: number;
+  xep_hang_nhan_vien: number;
 };
 
 type StrategicGroupKey =
@@ -128,11 +142,13 @@ const ConsultationServiceAnalytics: React.FC = () => {
   const [trendError, setTrendError] = useState<string | null>(null);
   const [rejectionError, setRejectionError] = useState<string | null>(null);
   const [serviceFunnelError, setServiceFunnelError] = useState<string | null>(null);
+  const [serviceStaffError, setServiceStaffError] = useState<string | null>(null);
 
   const [serviceData, setServiceData] = useState<ServicePerformanceRow[]>([]);
   const [trendData, setTrendData] = useState<ServiceTrendRow[]>([]);
   const [rejectionData, setRejectionData] = useState<ServiceRejectionReasonRow[]>([]);
   const [serviceFunnelData, setServiceFunnelData] = useState<ServiceFunnelRow[]>([]);
+  const [serviceStaffData, setServiceStaffData] = useState<ServiceStaffPerformanceRow[]>([]);
 
   const [selectedServiceId, setSelectedServiceId] = useState<string>('');
 
@@ -338,6 +354,70 @@ const ConsultationServiceAnalytics: React.FC = () => {
       .slice(0, 3);
   }, [rejectionData, selectedServiceId]);
 
+
+  const selectedServiceStaffRows = useMemo(() => {
+    if (!selectedServiceId) return [];
+    return serviceStaffData
+      .filter((item) => item.dich_vu_id === selectedServiceId)
+      .sort((a, b) => {
+        const rankA = Number(a.xep_hang_nhan_vien || 0);
+        const rankB = Number(b.xep_hang_nhan_vien || 0);
+        if (rankA !== rankB) return rankA - rankB;
+        return Number(b.ty_le_chot || 0) - Number(a.ty_le_chot || 0);
+      });
+  }, [serviceStaffData, selectedServiceId]);
+
+  const topStaffForSelectedService = useMemo(() => {
+    return selectedServiceStaffRows.length > 0 ? selectedServiceStaffRows[0] : null;
+  }, [selectedServiceStaffRows]);
+
+  const weakStaffForSelectedService = useMemo(() => {
+    return selectedServiceStaffRows.length > 0
+      ? [...selectedServiceStaffRows].sort((a, b) => {
+          const closeA = Number(a.ty_le_chot || 0);
+          const closeB = Number(b.ty_le_chot || 0);
+          if (closeA !== closeB) return closeA - closeB;
+          return Number(b.tong_lead || 0) - Number(a.tong_lead || 0);
+        })[0]
+      : null;
+  }, [selectedServiceStaffRows]);
+
+  const selectedServiceStaffInsight = useMemo(() => {
+    if (!selectedServiceMeta) {
+      return 'Chọn một dịch vụ để xem nhân viên nào đang bán tốt hoặc đang cần hỗ trợ ở dịch vụ đó.';
+    }
+
+    if (!selectedServiceStaffRows.length) {
+      return `Chưa có dữ liệu so sánh nhân viên cho dịch vụ "${selectedServiceMeta.ten_dich_vu}".`;
+    }
+
+    if (selectedServiceStaffRows.length === 1) {
+      return `Dịch vụ "${selectedServiceMeta.ten_dich_vu}" hiện mới có dữ liệu của 1 nhân viên tư vấn. Cần thêm dữ liệu để so sánh hiệu quả giữa các nhân viên.`;
+    }
+
+    if (topStaffForSelectedService && weakStaffForSelectedService) {
+      const gap = Math.max(
+        0,
+        Number(topStaffForSelectedService.ty_le_chot || 0) - Number(weakStaffForSelectedService.ty_le_chot || 0)
+      );
+
+      if (gap >= 25) {
+        return `Dịch vụ "${selectedServiceMeta.ten_dich_vu}" đang có chênh lệch hiệu suất rất lớn giữa nhân viên tốt nhất và nhân viên cần hỗ trợ. Nên dùng cách làm của "${topStaffForSelectedService.nhan_vien_tu_van}" để kèm lại cho các bạn còn yếu.`;
+      }
+
+      if (gap >= 10) {
+        return `Dịch vụ "${selectedServiceMeta.ten_dich_vu}" đã xuất hiện chênh lệch hiệu suất rõ giữa các nhân viên. Nên kiểm tra lại cách tư vấn, xử lý phản đối và theo dõi lại khách của nhóm đang thấp hơn.`;
+      }
+    }
+
+    return `Nhóm sale đang có hiệu suất khá đồng đều ở dịch vụ "${selectedServiceMeta.ten_dich_vu}". Có thể tiếp tục theo dõi theo tuần và nhân rộng cách làm hiệu quả nhất.`;
+  }, [
+    selectedServiceMeta,
+    selectedServiceStaffRows,
+    topStaffForSelectedService,
+    weakStaffForSelectedService,
+  ]);
+
   const selectedServiceInsight = useMemo(() => {
     if (!selectedServiceMeta) return 'Chọn một dịch vụ để xem điểm rơi funnel chi tiết.';
     if (!selectedServiceRows.length) {
@@ -370,6 +450,7 @@ const ConsultationServiceAnalytics: React.FC = () => {
       setTrendError(null);
       setRejectionError(null);
       setServiceFunnelError(null);
+      setServiceStaffError(null);
 
       if (!supabase) {
         throw new Error('Supabase chưa được cấu hình');
@@ -457,6 +538,7 @@ const ConsultationServiceAnalytics: React.FC = () => {
       setTrendData([]);
       setRejectionData([]);
       setServiceFunnelData([]);
+      setServiceStaffData([]);
       setSelectedServiceId('');
     } finally {
       setLoading(false);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'; 
 import { 
   LayoutDashboard, FileText, Calendar, DollarSign, Users, 
-  Package, Settings, LogOut, Menu, CheckSquare, Sparkles, Loader2, Lock, Receipt
+  Package, Settings, LogOut, Menu, CheckSquare, Sparkles, Loader2, Lock, Receipt, BarChart3
 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import ContractManager from './components/ContractManager';
@@ -13,6 +13,7 @@ import ProductManager from './components/ProductManager';
 import StudioSettings from './components/StudioSettings';
 import TaskManager from './components/TaskManager';
 import ConsultationManager from './components/ConsultationManager';
+import ConsultationSalesAnalytics from './components/ConsultationSalesAnalytics';
 import { 
   Contract, Customer, Staff, Service, Transaction, Schedule, 
   Task, StudioInfo, ExpenseCategoryItem, ServiceTypeItem, ServiceGroupItem 
@@ -247,6 +248,11 @@ export default function App() {
 			      visible={true}
 			   />
                <SidebarItem 
+                 icon={BarChart3} label="Phân tích sale" id="consultation_sales_analytics"  activeTab={activeTab} setActiveTab={setActiveTab}
+                 visible={true}
+               />
+				
+               <SidebarItem 
                   icon={DollarSign} label="Thu & Chi" id="finance" activeTab={activeTab} setActiveTab={setActiveTab} 
                   visible={canAccess('finance')}
                />
@@ -299,6 +305,7 @@ export default function App() {
                   {activeTab === 'tasks' && 'Quản lý Công việc'}
                   {activeTab === 'schedule' && 'Lịch làm việc'}
 				  {activeTab === 'consultation' && 'Nhật ký tư vấn'}
+				  {activeTab === 'consultation_sales_analytics' && 'Phân Tích Hiệu Suất Sale Nâng Cao'}
                   {activeTab === 'finance' && 'Quản lý Tài chính'}
                   {activeTab === 'payroll' && 'Bảng lương nhân sự'}
                   {activeTab === 'staff' && 'Danh sách nhân viên'}
@@ -342,6 +349,9 @@ export default function App() {
             )}
 			{activeTab === 'consultation' && (
               <ConsultationManager />
+            )}
+			{activeTab === 'consultation_sales_analytics' && (
+              <ConsultationSalesAnalytics />
             )}
             {((activeTab === 'finance' && canAccess('finance')) || activeTab === 'quick_expense') && (
               <ExpenseManager 

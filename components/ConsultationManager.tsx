@@ -1153,6 +1153,7 @@ const ConsultationManager: React.FC = () => {
   const maxMonthlyLead = Math.max(...monthlyLeadSeries.map((item) => item.total), 0);
   const totalMonthlyLead = monthlyLeadSeries.reduce((sum, item) => sum + item.total, 0);
   const maxDailyLead = Math.max(...dailyLeadSeries.map((item) => item.total), 0);
+  const totalDailyLead = dailyLeadSeries.reduce((sum, item) => sum + item.total, 0);
   const wonLeadCount =
     reportSummary.funnel.find((item) => item.label === 'Đã chốt')?.total || 0;
   const rejectedRate = totalLeads > 0 ? (reportSummary.total_rejected / totalLeads) * 100 : 0;

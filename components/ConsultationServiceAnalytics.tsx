@@ -15,11 +15,16 @@ type ServicePerformanceRow = {
 };
 
 type ServiceTrendRow = {
-  thang: number;
+  thang: string;
+  nam: number;
+  thang_so: number;
+  dich_vu_id: string;
   ten_dich_vu: string;
   tong_lead: number;
   lead_da_chot: number;
   ty_le_chot: number;
+  ty_trong_trong_thang: number;
+  tang_truong_lead_so_voi_thang_truoc: number;
 };
 
 type RecommendationItem = {
@@ -41,11 +46,6 @@ const clampPercent = (value?: number | null) => {
   const n = Number(value || 0);
   if (!Number.isFinite(n)) return 0;
   return Math.max(0, Math.min(100, n));
-};
-
-const getMonthLabel = (month?: number | null) => {
-  const safeMonth = Number(month || 0);
-  return safeMonth > 0 ? `Tháng ${safeMonth}` : '--';
 };
 
 const recommendationStyleMap: Record<
@@ -110,40 +110,44 @@ const ConsultationServiceAnalytics: React.FC = () => {
   const dichVuTyLeChotThapNhat = useMemo(() => {
     if (!serviceData.length) return null;
 
-    return [...serviceData]
-      .filter((item) => Number(item.tong_lead || 0) > 0)
-      .sort((a, b) => {
-        const tyLeA = Number(a.ty_le_chot || 0);
-        const tyLeB = Number(b.ty_le_chot || 0);
+    return (
+      [...serviceData]
+        .filter((item) => Number(item.tong_lead || 0) > 0)
+        .sort((a, b) => {
+          const tyLeA = Number(a.ty_le_chot || 0);
+          const tyLeB = Number(b.ty_le_chot || 0);
 
-        if (tyLeA !== tyLeB) return tyLeA - tyLeB;
+          if (tyLeA !== tyLeB) return tyLeA - tyLeB;
 
-        const leadB = Number(b.tong_lead || 0);
-        const leadA = Number(a.tong_lead || 0);
+          const leadB = Number(b.tong_lead || 0);
+          const leadA = Number(a.tong_lead || 0);
 
-        return leadB - leadA;
-      })[0] || null;
+          return leadB - leadA;
+        })[0] || null
+    );
   }, [serviceData]);
 
   const dichVuCoCoHoiTangTruong = useMemo(() => {
     if (!serviceData.length) return null;
 
-    return [...serviceData]
-      .filter(
-        (item) =>
-          Number(item.ty_trong_nhu_cau || 0) >= 10 &&
-          Number(item.ty_le_chot || 0) < 25
-      )
-      .sort((a, b) => {
-        const nhuCauB = Number(b.ty_trong_nhu_cau || 0);
-        const nhuCauA = Number(a.ty_trong_nhu_cau || 0);
+    return (
+      [...serviceData]
+        .filter(
+          (item) =>
+            Number(item.ty_trong_nhu_cau || 0) >= 10 &&
+            Number(item.ty_le_chot || 0) < 25
+        )
+        .sort((a, b) => {
+          const nhuCauB = Number(b.ty_trong_nhu_cau || 0);
+          const nhuCauA = Number(a.ty_trong_nhu_cau || 0);
 
-        if (nhuCauB !== nhuCauA) return nhuCauB - nhuCauA;
+          if (nhuCauB !== nhuCauA) return nhuCauB - nhuCauA;
 
-        const tyLeA = Number(a.ty_le_chot || 0);
-        const tyLeB = Number(b.ty_le_chot || 0);
-        return tyLeA - tyLeB;
-      })[0] || null;
+          const tyLeA = Number(a.ty_le_chot || 0);
+          const tyLeB = Number(b.ty_le_chot || 0);
+          return tyLeA - tyLeB;
+        })[0] || null
+    );
   }, [serviceData]);
 
   const recommendations = useMemo<RecommendationItem[]>(() => {
@@ -205,9 +209,7 @@ const ConsultationServiceAnalytics: React.FC = () => {
   }, [serviceData, tyLeDapUngToanBo, dichVuCoCoHoiTangTruong, dichVuQuanTamNhieuNhat]);
 
   const danhSachThang = useMemo(() => {
-    return [...new Set(serviceTrendData.map((item) => Number(item.thang || 0)).filter((month) => month > 0))].sort(
-      (a, b) => a - b
-    );
+    return [...new Set(serviceTrendData.map((item) => item.thang))];
   }, [serviceTrendData]);
 
   const topDichVuTheoXuHuong = useMemo(() => {
@@ -233,12 +235,20 @@ const ConsultationServiceAnalytics: React.FC = () => {
     return topDichVuTheoXuHuong.map((tenDichVu) => {
       const rows = serviceTrendData
         .filter((item) => item.ten_dich_vu === tenDichVu)
-        .sort((a, b) => Number(a.thang || 0) - Number(b.thang || 0));
+        .sort((a, b) => {
+          if (Number(a.nam || 0) !== Number(b.nam || 0)) {
+            return Number(a.nam || 0) - Number(b.nam || 0);
+          }
+          return Number(a.thang_so || 0) - Number(b.thang_so || 0);
+        });
 
       const thangCuoi = rows.length > 0 ? rows[rows.length - 1] : null;
       const thangTruoc = rows.length > 1 ? rows[rows.length - 2] : null;
       const chenhLechLead =
         Number(thangCuoi?.tong_lead || 0) - Number(thangTruoc?.tong_lead || 0);
+      const tangTruongGanNhat = Number(
+        thangCuoi?.tang_truong_lead_so_voi_thang_truoc || 0
+      );
 
       return {
         ten_dich_vu: tenDichVu,
@@ -246,6 +256,7 @@ const ConsultationServiceAnalytics: React.FC = () => {
         thangCuoi,
         thangTruoc,
         chenhLechLead,
+        tangTruongGanNhat,
       };
     });
   }, [serviceTrendData, topDichVuTheoXuHuong]);
@@ -253,17 +264,21 @@ const ConsultationServiceAnalytics: React.FC = () => {
   const dichVuTangNhanhNhat = useMemo(() => {
     if (!xuHuongTheoDichVu.length) return null;
 
-    return [...xuHuongTheoDichVu]
-      .filter((item) => item.chenhLechLead > 0)
-      .sort((a, b) => b.chenhLechLead - a.chenhLechLead)[0] || null;
+    return (
+      [...xuHuongTheoDichVu]
+        .filter((item) => item.chenhLechLead > 0)
+        .sort((a, b) => b.chenhLechLead - a.chenhLechLead)[0] || null
+    );
   }, [xuHuongTheoDichVu]);
 
   const dichVuGiamNhieuNhat = useMemo(() => {
     if (!xuHuongTheoDichVu.length) return null;
 
-    return [...xuHuongTheoDichVu]
-      .filter((item) => item.chenhLechLead < 0)
-      .sort((a, b) => a.chenhLechLead - b.chenhLechLead)[0] || null;
+    return (
+      [...xuHuongTheoDichVu]
+        .filter((item) => item.chenhLechLead < 0)
+        .sort((a, b) => a.chenhLechLead - b.chenhLechLead)[0] || null
+    );
   }, [xuHuongTheoDichVu]);
 
   const nhanDinhXuHuong = useMemo(() => {
@@ -378,9 +393,7 @@ const ConsultationServiceAnalytics: React.FC = () => {
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <div>
-            <label className="mb-2 block text-sm font-medium text-gray-700">
-              Từ ngày
-            </label>
+            <label className="mb-2 block text-sm font-medium text-gray-700">Từ ngày</label>
             <input
               type="date"
               value={dateRange.from}
@@ -395,9 +408,7 @@ const ConsultationServiceAnalytics: React.FC = () => {
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-gray-700">
-              Đến ngày
-            </label>
+            <label className="mb-2 block text-sm font-medium text-gray-700">Đến ngày</label>
             <input
               type="date"
               value={dateRange.to}
@@ -428,35 +439,29 @@ const ConsultationServiceAnalytics: React.FC = () => {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="text-sm text-gray-500">Tổng lead thị trường</div>
-          <div className="mt-2 text-3xl font-bold text-gray-900">
-            {formatNumber(totalLeadThiTruong)}
-          </div>
+          <div className="mt-2 text-3xl font-bold text-gray-900">{formatNumber(totalLeadThiTruong)}</div>
         </div>
 
         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="text-sm text-gray-500">Tổng lead đã chốt</div>
-          <div className="mt-2 text-3xl font-bold text-gray-900">
-            {formatNumber(totalLeadDaChot)}
-          </div>
+          <div className="mt-2 text-3xl font-bold text-gray-900">{formatNumber(totalLeadDaChot)}</div>
         </div>
 
         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="text-sm text-gray-500">Tỷ lệ đáp ứng nhu cầu</div>
           <div className="mt-2 flex items-center gap-2">
-            <div className="text-3xl font-bold text-gray-900">
-              {formatPercent(tyLeDapUngToanBo)}
-            </div>
+            <div className="text-3xl font-bold text-gray-900">{formatPercent(tyLeDapUngToanBo)}</div>
             {tyLeDapUngToanBo >= 30 ? (
-              <TrendingUp size={20} className="text-green-600" />
+              <TrendingUp size={18} className="text-green-600" />
             ) : (
-              <TrendingDown size={20} className="text-red-600" />
+              <TrendingDown size={18} className="text-red-600" />
             )}
           </div>
         </div>
 
         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="text-sm text-gray-500">Dịch vụ được quan tâm nhất</div>
-          <div className="mt-2 text-lg font-bold text-gray-900">
+          <div className="mt-2 text-xl font-bold text-gray-900">
             {dichVuQuanTamNhieuNhat?.ten_dich_vu || '--'}
           </div>
           <div className="mt-1 text-sm text-gray-500">
@@ -468,56 +473,40 @@ const ConsultationServiceAnalytics: React.FC = () => {
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
         <div className="mb-4 flex items-center gap-2">
           <BarChart3 size={18} className="text-gray-500" />
-          <h2 className="text-base font-semibold text-gray-800">
-            Insight nhanh theo dịch vụ
-          </h2>
+          <h2 className="text-base font-semibold text-gray-800">Insight nhanh theo dịch vụ</h2>
         </div>
 
         {!loading && !error && serviceData.length === 0 && (
           <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-sm text-gray-500">
-            Chưa có dữ liệu để phân tích insight theo dịch vụ.
+            Chưa có dữ liệu để phân tích insight.
           </div>
         )}
 
         {!loading && !error && serviceData.length > 0 && (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
-              <div className="text-sm font-semibold text-blue-800">
-                Dịch vụ được quan tâm nhiều nhất
-              </div>
+              <div className="text-sm font-semibold text-blue-800">Dịch vụ được quan tâm nhiều nhất</div>
               <div className="mt-2 text-sm leading-6 text-blue-900">
                 <strong>{dichVuQuanTamNhieuNhat?.ten_dich_vu || '--'}</strong> đang dẫn đầu với{' '}
-                <strong>{formatNumber(dichVuQuanTamNhieuNhat?.tong_lead || 0)}</strong> lead,
-                chiếm khoảng <strong>{formatPercent(dichVuQuanTamNhieuNhat?.ty_trong_nhu_cau || 0)}</strong> nhu cầu hiện tại.
+                <strong>{formatNumber(dichVuQuanTamNhieuNhat?.tong_lead || 0)}</strong> lead, chiếm khoảng{' '}
+                <strong>{formatPercent(dichVuQuanTamNhieuNhat?.ty_trong_nhu_cau || 0)}</strong> nhu cầu hiện tại.
               </div>
             </div>
 
             <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
-              <div className="text-sm font-semibold text-amber-800">
-                Dịch vụ cần xem lại nhất
-              </div>
+              <div className="text-sm font-semibold text-amber-800">Dịch vụ cần xem lại nhất</div>
               <div className="mt-2 text-sm leading-6 text-amber-900">
                 <strong>{dichVuTyLeChotThapNhat?.ten_dich_vu || '--'}</strong> đang có tỷ lệ chốt khoảng{' '}
-                <strong>{formatPercent(dichVuTyLeChotThapNhat?.ty_le_chot || 0)}</strong>.
-                Nếu dịch vụ này vẫn có nhiều lead thì đây là khu vực đang mất cơ hội kinh doanh.
+                <strong>{formatPercent(dichVuTyLeChotThapNhat?.ty_le_chot || 0)}</strong>. Nếu dịch vụ này vẫn còn nhiều lead thì đây là khu vực đang mất cơ hội kinh doanh.
               </div>
             </div>
 
             <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
-              <div className="text-sm font-semibold text-emerald-800">
-                Cơ hội tăng trưởng
-              </div>
+              <div className="text-sm font-semibold text-emerald-800">Cơ hội tăng trưởng</div>
               <div className="mt-2 text-sm leading-6 text-emerald-900">
-                {dichVuCoCoHoiTangTruong ? (
-                  <>
-                    <strong>{dichVuCoCoHoiTangTruong.ten_dich_vu}</strong> đang có nhu cầu{' '}
-                    <strong>{formatPercent(dichVuCoCoHoiTangTruong.ty_trong_nhu_cau)}</strong> nhưng tỷ lệ chốt mới đạt{' '}
-                    <strong>{formatPercent(dichVuCoCoHoiTangTruong.ty_le_chot)}</strong>.
-                    Đây là dịch vụ nên ưu tiên cải thiện gói sản phẩm và cách tư vấn.
-                  </>
-                ) : (
-                  <>Hiện chưa thấy một dịch vụ nào vừa có nhu cầu cao vừa có tỷ lệ chốt thấp rõ rệt.</>
-                )}
+                <strong>{dichVuCoCoHoiTangTruong?.ten_dich_vu || '--'}</strong> đang có nhu cầu{' '}
+                <strong>{formatPercent(dichVuCoCoHoiTangTruong?.ty_trong_nhu_cau || 0)}</strong> nhưng tỷ lệ chốt mới đạt{' '}
+                <strong>{formatPercent(dichVuCoCoHoiTangTruong?.ty_le_chot || 0)}</strong>. Đây là dịch vụ nên ưu tiên cải thiện gói sản phẩm và cách tư vấn.
               </div>
             </div>
           </div>
@@ -527,9 +516,7 @@ const ConsultationServiceAnalytics: React.FC = () => {
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
         <div className="mb-4 flex items-center gap-2">
           <BarChart3 size={18} className="text-gray-500" />
-          <h2 className="text-base font-semibold text-gray-800">
-            Khuyến nghị hành động
-          </h2>
+          <h2 className="text-base font-semibold text-gray-800">Khuyến nghị hành động</h2>
         </div>
 
         {!loading && !error && serviceData.length === 0 && (
@@ -548,12 +535,8 @@ const ConsultationServiceAnalytics: React.FC = () => {
                   key={`${item.title}-${index}`}
                   className={`rounded-2xl border p-4 ${style.container}`}
                 >
-                  <div className={`text-sm font-semibold ${style.title}`}>
-                    {item.title}
-                  </div>
-                  <div className="mt-2 text-sm leading-6 text-gray-700">
-                    {item.message}
-                  </div>
+                  <div className={`text-sm font-semibold ${style.title}`}>{item.title}</div>
+                  <div className="mt-2 text-sm leading-6 text-gray-700">{item.message}</div>
                 </div>
               );
             })}
@@ -564,9 +547,7 @@ const ConsultationServiceAnalytics: React.FC = () => {
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
         <div className="mb-4 flex items-center gap-2">
           <BarChart3 size={18} className="text-gray-500" />
-          <h2 className="text-base font-semibold text-gray-800">
-            Xu hướng theo tháng của dịch vụ
-          </h2>
+          <h2 className="text-base font-semibold text-gray-800">Xu hướng theo tháng của dịch vụ</h2>
         </div>
 
         {trendError && (
@@ -577,45 +558,41 @@ const ConsultationServiceAnalytics: React.FC = () => {
 
         {!loading && !error && !trendError && serviceTrendData.length === 0 && (
           <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-sm text-gray-500">
-            Chưa có dữ liệu xu hướng theo tháng trong khoảng thời gian đang chọn.
+            Chưa có dữ liệu xu hướng theo tháng trong khoảng thời gian đã chọn.
           </div>
         )}
 
         {!loading && !error && !trendError && serviceTrendData.length > 0 && (
           <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-              <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
-                <div className="text-sm font-semibold text-blue-800">Dịch vụ tăng nhanh nhất</div>
-                <div className="mt-2 text-sm leading-6 text-blue-900">
-                  {dichVuTangNhanhNhat ? (
-                    <>
-                      <strong>{dichVuTangNhanhNhat.ten_dich_vu}</strong> đang tăng khoảng{' '}
-                      <strong>{formatNumber(dichVuTangNhanhNhat.chenhLechLead)}</strong> lead so với kỳ trước.
-                    </>
-                  ) : (
-                    <>Chưa có dịch vụ nào tăng rõ rệt so với kỳ trước.</>
-                  )}
+            <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+              <div className="text-sm font-semibold text-blue-800">Nhận định xu hướng</div>
+              <div className="mt-2 text-sm leading-6 text-blue-900">{nhanDinhXuHuong}</div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                <div className="text-sm font-semibold text-emerald-800">Dịch vụ tăng nhanh nhất</div>
+                <div className="mt-2 text-lg font-bold text-gray-900">
+                  {dichVuTangNhanhNhat?.ten_dich_vu || '--'}
+                </div>
+                <div className="mt-1 text-sm text-gray-600">
+                  Chênh lệch lead gần nhất: {formatNumber(dichVuTangNhanhNhat?.chenhLechLead || 0)}
+                </div>
+                <div className="mt-1 text-sm text-gray-600">
+                  Tăng trưởng gần nhất: {formatPercent(dichVuTangNhanhNhat?.tangTruongGanNhat || 0)}
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
                 <div className="text-sm font-semibold text-amber-800">Dịch vụ giảm rõ nhất</div>
-                <div className="mt-2 text-sm leading-6 text-amber-900">
-                  {dichVuGiamNhieuNhat ? (
-                    <>
-                      <strong>{dichVuGiamNhieuNhat.ten_dich_vu}</strong> đang giảm khoảng{' '}
-                      <strong>{formatNumber(Math.abs(dichVuGiamNhieuNhat.chenhLechLead))}</strong> lead so với kỳ trước.
-                    </>
-                  ) : (
-                    <>Chưa có dịch vụ nào giảm rõ rệt so với kỳ trước.</>
-                  )}
+                <div className="mt-2 text-lg font-bold text-gray-900">
+                  {dichVuGiamNhieuNhat?.ten_dich_vu || '--'}
                 </div>
-              </div>
-
-              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
-                <div className="text-sm font-semibold text-emerald-800">Nhận định xu hướng</div>
-                <div className="mt-2 text-sm leading-6 text-emerald-900">
-                  {nhanDinhXuHuong}
+                <div className="mt-1 text-sm text-gray-600">
+                  Chênh lệch lead gần nhất: {formatNumber(dichVuGiamNhieuNhat?.chenhLechLead || 0)}
+                </div>
+                <div className="mt-1 text-sm text-gray-600">
+                  Tăng trưởng gần nhất: {formatPercent(dichVuGiamNhieuNhat?.tangTruongGanNhat || 0)}
                 </div>
               </div>
             </div>
@@ -629,58 +606,41 @@ const ConsultationServiceAnalytics: React.FC = () => {
                     </th>
                     {danhSachThang.map((thang) => (
                       <th
-                        key={`thang-${thang}`}
-                        className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-500"
+                        key={thang}
+                        className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500"
                       >
-                        {getMonthLabel(thang)}
+                        {thang}
                       </th>
                     ))}
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Tăng trưởng gần nhất
+                    </th>
                   </tr>
                 </thead>
 
                 <tbody>
-                  {xuHuongTheoDichVu.map((serviceItem) => (
-                    <tr key={serviceItem.ten_dich_vu} className="bg-gray-50">
+                  {xuHuongTheoDichVu.map((item) => (
+                    <tr key={item.ten_dich_vu} className="bg-gray-50">
                       <td className="rounded-l-xl px-4 py-3 text-sm font-medium text-gray-800">
-                        {serviceItem.ten_dich_vu}
+                        {item.ten_dich_vu}
                       </td>
 
-                      {danhSachThang.map((thang, index) => {
-                        const monthRow =
-                          serviceItem.rows.find((row) => Number(row.thang || 0) === thang) || null;
-
-                        const previousMonth = index > 0 ? danhSachThang[index - 1] : null;
-                        const previousRow =
-                          previousMonth !== null
-                            ? serviceItem.rows.find((row) => Number(row.thang || 0) === previousMonth) || null
-                            : null;
-
-                        const growth =
-                          Number(monthRow?.tong_lead || 0) - Number(previousRow?.tong_lead || 0);
+                      {danhSachThang.map((thang) => {
+                        const row = item.rows.find((x) => x.thang === thang);
 
                         return (
                           <td
-                            key={`${serviceItem.ten_dich_vu}-${thang}`}
-                            className={`px-4 py-3 text-center text-sm ${
-                              index === danhSachThang.length - 1 ? 'rounded-r-xl' : ''
-                            }`}
+                            key={`${item.ten_dich_vu}-${thang}`}
+                            className="px-4 py-3 text-right text-sm text-gray-700"
                           >
-                            <div className="font-semibold text-gray-900">
-                              {formatNumber(monthRow?.tong_lead || 0)}
-                            </div>
-                            <div className="mt-1 text-xs text-gray-500">
-                              Chốt {formatNumber(monthRow?.lead_da_chot || 0)}
-                            </div>
-                            <div className="mt-1 text-xs text-gray-500">
-                              {index === 0
-                                ? 'Mốc đầu'
-                                : growth > 0
-                                ? `+${formatNumber(growth)}`
-                                : formatNumber(growth)}
-                            </div>
+                            {formatNumber(row?.tong_lead || 0)}
                           </td>
                         );
                       })}
+
+                      <td className="rounded-r-xl px-4 py-3 text-right text-sm font-semibold text-gray-900">
+                        {formatPercent(item.tangTruongGanNhat)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -688,51 +648,44 @@ const ConsultationServiceAnalytics: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              {xuHuongTheoDichVu.map((serviceItem) => (
+              {xuHuongTheoDichVu.map((item) => (
                 <div
-                  key={`${serviceItem.ten_dich_vu}-trend-card`}
+                  key={`${item.ten_dich_vu}-trend-card`}
                   className="rounded-2xl border border-gray-200 bg-white p-4"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <div className="text-sm font-semibold text-gray-800">
-                        {serviceItem.ten_dich_vu}
-                      </div>
+                      <div className="text-sm font-semibold text-gray-800">{item.ten_dich_vu}</div>
                       <div className="mt-1 text-sm text-gray-500">
-                        {serviceItem.rows.length} mốc theo dõi
+                        Kỳ gần nhất: {item.thangCuoi?.thang || '--'}
                       </div>
                     </div>
 
                     <div className="text-right">
-                      <div className="text-sm text-gray-500">Biến động gần nhất</div>
+                      <div className="text-sm text-gray-500">Lead kỳ gần nhất</div>
                       <div className="text-lg font-bold text-gray-900">
-                        {serviceItem.chenhLechLead > 0
-                          ? `+${formatNumber(serviceItem.chenhLechLead)}`
-                          : formatNumber(serviceItem.chenhLechLead)}
+                        {formatNumber(item.thangCuoi?.tong_lead || 0)}
                       </div>
                     </div>
                   </div>
 
-                  <div className="mt-4 flex items-end gap-2">
-                    {serviceItem.rows.map((row) => (
-                      <div key={`${serviceItem.ten_dich_vu}-${row.thang}`} className="flex-1">
-                        <div
-                          className="w-full rounded-t-lg bg-blue-600"
-                          style={{
-                            height: `${Math.max(16, clampPercent((Number(row.tong_lead || 0) / Math.max(1, Number(serviceItem.thangCuoi?.tong_lead || 1), ...serviceItem.rows.map((item) => Number(item.tong_lead || 0)))) * 100))}px`,
-                          }}
-                        />
-                        <div className="mt-2 text-center text-[11px] text-gray-500">
-                          T{row.thang}
-                        </div>
-                      </div>
-                    ))}
+                  <div className="mt-4 h-3 w-full rounded-full bg-gray-200">
+                    <div
+                      className="h-3 rounded-full bg-blue-600 transition-all"
+                      style={{
+                        width: `${clampPercent(item.thangCuoi?.ty_trong_trong_thang || 0)}%`,
+                      }}
+                    />
                   </div>
 
-                  <div className="mt-3 text-sm leading-6 text-gray-600">
-                    Kỳ gần nhất là <strong>{getMonthLabel(serviceItem.thangCuoi?.thang || 0)}</strong> với{' '}
-                    <strong>{formatNumber(serviceItem.thangCuoi?.tong_lead || 0)}</strong> lead và tỷ lệ chốt{' '}
-                    <strong>{formatPercent(serviceItem.thangCuoi?.ty_le_chot || 0)}</strong>.
+                  <div className="mt-3 text-sm text-gray-600">
+                    Tỷ trọng trong tháng gần nhất:{' '}
+                    <strong>{formatPercent(item.thangCuoi?.ty_trong_trong_thang || 0)}</strong>
+                  </div>
+
+                  <div className="mt-1 text-sm text-gray-600">
+                    Tăng trưởng so với tháng trước:{' '}
+                    <strong>{formatPercent(item.tangTruongGanNhat)}</strong>
                   </div>
                 </div>
               ))}
@@ -744,9 +697,7 @@ const ConsultationServiceAnalytics: React.FC = () => {
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
         <div className="mb-4 flex items-center gap-2">
           <BarChart3 size={18} className="text-gray-500" />
-          <h2 className="text-base font-semibold text-gray-800">
-            Bảng hiệu quả theo dịch vụ
-          </h2>
+          <h2 className="text-base font-semibold text-gray-800">Bảng hiệu quả theo dịch vụ</h2>
         </div>
 
         {error && (
@@ -757,7 +708,7 @@ const ConsultationServiceAnalytics: React.FC = () => {
 
         {loading && (
           <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-6 py-10 text-center text-sm text-gray-500">
-            Đang tải dữ liệu theo dịch vụ...
+            Đang tải dữ liệu phân tích dịch vụ...
           </div>
         )}
 
@@ -765,7 +716,7 @@ const ConsultationServiceAnalytics: React.FC = () => {
           <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-6 py-10 text-center">
             <div className="text-base font-medium text-gray-700">Chưa có dữ liệu</div>
             <div className="mt-2 text-sm text-gray-500">
-              Hãy kiểm tra lại dữ liệu dịch vụ đã gắn cho nhật ký tư vấn hoặc khoảng ngày lọc.
+              Hãy kiểm tra lại dữ liệu tư vấn, dịch vụ liên kết hoặc khoảng ngày lọc.
             </div>
           </div>
         )}
@@ -807,9 +758,7 @@ const ConsultationServiceAnalytics: React.FC = () => {
                   {serviceData.map((item) => (
                     <tr key={item.dich_vu_id} className="bg-gray-50">
                       <td className="rounded-l-xl px-4 py-3">
-                        <div className="text-sm font-medium text-gray-800">
-                          {item.ten_dich_vu}
-                        </div>
+                        <div className="text-sm font-medium text-gray-800">{item.ten_dich_vu}</div>
                         <div className="mt-2 h-2 w-40 rounded-full bg-gray-200">
                           <div
                             className="h-2 rounded-full bg-blue-600"
@@ -859,9 +808,7 @@ const ConsultationServiceAnalytics: React.FC = () => {
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <div className="text-sm font-semibold text-gray-800">
-                        {item.ten_dich_vu}
-                      </div>
+                      <div className="text-sm font-semibold text-gray-800">{item.ten_dich_vu}</div>
                       <div className="mt-1 text-sm text-gray-500">
                         {formatNumber(item.tong_lead)} lead quan tâm
                       </div>
@@ -879,14 +826,14 @@ const ConsultationServiceAnalytics: React.FC = () => {
                     <div
                       className="h-3 rounded-full bg-blue-600 transition-all"
                       style={{
-                        width: `${clampPercent(item.ty_le_chot)}%`,
+                        width: `${clampPercent(item.ty_trong_nhu_cau)}%`,
                       }}
                     />
                   </div>
 
-                  <div className="mt-3 text-sm leading-6 text-gray-600">
-                    Dịch vụ này đang chiếm <strong>{formatPercent(item.ty_trong_nhu_cau)}</strong> mức quan tâm của thị trường,
-                    với <strong>{formatNumber(item.lead_da_chot)}</strong> lead đã chốt.
+                  <div className="mt-3 text-sm text-gray-600">
+                    Dịch vụ này đang chiếm <strong>{formatPercent(item.ty_trong_nhu_cau)}</strong> mức quan tâm của thị trường, với{' '}
+                    <strong>{formatNumber(item.lead_da_chot)}</strong> lead đã chốt.
                   </div>
                 </div>
               ))}

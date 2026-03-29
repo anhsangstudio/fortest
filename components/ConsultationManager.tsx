@@ -42,6 +42,22 @@ const ConsultationManager: React.FC = () => {
   const [sourceBreakdown, setSourceBreakdown] = useState<
     Array<{ label: string; total: number; rate: number }>
   >([]);
+
+  const [addressBreakdown, setAddressBreakdown] = useState<
+    Array<{ label: string; total: number; rate: number }>
+  >([]);
+
+  const [monthlyLeadSeries, setMonthlyLeadSeries] = useState<
+    Array<{ label: string; total: number }>
+  >([]);
+
+  const [dailyLeadSeries, setDailyLeadSeries] = useState<
+    Array<{ label: string; total: number }>
+  >([]);
+
+  const [wonServiceMonthly, setWonServiceMonthly] = useState<
+    Array<{ service_label: string; monthly_totals: Array<{ month: number; total: number }>; total: number }>
+  >([]);
   
   
   const today = new Date().toISOString().slice(0, 10);
@@ -167,6 +183,72 @@ const ConsultationManager: React.FC = () => {
   }, [reportDateRange]);
 
 
+  const loadAddressBreakdown = useCallback(async (fromDate?: string, toDate?: string) => {
+    try {
+      const finalFromDate = fromDate || reportDateRange.from;
+      const finalToDate = toDate || reportDateRange.to;
+
+      const { data, error } = await supabase.rpc('consultation_report_by_address', {
+        p_from: finalFromDate,
+        p_to: finalToDate,
+      });
+
+      if (error) throw error;
+
+      setAddressBreakdown(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.error('Lỗi khi tải breakdown địa chỉ:', err);
+      setAddressBreakdown([]);
+    }
+  }, [reportDateRange]);
+
+  const loadMonthlyLeadSeries = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.rpc('consultation_report_leads_by_month', {
+        p_year: reportYear,
+      });
+
+      if (error) throw error;
+
+      setMonthlyLeadSeries(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.error('Lỗi khi tải lead theo tháng:', err);
+      setMonthlyLeadSeries([]);
+    }
+  }, [reportYear]);
+
+  const loadDailyLeadSeries = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.rpc('consultation_report_leads_by_day', {
+        p_year: reportYear,
+        p_month: reportMonth,
+      });
+
+      if (error) throw error;
+
+      setDailyLeadSeries(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.error('Lỗi khi tải lead theo ngày:', err);
+      setDailyLeadSeries([]);
+    }
+  }, [reportYear, reportMonth]);
+
+  const loadWonServiceMonthly = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.rpc('consultation_report_won_service_monthly', {
+        p_year: reportYear,
+      });
+
+      if (error) throw error;
+
+      setWonServiceMonthly(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.error('Lỗi khi tải bảng chốt theo dịch vụ từng tháng:', err);
+      setWonServiceMonthly([]);
+    }
+  }, [reportYear]);
+
+
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
@@ -252,7 +334,20 @@ const ConsultationManager: React.FC = () => {
     loadReportSummary();
     loadServiceBreakdown();
     loadSourceBreakdown();
-  }, [loadData, loadReportSummary, loadServiceBreakdown, loadSourceBreakdown]);
+    loadAddressBreakdown();
+    loadMonthlyLeadSeries();
+    loadDailyLeadSeries();
+    loadWonServiceMonthly();
+  }, [
+    loadData,
+    loadReportSummary,
+    loadServiceBreakdown,
+    loadSourceBreakdown,
+    loadAddressBreakdown,
+    loadMonthlyLeadSeries,
+    loadDailyLeadSeries,
+    loadWonServiceMonthly,
+  ]);
   
   useEffect(() => {
     const nextMap: Record<string, string> = {};
@@ -1035,6 +1130,22 @@ const ConsultationManager: React.FC = () => {
   });
 
   const maxStatusTotal = sortedStatusBreakdown[0]?.total || 0;
+  const maxServiceBreakdown = serviceBreakdown[0]?.rate || 0;
+  const maxSourceBreakdown = sourceBreakdown[0]?.rate || 0;
+  const maxAddressBreakdown = addressBreakdown[0]?.rate || 0;
+  const maxMonthlyLead = Math.max(...monthlyLeadSeries.map((item) => item.total), 0);
+  const maxDailyLead = Math.max(...dailyLeadSeries.map((item) => item.total), 0);
+  const wonLeadCount =
+    reportSummary.funnel.find((item) => item.label === 'Đã chốt')?.total || 0;
+  const rejectedRate = totalLeads > 0 ? (reportSummary.total_rejected / totalLeads) * 100 : 0;
+  const leadCompletionRate =
+    reportTargets.total_leads > 0 ? (totalLeads / reportTargets.total_leads) * 100 : 0;
+  const wonCompletionRate =
+    reportTargets.won_leads > 0 ? (wonLeadCount / reportTargets.won_leads) * 100 : 0;
+  const pipelineCompletionRate =
+    reportTargets.pipeline_value > 0
+      ? (reportSummary.total_pipeline_value / reportTargets.pipeline_value) * 100
+      : 0;
 
   return (
     <div className="p-6 space-y-4">
@@ -1136,6 +1247,10 @@ const ConsultationManager: React.FC = () => {
                   loadReportSummary();
                   loadServiceBreakdown();
                   loadSourceBreakdown();
+                  loadAddressBreakdown();
+                  loadMonthlyLeadSeries();
+                  loadDailyLeadSeries();
+                  loadWonServiceMonthly();
                 }}
                 className="w-full rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-medium hover:bg-blue-700"
               >
@@ -1341,6 +1456,283 @@ const ConsultationManager: React.FC = () => {
               </div>
             )}
           </div>
+        </div>
+
+
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-semibold text-gray-800">
+                Lead theo địa chỉ
+              </h3>
+              <span className="text-sm text-gray-400">
+                {addressBreakdown.length} địa chỉ
+              </span>
+            </div>
+
+            {addressBreakdown.length === 0 ? (
+              <div className="text-sm text-gray-500">
+                Chưa có dữ liệu địa chỉ trong khoảng thời gian này.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {addressBreakdown.map((item, index) => (
+                  <div key={item.label} className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-violet-50 text-violet-600 text-sm font-bold shrink-0">
+                          {index + 1}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-gray-800 truncate">
+                            {item.label}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {item.total.toLocaleString('vi-VN')} lead
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-sm font-bold text-gray-800 shrink-0">
+                        {item.rate.toFixed(1)}%
+                      </div>
+                    </div>
+                    <div className="mt-3 h-2 w-full rounded-full bg-gray-200 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-violet-500 transition-all"
+                        style={{ width: `${Math.min(maxAddressBreakdown > 0 ? (item.rate / maxAddressBreakdown) * 100 : 0, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-semibold text-gray-800">
+                Lead đã liên hệ từng tháng trong năm {reportYear}
+              </h3>
+              <span className="text-sm text-gray-400">
+                12 tháng
+              </span>
+            </div>
+
+            {monthlyLeadSeries.length === 0 ? (
+              <div className="text-sm text-gray-500">
+                Chưa có dữ liệu lead theo tháng.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {monthlyLeadSeries.map((item) => (
+                  <div key={item.label}>
+                    <div className="flex items-center justify-between text-sm mb-1">
+                      <span className="font-medium text-gray-700">{item.label}</span>
+                      <span className="font-semibold text-gray-900">
+                        {item.total.toLocaleString('vi-VN')}
+                      </span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-sky-500 transition-all"
+                        style={{ width: `${Math.min(maxMonthlyLead > 0 ? (item.total / maxMonthlyLead) * 100 : 0, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-semibold text-gray-800">
+                Lead đã liên hệ từng ngày trong tháng {String(reportMonth).padStart(2, '0')}/{reportYear}
+              </h3>
+              <span className="text-sm text-gray-400">
+                {dailyLeadSeries.length} ngày
+              </span>
+            </div>
+
+            {dailyLeadSeries.length === 0 ? (
+              <div className="text-sm text-gray-500">
+                Chưa có dữ liệu lead theo ngày trong tháng.
+              </div>
+            ) : (
+              <div className="max-h-[420px] overflow-y-auto pr-1 space-y-2">
+                {dailyLeadSeries.map((item) => (
+                  <div key={item.label}>
+                    <div className="flex items-center justify-between text-sm mb-1">
+                      <span className="font-medium text-gray-700">{item.label}</span>
+                      <span className="font-semibold text-gray-900">
+                        {item.total.toLocaleString('vi-VN')}
+                      </span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-cyan-500 transition-all"
+                        style={{ width: `${Math.min(maxDailyLead > 0 ? (item.total / maxDailyLead) * 100 : 0, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+            <div className="flex items-center justify-between gap-4 mb-4">
+              <div>
+                <h3 className="text-base font-semibold text-gray-800">
+                  Chỉ tiêu và kết quả
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  Có thể chỉnh trực tiếp các target trong file để bám sát kế hoạch kinh doanh.
+                </p>
+              </div>
+              <span className="text-sm text-gray-400">
+                Năm {reportYear}
+              </span>
+            </div>
+
+            <div className="overflow-hidden rounded-2xl border border-gray-200">
+              <div className="grid grid-cols-12 bg-gray-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                <div className="col-span-4">Chỉ số</div>
+                <div className="col-span-2 text-right">Target</div>
+                <div className="col-span-2 text-right">Kết quả</div>
+                <div className="col-span-2 text-right">Hoàn thành</div>
+                <div className="col-span-2 text-right">Đánh giá</div>
+              </div>
+
+              <div className="divide-y divide-gray-100 bg-white text-sm">
+                {[
+                  {
+                    label: 'Tổng lead',
+                    target: reportTargets.total_leads,
+                    result: totalLeads,
+                    completion: leadCompletionRate,
+                    suffix: '',
+                    assessment: leadCompletionRate >= 100 ? 'Đạt' : leadCompletionRate >= 70 ? 'Tiệm cận' : 'Thiếu',
+                  },
+                  {
+                    label: 'Lead đã chốt',
+                    target: reportTargets.won_leads,
+                    result: wonLeadCount,
+                    completion: wonCompletionRate,
+                    suffix: '',
+                    assessment: wonCompletionRate >= 100 ? 'Đạt' : wonCompletionRate >= 70 ? 'Tiệm cận' : 'Thiếu',
+                  },
+                  {
+                    label: 'Giá trị pipeline',
+                    target: reportTargets.pipeline_value,
+                    result: reportSummary.total_pipeline_value,
+                    completion: pipelineCompletionRate,
+                    suffix: '₫',
+                    assessment: pipelineCompletionRate >= 100 ? 'Đạt' : pipelineCompletionRate >= 70 ? 'Tiệm cận' : 'Thiếu',
+                  },
+                  {
+                    label: 'Tỷ lệ từ chối tối đa',
+                    target: reportTargets.rejected_rate_max,
+                    result: Number(rejectedRate.toFixed(1)),
+                    completion: reportTargets.rejected_rate_max > 0 ? (rejectedRate / reportTargets.rejected_rate_max) * 100 : 0,
+                    suffix: '%',
+                    assessment: rejectedRate <= reportTargets.rejected_rate_max ? 'Trong ngưỡng' : 'Vượt ngưỡng',
+                    inverse: true,
+                  },
+                ].map((row) => {
+                  const completionText = row.inverse
+                    ? `${row.result.toLocaleString('vi-VN')}${row.suffix} / ${row.target.toLocaleString('vi-VN')}${row.suffix}`
+                    : `${row.completion.toFixed(1)}%`;
+
+                  return (
+                    <div key={row.label} className="grid grid-cols-12 items-center px-4 py-4">
+                      <div className="col-span-4 font-medium text-gray-800">{row.label}</div>
+                      <div className="col-span-2 text-right text-gray-600">
+                        {row.target.toLocaleString('vi-VN')}{row.suffix}
+                      </div>
+                      <div className="col-span-2 text-right font-semibold text-gray-900">
+                        {row.result.toLocaleString('vi-VN')}{row.suffix}
+                      </div>
+                      <div className="col-span-2 text-right text-gray-600">
+                        {completionText}
+                      </div>
+                      <div className="col-span-2 flex justify-end">
+                        <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                          row.assessment === 'Đạt' || row.assessment === 'Trong ngưỡng'
+                            ? 'bg-emerald-50 text-emerald-600'
+                            : row.assessment === 'Tiệm cận'
+                            ? 'bg-amber-50 text-amber-600'
+                            : 'bg-rose-50 text-rose-600'
+                        }`}>
+                          {row.assessment}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <div>
+              <h3 className="text-base font-semibold text-gray-800">
+                Khách đã chốt theo loại dịch vụ từng tháng trong năm {reportYear}
+              </h3>
+              <p className="text-sm text-gray-500 mt-1">
+                Bảng này giúp nhìn dịch vụ nào chốt tốt theo từng tháng để hỗ trợ kế hoạch kinh doanh.
+              </p>
+            </div>
+            <span className="text-sm text-gray-400">
+              {wonServiceMonthly.length} dịch vụ
+            </span>
+          </div>
+
+          {wonServiceMonthly.length === 0 ? (
+            <div className="text-sm text-gray-500">
+              Chưa có dữ liệu chốt theo dịch vụ trong năm này.
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border border-gray-200">
+              <table className="min-w-full text-sm">
+                <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold">Dịch vụ</th>
+                    {Array.from({ length: 12 }, (_, i) => (
+                      <th key={i + 1} className="px-3 py-3 text-center font-semibold">
+                        T{i + 1}
+                      </th>
+                    ))}
+                    <th className="px-4 py-3 text-right font-semibold">Tổng</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 bg-white">
+                  {wonServiceMonthly.map((row) => {
+                    const monthMap = Object.fromEntries(row.monthly_totals.map((m) => [m.month, m.total]));
+                    return (
+                      <tr key={row.service_label} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 font-medium text-gray-800 whitespace-nowrap">
+                          {row.service_label}
+                        </td>
+                        {Array.from({ length: 12 }, (_, i) => (
+                          <td key={i + 1} className="px-3 py-3 text-center text-gray-700">
+                            {(monthMap[i + 1] || 0).toLocaleString('vi-VN')}
+                          </td>
+                        ))}
+                        <td className="px-4 py-3 text-right font-bold text-gray-900">
+                          {row.total.toLocaleString('vi-VN')}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">

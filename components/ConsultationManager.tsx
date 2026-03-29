@@ -1128,6 +1128,14 @@ const ConsultationManager: React.FC = () => {
     rate: totalLeads > 0 ? (item.total / totalLeads) * 100 : 0,
   }));
 
+
+  const reportTargets = {
+    total_leads: 100,
+    won_leads: 50,
+    pipeline_value: 100000000,
+    rejected_rate_max: 30,
+  };
+
   const sortedStatusBreakdown = [...reportSummary.by_status].sort((a, b) => {
     if (b.total !== a.total) return b.total - a.total;
     return a.label.localeCompare(b.label, 'vi');

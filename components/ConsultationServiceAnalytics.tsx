@@ -27,6 +27,17 @@ type ServiceTrendRow = {
   tang_truong_lead_so_voi_thang_truoc: number;
 };
 
+
+type ServiceRejectReasonRow = {
+  dich_vu_id: string;
+  ten_dich_vu: string;
+  ly_do_tu_choi_id: string;
+  ten_ly_do: string;
+  so_luong_tu_choi: number;
+  ty_trong_tu_choi_trong_dich_vu: number;
+  xep_hang_ly_do: number;
+};
+
 type RecommendationItem = {
   level: 'critical' | 'warning' | 'positive' | 'neutral';
   title: string;
@@ -91,9 +102,11 @@ const ConsultationServiceAnalytics: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [trendError, setTrendError] = useState<string | null>(null);
+  const [rejectReasonError, setRejectReasonError] = useState<string | null>(null);
 
   const [serviceData, setServiceData] = useState<ServicePerformanceRow[]>([]);
   const [serviceTrendData, setServiceTrendData] = useState<ServiceTrendRow[]>([]);
+  const [serviceRejectReasonData, setServiceRejectReasonData] = useState<ServiceRejectReasonRow[]>([]);
 
   const totalLeadThiTruong = useMemo(() => {
     return serviceData.reduce((sum, item) => sum + Number(item.tong_lead || 0), 0);
@@ -511,11 +524,105 @@ const ConsultationServiceAnalytics: React.FC = () => {
     return 'Xu hướng giữa các dịch vụ hiện chưa biến động quá mạnh. Nên tiếp tục theo dõi thêm theo tháng để xác nhận dịch vụ nào đang thật sự tăng hoặc giảm.';
   }, [serviceTrendData, dichVuTangNhanhNhat, dichVuGiamNhieuNhat]);
 
+
+  const lyDoTuChoiTopTheoDichVu = useMemo(() => {
+    return [...serviceRejectReasonData]
+      .filter((item) => Number(item.xep_hang_ly_do || 0) === 1)
+      .sort((a, b) => {
+        const soLuongB = Number(b.so_luong_tu_choi || 0);
+        const soLuongA = Number(a.so_luong_tu_choi || 0);
+
+        if (soLuongB !== soLuongA) return soLuongB - soLuongA;
+
+        return Number(b.ty_trong_tu_choi_trong_dich_vu || 0) - Number(a.ty_trong_tu_choi_trong_dich_vu || 0);
+      });
+  }, [serviceRejectReasonData]);
+
+  const lyDoTuChoiPhoBienToanBo = useMemo(() => {
+    if (!serviceRejectReasonData.length) return null;
+
+    const groupedMap = new Map<
+      string,
+      { ten_ly_do: string; so_luong_tu_choi: number; so_dich_vu_gap: number }
+    >();
+
+    serviceRejectReasonData.forEach((item) => {
+      const key = item.ten_ly_do || 'Không rõ lý do';
+      const current = groupedMap.get(key) || {
+        ten_ly_do: key,
+        so_luong_tu_choi: 0,
+        so_dich_vu_gap: 0,
+      };
+
+      groupedMap.set(key, {
+        ten_ly_do: key,
+        so_luong_tu_choi: current.so_luong_tu_choi + Number(item.so_luong_tu_choi || 0),
+        so_dich_vu_gap: current.so_dich_vu_gap + (Number(item.xep_hang_ly_do || 0) === 1 ? 1 : 0),
+      });
+    });
+
+    return [...groupedMap.values()].sort((a, b) => {
+      if (b.so_luong_tu_choi !== a.so_luong_tu_choi) {
+        return b.so_luong_tu_choi - a.so_luong_tu_choi;
+      }
+      return b.so_dich_vu_gap - a.so_dich_vu_gap;
+    })[0] || null;
+  }, [serviceRejectReasonData]);
+
+  const dichVuCanXuLyTheoLyDoTuChoi = useMemo(() => {
+    if (!lyDoTuChoiTopTheoDichVu.length || !serviceDataWithGap.length) return null;
+
+    const merged = lyDoTuChoiTopTheoDichVu.map((reasonItem) => {
+      const serviceItem = serviceDataWithGap.find(
+        (service) => service.dich_vu_id === reasonItem.dich_vu_id
+      );
+
+      const tongLead = Number(serviceItem?.tong_lead || 0);
+      const tyTrongNhuCau = Number(serviceItem?.ty_trong_nhu_cau || 0);
+      const leadTuChoi = Number(serviceItem?.lead_tu_choi || 0);
+      const score =
+        tongLead * 0.4 +
+        tyTrongNhuCau * 2 +
+        Number(reasonItem.so_luong_tu_choi || 0) * 2 +
+        leadTuChoi * 1.5;
+
+      return {
+        ...reasonItem,
+        tong_lead: tongLead,
+        ty_trong_nhu_cau: tyTrongNhuCau,
+        lead_tu_choi: leadTuChoi,
+        score,
+      };
+    });
+
+    return merged.sort((a, b) => b.score - a.score)[0] || null;
+  }, [lyDoTuChoiTopTheoDichVu, serviceDataWithGap]);
+
+  const nhanDinhLyDoTuChoi = useMemo(() => {
+    if (!serviceRejectReasonData.length) {
+      return 'Chưa có dữ liệu lý do từ chối theo dịch vụ để đưa ra nhận định.';
+    }
+
+    if (
+      dichVuCanXuLyTheoLyDoTuChoi &&
+      Number(dichVuCanXuLyTheoLyDoTuChoi.so_luong_tu_choi || 0) >= 3
+    ) {
+      return `Dịch vụ "${dichVuCanXuLyTheoLyDoTuChoi.ten_dich_vu}" đang có lý do từ chối nổi bật là "${dichVuCanXuLyTheoLyDoTuChoi.ten_ly_do}". Đây là dịch vụ nên ưu tiên xem lại đầu tiên để giảm thất thoát cơ hội.`;
+    }
+
+    if (lyDoTuChoiPhoBienToanBo && Number(lyDoTuChoiPhoBienToanBo.so_luong_tu_choi || 0) >= 5) {
+      return `Lý do từ chối xuất hiện nhiều nhất hiện là "${lyDoTuChoiPhoBienToanBo.ten_ly_do}". Nên kiểm tra xem đây là vấn đề chung của gói dịch vụ, giá bán hay cách tư vấn hiện tại.`;
+    }
+
+    return 'Lý do từ chối hiện chưa tập trung quá mạnh vào một điểm duy nhất. Nên tiếp tục theo dõi thêm để xác định mẫu từ chối rõ hơn.';
+  }, [serviceRejectReasonData, lyDoTuChoiPhoBienToanBo, dichVuCanXuLyTheoLyDoTuChoi]);
+
   const loadServiceData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
       setTrendError(null);
+      setRejectReasonError(null);
 
       if (!supabase) {
         throw new Error('Supabase chưa được cấu hình');
@@ -553,12 +660,33 @@ const ConsultationServiceAnalytics: React.FC = () => {
         setServiceTrendData(Array.isArray(trendData) ? trendData : []);
         setTrendError(null);
       }
+
+      const { data: rejectReasonData, error: rejectReasonRpcError } = await supabase.rpc(
+        'consultation_service_rejection_reasons',
+        {
+          p_from: dateRange.from || null,
+          p_to: dateRange.to || null,
+        }
+      );
+
+      if (rejectReasonRpcError) {
+        console.warn('RPC consultation_service_rejection_reasons chưa sẵn sàng:', rejectReasonRpcError);
+        setServiceRejectReasonData([]);
+        setRejectReasonError(
+          'Chưa tải được phần lý do từ chối theo dịch vụ. Hãy tạo thêm hàm SQL consultation_service_rejection_reasons.'
+        );
+      } else {
+        setServiceRejectReasonData(Array.isArray(rejectReasonData) ? rejectReasonData : []);
+        setRejectReasonError(null);
+      }
     } catch (err: any) {
       console.error('Lỗi khi tải dữ liệu phân tích theo dịch vụ:', err);
       setError(err?.message || 'Không thể tải dữ liệu phân tích theo dịch vụ');
       setServiceData([]);
       setServiceTrendData([]);
+      setServiceRejectReasonData([]);
       setTrendError(null);
+      setRejectReasonError(null);
     } finally {
       setLoading(false);
     }
@@ -1133,6 +1261,144 @@ const ConsultationServiceAnalytics: React.FC = () => {
                         >
                           {item.muc_do_uu_tien}
                         </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+
+
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="mb-4 flex items-center gap-2">
+          <BarChart3 size={18} className="text-gray-500" />
+          <h2 className="text-base font-semibold text-gray-800">Lý do từ chối theo dịch vụ</h2>
+        </div>
+
+        {rejectReasonError && (
+          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            {rejectReasonError}
+          </div>
+        )}
+
+        {!loading && !error && !rejectReasonError && serviceRejectReasonData.length === 0 && (
+          <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-sm text-gray-500">
+            Chưa có dữ liệu lý do từ chối theo dịch vụ trong khoảng thời gian đang chọn.
+          </div>
+        )}
+
+        {!loading && !error && !rejectReasonError && serviceRejectReasonData.length > 0 && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <div className="rounded-2xl border border-red-100 bg-red-50 p-4">
+                <div className="text-sm font-semibold text-red-800">Lý do phổ biến nhất toàn bộ</div>
+                <div className="mt-2 text-lg font-bold text-gray-900">
+                  {lyDoTuChoiPhoBienToanBo?.ten_ly_do || '--'}
+                </div>
+                <div className="mt-1 text-sm text-gray-600">
+                  Số lần xuất hiện: {formatNumber(lyDoTuChoiPhoBienToanBo?.so_luong_tu_choi || 0)}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
+                <div className="text-sm font-semibold text-amber-800">Dịch vụ nên xem lại trước</div>
+                <div className="mt-2 text-lg font-bold text-gray-900">
+                  {dichVuCanXuLyTheoLyDoTuChoi?.ten_dich_vu || '--'}
+                </div>
+                <div className="mt-1 text-sm text-gray-600">
+                  Lý do chính: {dichVuCanXuLyTheoLyDoTuChoi?.ten_ly_do || '--'}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                <div className="text-sm font-semibold text-blue-800">Nhận định nhanh</div>
+                <div className="mt-2 text-sm leading-6 text-blue-900">
+                  {nhanDinhLyDoTuChoi}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              {lyDoTuChoiTopTheoDichVu.map((item) => (
+                <div
+                  key={`${item.dich_vu_id}-${item.ly_do_tu_choi_id}`}
+                  className="rounded-2xl border border-gray-200 bg-white p-4"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="text-sm font-semibold text-gray-800">{item.ten_dich_vu}</div>
+                      <div className="mt-1 text-sm text-gray-500">
+                        Lý do nổi bật: {item.ten_ly_do}
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <div className="text-sm text-gray-500">Số lượng từ chối</div>
+                      <div className="text-lg font-bold text-gray-900">
+                        {formatNumber(item.so_luong_tu_choi)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 h-3 w-full rounded-full bg-gray-200">
+                    <div
+                      className="h-3 rounded-full bg-red-500 transition-all"
+                      style={{
+                        width: `${clampPercent(item.ty_trong_tu_choi_trong_dich_vu)}%`,
+                      }}
+                    />
+                  </div>
+
+                  <div className="mt-3 text-sm text-gray-600">
+                    Chiếm <strong>{formatPercent(item.ty_trong_tu_choi_trong_dich_vu)}</strong> trong tổng số lead từ chối của dịch vụ này.
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full border-separate border-spacing-y-2">
+                <thead>
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Dịch vụ
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Lý do từ chối
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Số lượng
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Tỷ trọng trong dịch vụ
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Xếp hạng lý do
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {serviceRejectReasonData.map((item) => (
+                    <tr key={`${item.dich_vu_id}-${item.ly_do_tu_choi_id}`} className="bg-gray-50">
+                      <td className="rounded-l-xl px-4 py-3 text-sm font-medium text-gray-800">
+                        {item.ten_dich_vu}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-700">
+                        {item.ten_ly_do}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-700">
+                        {formatNumber(item.so_luong_tu_choi)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-700">
+                        {formatPercent(item.ty_trong_tu_choi_trong_dich_vu)}
+                      </td>
+                      <td className="rounded-r-xl px-4 py-3 text-right text-sm font-semibold text-gray-900">
+                        #{formatNumber(item.xep_hang_ly_do)}
                       </td>
                     </tr>
                   ))}

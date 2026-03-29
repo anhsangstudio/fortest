@@ -130,6 +130,11 @@ type MarketingDecisionRow = {
   hanh_dong: string;
 };
 
+type ExecutiveSummaryItem = {
+  tieu_de: string;
+  noi_dung: string;
+};
+
 const getToday = () => new Date().toISOString().slice(0, 10);
 
 const getFirstDayOfMonth = () => {
@@ -1215,6 +1220,107 @@ const ConsultationServiceAnalytics: React.FC = () => {
     setSelectedSourceName(serviceSourceData.length > 0 ? serviceSourceData[0].nguon_khach_hang : '');
     setSelectedAddressName(serviceAddressData.length > 0 ? serviceAddressData[0].dia_chi : '');
   };
+
+  const executiveConclusions = useMemo<ExecutiveSummaryItem[]>(() => {
+    const items: ExecutiveSummaryItem[] = [];
+
+    if (coreServiceToProtect) {
+      items.push({
+        tieu_de: 'Dịch vụ chủ lực đang giữ tốt thị trường',
+        noi_dung: `${coreServiceToProtect.ten_dich_vu} hiện nằm trong nhóm nhu cầu cao và chốt tốt, chiếm ${formatPercent(
+          coreServiceToProtect.ty_trong_nhu_cau
+        )} nhu cầu và chốt ${formatPercent(coreServiceToProtect.ty_le_chot)}.`,
+      });
+    }
+
+    if (serviceNeedPackageFixMost) {
+      items.push({
+        tieu_de: 'Có một dịch vụ đang hút nhu cầu nhưng chuyển đổi còn yếu',
+        noi_dung: `${serviceNeedPackageFixMost.ten_dich_vu} đang có ${formatNumber(
+          serviceNeedPackageFixMost.tong_lead
+        )} lead nhưng mới chốt ${formatPercent(
+          serviceNeedPackageFixMost.ty_le_chot
+        )}, cần ưu tiên xử lý như một điểm nghẽn kinh doanh.`,
+      });
+    }
+
+    if (fastestGrowingService) {
+      items.push({
+        tieu_de: 'Xu hướng thị trường đang dịch chuyển rõ',
+        noi_dung: `${fastestGrowingService.ten_dich_vu} đang tăng ${formatPercent(
+          fastestGrowingService.tang_truong_lead_so_voi_thang_truoc
+        )} lead so với tháng trước và cần được theo dõi sát trong các chiến dịch sắp tới.`,
+      });
+    }
+
+    return items.slice(0, 5);
+  }, [coreServiceToProtect, serviceNeedPackageFixMost, fastestGrowingService]);
+
+  const executiveActions = useMemo<ExecutiveSummaryItem[]>(() => {
+    return businessActionItems.slice(0, 5).map((item) => ({
+      tieu_de: item.tieu_de,
+      noi_dung: item.noi_dung,
+    }));
+  }, [businessActionItems]);
+
+  const executiveRisks = useMemo<ExecutiveSummaryItem[]>(() => {
+    const items: ExecutiveSummaryItem[] = [];
+
+    if (serviceNeedPackageFixMost) {
+      const topReason = serviceTopReasonMap.get(serviceNeedPackageFixMost.dich_vu_id);
+      items.push({
+        tieu_de: 'Rủi ro mất nhu cầu ở dịch vụ quan trọng',
+        noi_dung: topReason
+          ? `${serviceNeedPackageFixMost.ten_dich_vu} đang mất nhiều cơ hội và lý do từ chối nổi bật là "${topReason.ten_ly_do}".`
+          : `${serviceNeedPackageFixMost.ten_dich_vu} đang mất nhiều cơ hội và cần xem lại gói dịch vụ, giá trị và quy trình chốt.`,
+      });
+    }
+
+    if (fastestDroppingService && Number(fastestDroppingService.tang_truong_lead_so_voi_thang_truoc || 0) < 0) {
+      items.push({
+        tieu_de: 'Rủi ro giảm nhu cầu theo thời gian',
+        noi_dung: `${fastestDroppingService.ten_dich_vu} đang giảm ${formatPercent(
+          Math.abs(Number(fastestDroppingService.tang_truong_lead_so_voi_thang_truoc || 0))
+        )} lead so với tháng trước.`,
+      });
+    }
+
+    if (serviceNeedTrainingMost) {
+      items.push({
+        tieu_de: 'Rủi ro lệch năng lực sale theo dịch vụ',
+        noi_dung: `${serviceNeedTrainingMost.ten_dich_vu} đang có chênh lệch ${formatPercent(
+          serviceNeedTrainingMost.gap
+        )} giữa người làm tốt nhất và người yếu nhất.`,
+      });
+    }
+
+    if (sourceNeedFixMost) {
+      items.push({
+        tieu_de: 'Rủi ro đốt nguồn khách chưa hiệu quả',
+        noi_dung: `Nguồn "${sourceNeedFixMost.nguon_khach_hang}" đang mang lead cho "${sourceNeedFixMost.ten_dich_vu}" nhưng tỷ lệ chốt mới đạt ${formatPercent(
+          sourceNeedFixMost.ty_le_chot
+        )}.`,
+      });
+    }
+
+    if (addressNeedFixMost) {
+      items.push({
+        tieu_de: 'Rủi ro lệch phù hợp theo khu vực',
+        noi_dung: `Khu vực "${addressNeedFixMost.dia_chi}" đang có nhu cầu cho "${addressNeedFixMost.ten_dich_vu}" nhưng chốt chỉ đạt ${formatPercent(
+          addressNeedFixMost.ty_le_chot
+        )}.`,
+      });
+    }
+
+    return items.slice(0, 5);
+  }, [
+    serviceNeedPackageFixMost,
+    serviceTopReasonMap,
+    fastestDroppingService,
+    serviceNeedTrainingMost,
+    sourceNeedFixMost,
+    addressNeedFixMost,
+  ]);
 
   useEffect(() => {
     loadData();

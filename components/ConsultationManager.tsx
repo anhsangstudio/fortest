@@ -1151,6 +1151,7 @@ const ConsultationManager: React.FC = () => {
   const maxSourceBreakdown = sourceBreakdown[0]?.rate || 0;
   const maxAddressBreakdown = addressBreakdown[0]?.rate || 0;
   const maxMonthlyLead = Math.max(...monthlyLeadSeries.map((item) => item.total), 0);
+  const totalMonthlyLead = monthlyLeadSeries.reduce((sum, item) => sum + item.total, 0);
   const maxDailyLead = Math.max(...dailyLeadSeries.map((item) => item.total), 0);
   const wonLeadCount =
     reportSummary.funnel.find((item) => item.label === 'Đã chốt')?.total || 0;
@@ -1647,21 +1648,35 @@ const ConsultationManager: React.FC = () => {
                       Chưa có dữ liệu lead theo tháng.
                     </div>
                   ) : (
-                    <div className="mt-5 space-y-3">
-                      {monthlyLeadSeries.map((item) => (
-                        <div key={item.label} className="rounded-2xl border border-gray-200 bg-white p-4">
-                          <div className="mb-2 flex items-center justify-between text-sm">
-                            <span className="font-semibold text-gray-900">{item.label}</span>
-                            <span className="font-bold text-gray-700">{item.total.toLocaleString('vi-VN')}</span>
-                          </div>
-                          <div className="h-2 overflow-hidden rounded-full bg-gray-100">
-                            <div
-                              className="h-full rounded-full bg-sky-500 transition-all"
-                              style={{ width: `${Math.min(maxMonthlyLead > 0 ? (item.total / maxMonthlyLead) * 100 : 0, 100)}%` }}
-                            />
-                          </div>
-                        </div>
-                      ))}
+                    <div className="mt-5 rounded-2xl border border-sky-100 bg-white p-4">
+                      <div className="grid grid-cols-12 gap-3 items-end min-h-[320px]">
+                        {monthlyLeadSeries.map((item) => {
+                          const barHeight = maxMonthlyLead > 0 ? (item.total / maxMonthlyLead) * 220 : 0;
+                          const rate = totalMonthlyLead > 0 ? (item.total / totalMonthlyLead) * 100 : 0;
+
+                          return (
+                            <div key={item.label} className="flex flex-col items-center justify-end h-full">
+                              <div className="text-[11px] font-semibold text-sky-700 mb-2">
+                                {item.total}
+                              </div>
+
+                              <div
+                                className="w-full max-w-[44px] rounded-t-xl bg-sky-500 transition-all"
+                                style={{ height: `${Math.max(barHeight, item.total > 0 ? 16 : 4)}px` }}
+                                title={`${item.label}: ${item.total} lead - ${rate.toFixed(1)}%`}
+                              />
+
+                              <div className="mt-3 text-[11px] font-bold text-gray-700">
+                                {item.label}
+                              </div>
+
+                              <div className="mt-1 text-[10px] text-gray-500">
+                                {rate.toFixed(1)}%
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                 </div>

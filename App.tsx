@@ -252,6 +252,10 @@ export default function App() {
                  icon={BarChart3} label="Phân tích sale" id="consultation_sales_analytics"  activeTab={activeTab} setActiveTab={setActiveTab}
                  visible={true}
                />
+               <SidebarItem 
+                 icon={BarChart3} label="Phân tích dịch vụ" id="consultation_service_analytics" activeTab={activeTab} setActiveTab={setActiveTab}
+                 visible={true}
+               />
 				
                <SidebarItem 
                   icon={DollarSign} label="Thu & Chi" id="finance" activeTab={activeTab} setActiveTab={setActiveTab} 
@@ -307,7 +311,7 @@ export default function App() {
                   {activeTab === 'schedule' && 'Lịch làm việc'}
 				  {activeTab === 'consultation' && 'Nhật ký tư vấn'}
 				  {activeTab === 'consultation_sales_analytics' && 'Phân Tích Hiệu Suất Sale Nâng Cao'}
-				  {activeTab === 'consultation_service_analytics' && 'Phân Tích Dịch Vụ'}
+                  {activeTab === 'consultation_service_analytics' && 'Phân Tích Dịch Vụ'}
                   {activeTab === 'finance' && 'Quản lý Tài chính'}
                   {activeTab === 'payroll' && 'Bảng lương nhân sự'}
                   {activeTab === 'staff' && 'Danh sách nhân viên'}

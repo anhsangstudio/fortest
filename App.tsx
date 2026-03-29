@@ -14,6 +14,7 @@ import StudioSettings from './components/StudioSettings';
 import TaskManager from './components/TaskManager';
 import ConsultationManager from './components/ConsultationManager';
 import ConsultationSalesAnalytics from './components/ConsultationSalesAnalytics';
+import ConsultationServiceAnalytics from './components/ConsultationServiceAnalytics';
 import { 
   Contract, Customer, Staff, Service, Transaction, Schedule, 
   Task, StudioInfo, ExpenseCategoryItem, ServiceTypeItem, ServiceGroupItem 
@@ -306,6 +307,7 @@ export default function App() {
                   {activeTab === 'schedule' && 'Lịch làm việc'}
 				  {activeTab === 'consultation' && 'Nhật ký tư vấn'}
 				  {activeTab === 'consultation_sales_analytics' && 'Phân Tích Hiệu Suất Sale Nâng Cao'}
+				  {activeTab === 'consultation_service_analytics' && 'Phân Tích Dịch Vụ'}
                   {activeTab === 'finance' && 'Quản lý Tài chính'}
                   {activeTab === 'payroll' && 'Bảng lương nhân sự'}
                   {activeTab === 'staff' && 'Danh sách nhân viên'}
@@ -352,6 +354,9 @@ export default function App() {
             )}
 			{activeTab === 'consultation_sales_analytics' && (
               <ConsultationSalesAnalytics />
+            )}
+            {activeTab === 'consultation_service_analytics' && (
+              <ConsultationServiceAnalytics />
             )}
             {((activeTab === 'finance' && canAccess('finance')) || activeTab === 'quick_expense') && (
               <ExpenseManager 

@@ -58,10 +58,6 @@ const ConsultationManager: React.FC = () => {
   const [wonServiceMonthly, setWonServiceMonthly] = useState<
     Array<{ service_label: string; monthly_totals: Array<{ month: number; total: number }>; total: number }>
   >([]);
-
-  const [serviceInterestMonthly, setServiceInterestMonthly] = useState<
-    Array<{ service_label: string; monthly_totals: Array<{ month: number; total: number }>; total: number }>
-  >([]);
   
   
   const today = new Date().toISOString().slice(0, 10);
@@ -256,20 +252,25 @@ const ConsultationManager: React.FC = () => {
     }
   }, [reportYear]);
 
-  const loadServiceInterestMonthly = useCallback(async () => {
-    try {
-      const { data, error } = await supabase.rpc('consultation_report_service_interest_monthly', {
-        p_year: reportYear,
-      });
-
-      if (error) throw error;
-
-      setServiceInterestMonthly(Array.isArray(data) ? data : []);
-    } catch (err: any) {
-      console.error('Lỗi khi tải bảng lead quan tâm theo dịch vụ từng tháng:', err);
-      setServiceInterestMonthly([]);
-    }
-  }, [reportYear]);
+  const loadAllReportData = useCallback(async () => {
+    await Promise.all([
+      loadReportSummary(),
+      loadServiceBreakdown(),
+      loadSourceBreakdown(),
+      loadAddressBreakdown(),
+      loadMonthlyLeadSeries(),
+      loadDailyLeadSeries(),
+      loadWonServiceMonthly(),
+    ]);
+  }, [
+    loadReportSummary,
+    loadServiceBreakdown,
+    loadSourceBreakdown,
+    loadAddressBreakdown,
+    loadMonthlyLeadSeries,
+    loadDailyLeadSeries,
+    loadWonServiceMonthly,
+  ]);
 
 
   const loadData = useCallback(async () => {
@@ -354,25 +355,8 @@ const ConsultationManager: React.FC = () => {
 
   useEffect(() => {
     loadData();
-    loadReportSummary();
-    loadServiceBreakdown();
-    loadSourceBreakdown();
-    loadAddressBreakdown();
-    loadMonthlyLeadSeries();
-    loadDailyLeadSeries();
-    loadWonServiceMonthly();
-    loadServiceInterestMonthly();
-  }, [
-    loadData,
-    loadReportSummary,
-    loadServiceBreakdown,
-    loadSourceBreakdown,
-    loadAddressBreakdown,
-    loadMonthlyLeadSeries,
-    loadDailyLeadSeries,
-    loadWonServiceMonthly,
-    loadServiceInterestMonthly,
-  ]);
+    loadAllReportData();
+  }, [loadData, loadAllReportData]);
   
   useEffect(() => {
     const nextMap: Record<string, string> = {};
@@ -1180,143 +1164,6 @@ const ConsultationManager: React.FC = () => {
       ? (reportSummary.total_pipeline_value / reportTargets.pipeline_value) * 100
       : 0;
 
-
-  const totalMonthlyLeads = monthlyLeadSeries.reduce((sum, item) => sum + item.total, 0);
-  const totalDailyLeads = dailyLeadSeries.reduce((sum, item) => sum + item.total, 0);
-
-  const monthlyLeadRateSeries = monthlyLeadSeries.map((item) => ({
-    ...item,
-    rate: totalMonthlyLeads > 0 ? (item.total / totalMonthlyLeads) * 100 : 0,
-    height: maxMonthlyLead > 0 ? (item.total / maxMonthlyLead) * 100 : 0,
-  }));
-
-  const dailyLeadRateSeries = dailyLeadSeries.map((item) => ({
-    ...item,
-    rate: totalDailyLeads > 0 ? (item.total / totalDailyLeads) * 100 : 0,
-    height: maxDailyLead > 0 ? (item.total / maxDailyLead) * 100 : 0,
-  }));
-
-  const monthlyWonLeadSeries = Array.from({ length: 12 }, (_, index) => {
-    const month = index + 1;
-    const total = wonServiceMonthly.reduce((sum, row) => {
-      const found = row.monthly_totals.find((item) => item.month === month);
-      return sum + (found?.total || 0);
-    }, 0);
-
-    return {
-      label: `T${month}`,
-      total,
-    };
-  });
-
-  const distributeAnnualTarget = (annualTarget: number) => {
-    const base = Math.floor(annualTarget / 12);
-    let remainder = annualTarget - base * 12;
-
-    return Array.from({ length: 12 }, () => {
-      const value = base + (remainder > 0 ? 1 : 0);
-      if (remainder > 0) remainder -= 1;
-      return value;
-    });
-  };
-
-  const monthlyLeadTargets = distributeAnnualTarget(reportTargets.total_leads);
-  const monthlyWonTargets = distributeAnnualTarget(reportTargets.won_leads);
-
-  const monthlyTargetRows = [
-    {
-      label: 'Số lead cần đạt trong tháng',
-      values: monthlyLeadTargets,
-      total: monthlyLeadTargets.reduce((sum, item) => sum + item, 0),
-      colorClass: 'bg-blue-50 text-blue-700',
-    },
-    {
-      label: 'Số lead đã đạt được',
-      values: monthlyLeadSeries.map((item) => item.total),
-      total: monthlyLeadSeries.reduce((sum, item) => sum + item.total, 0),
-      colorClass: 'bg-emerald-50 text-emerald-700',
-    },
-    {
-      label: 'Số lead cần chốt được',
-      values: monthlyWonTargets,
-      total: monthlyWonTargets.reduce((sum, item) => sum + item, 0),
-      colorClass: 'bg-amber-50 text-amber-700',
-    },
-    {
-      label: 'Số lead đã chốt',
-      values: monthlyWonLeadSeries.map((item) => item.total),
-      total: monthlyWonLeadSeries.reduce((sum, item) => sum + item.total, 0),
-      colorClass: 'bg-violet-50 text-violet-700',
-    },
-    {
-      label: 'Kết quả',
-      values: monthlyLeadSeries.map((item, index) => item.total >= monthlyLeadTargets[index] ? 'Đạt' : 'Chưa đạt'),
-      total: monthlyLeadSeries.reduce((sum, item) => sum + item.total, 0) >= monthlyLeadTargets.reduce((sum, item) => sum + item, 0) ? 'Đạt' : 'Chưa đạt',
-      colorClass: 'bg-rose-50 text-rose-700',
-    },
-  ];
-
-  const normalizeMonthlyServiceRows = (
-    rows: Array<{ service_label: string; monthly_totals: Array<{ month: number; total: number }>; total: number }>
-  ) => {
-    return masterData.services.map((service) => {
-      const found = rows.find((row) => row.service_label === service.ten_dich_vu);
-      const monthlyTotals = Array.from({ length: 12 }, (_, index) => {
-        const month = index + 1;
-        const monthValue = found?.monthly_totals.find((item) => item.month === month)?.total || 0;
-        return { month, total: monthValue };
-      });
-
-      return {
-        service_label: service.ten_dich_vu,
-        monthly_totals: monthlyTotals,
-        total: monthlyTotals.reduce((sum, item) => sum + item.total, 0),
-      };
-    });
-  };
-
-  const normalizedServiceInterestMonthly = normalizeMonthlyServiceRows(serviceInterestMonthly);
-  const normalizedWonServiceMonthly = normalizeMonthlyServiceRows(wonServiceMonthly);
-
-  const detailColumns = [
-    {
-      key: 'funnel',
-      title: 'Funnel cơ bản',
-      subtitle: 'Theo dõi lead theo từng giai đoạn xử lý.',
-      tone: 'from-blue-50 to-blue-100/60 border-blue-200',
-      barClass: 'bg-blue-500',
-      items: funnelWithRate.map((item) => ({
-        label: item.label,
-        total: item.total,
-        rate: item.rate,
-      })),
-    },
-    {
-      key: 'service',
-      title: 'Mức độ quan tâm dịch vụ',
-      subtitle: 'Dịch vụ khách hỏi nhiều nhất trong kỳ.',
-      tone: 'from-emerald-50 to-emerald-100/60 border-emerald-200',
-      barClass: 'bg-emerald-500',
-      items: serviceBreakdown,
-    },
-    {
-      key: 'source',
-      title: 'Số lượng lead theo nguồn khách hàng',
-      subtitle: 'Kênh nào đang tạo lead nhiều hơn.',
-      tone: 'from-amber-50 to-amber-100/60 border-amber-200',
-      barClass: 'bg-amber-500',
-      items: sourceBreakdown,
-    },
-    {
-      key: 'address',
-      title: 'Số lượng lead theo địa chỉ',
-      subtitle: 'Khu vực nào đang phát sinh lead.',
-      tone: 'from-violet-50 to-violet-100/60 border-violet-200',
-      barClass: 'bg-violet-500',
-      items: addressBreakdown,
-    },
-  ];
-
   return (
     <div className="p-6 space-y-4">
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
@@ -1428,17 +1275,7 @@ const ConsultationManager: React.FC = () => {
               <div className="flex items-end">
                 <button
                   type="button"
-                  onClick={() => {
-                    loadReportSummary();
-                    loadServiceBreakdown();
-                    loadSourceBreakdown();
-                    loadAddressBreakdown();
-                    loadMonthlyLeadSeries();
-                    loadDailyLeadSeries();
-                    loadWonServiceMonthly();
-                    loadServiceInterestMonthly();
-                    loadServiceInterestMonthly();
-                  }}
+                  onClick={loadAllReportData}
                   className="w-full rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
                 >
                   Xem báo cáo
@@ -1519,7 +1356,6 @@ const ConsultationManager: React.FC = () => {
           </div>
         </div>
 
-        
         <div className="rounded-[28px] border border-gray-200 bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between gap-4 border-b border-gray-100 pb-4">
             <div>
@@ -1527,7 +1363,7 @@ const ConsultationManager: React.FC = () => {
                 Chi tiết phân tích lead
               </div>
               <div className="mt-1 text-sm font-medium text-gray-500">
-                Tổng hợp các lớp chỉ số vận hành, nguồn lead và hiệu suất dịch vụ theo dạng dashboard trực quan.
+                Sắp xếp lại dashboard theo nhóm chỉ số để đọc nhanh và trực quan hơn.
               </div>
             </div>
             <div className="rounded-2xl bg-gray-50 px-4 py-3 text-right">
@@ -1540,279 +1376,481 @@ const ConsultationManager: React.FC = () => {
             </div>
           </div>
 
-          <div className="mt-6 space-y-8">
-            <div>
-              <div className="mb-4 flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-bold text-gray-900">Phần 1. Tổng quan lead theo 4 nhóm chỉ số</h3>
-                  <p className="mt-1 text-sm text-gray-500">
-                    Mỗi cột thể hiện một nhóm insight khác nhau, dùng cùng ngôn ngữ hiển thị để đọc và so sánh nhanh.
-                  </p>
+          <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-12">
+            <div className="xl:col-span-4">
+              <div className="rounded-[24px] border border-gray-200 bg-gray-50/60 p-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-base font-bold text-gray-900">Funnel cơ bản</h3>
+                    <p className="mt-1 text-sm text-gray-500">Diễn biến lead theo từng giai đoạn xử lý.</p>
+                  </div>
+                  <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-500 shadow-sm">
+                    {reportSummary.funnel.length} bước
+                  </span>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
-                {detailColumns.map((column) => (
-                  <div
-                    key={column.key}
-                    className={`rounded-[24px] border bg-gradient-to-b p-4 shadow-sm ${column.tone}`}
-                  >
-                    <div className="mb-4">
-                      <div className="text-sm font-bold text-gray-900">{column.title}</div>
-                      <div className="mt-1 text-xs text-gray-500">{column.subtitle}</div>
-                    </div>
-
-                    {column.items.length === 0 ? (
-                      <div className="rounded-2xl border border-dashed border-gray-300 bg-white/70 px-4 py-6 text-sm text-gray-500">
-                        Chưa có dữ liệu trong kỳ đã chọn.
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {column.items.map((item) => (
-                          <div key={`${column.key}-${item.label}`} className="rounded-2xl bg-white/95 px-3 py-3 shadow-sm ring-1 ring-black/5">
-                            <div className="mb-3 h-2 overflow-hidden rounded-full bg-gray-100">
-                              <div
-                                className={`h-full rounded-full transition-all ${column.barClass}`}
-                                style={{ width: `${Math.min(item.rate, 100)}%` }}
-                              />
+                {reportSummary.funnel.length === 0 ? (
+                  <div className="mt-4 text-sm text-gray-500">
+                    Chưa có dữ liệu funnel trong khoảng thời gian này.
+                  </div>
+                ) : (
+                  <div className="mt-5 space-y-3">
+                    {funnelWithRate.map((item) => (
+                      <div key={item.label} className="rounded-2xl border border-gray-200 bg-white p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">
+                              Giai đoạn
                             </div>
-
-                            <div className="grid grid-cols-12 items-center gap-2 text-sm">
-                              <div className="col-span-6 min-w-0">
-                                <div className="truncate font-semibold text-gray-900">{item.label}</div>
-                              </div>
-                              <div className="col-span-3 text-right font-bold text-gray-900">
-                                {item.total.toLocaleString('vi-VN')}
-                              </div>
-                              <div className="col-span-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                {item.rate.toFixed(1)}%
-                              </div>
+                            <div className="mt-1 text-sm font-semibold text-gray-900">{item.label}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-xl font-extrabold text-gray-900">
+                              {item.total.toLocaleString('vi-VN')}
+                            </div>
+                            <div className="text-xs font-medium text-gray-500">
+                              {item.rate.toFixed(1)}%
                             </div>
                           </div>
-                        ))}
+                        </div>
+                        <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-100">
+                          <div
+                            className="h-full rounded-full bg-blue-500 transition-all"
+                            style={{ width: `${Math.min(item.rate, 100)}%` }}
+                          />
+                        </div>
                       </div>
-                    )}
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
             </div>
 
-            <div>
-              <div className="mb-4">
-                <h3 className="text-lg font-bold text-gray-900">Phần 2. Báo cáo tăng trưởng, chỉ tiêu và hiệu suất dịch vụ</h3>
-                <p className="mt-1 text-sm text-gray-500">
-                  Các bảng bên dưới giúp theo dõi tăng trưởng lead, kết quả mục tiêu và mức độ quan tâm/chốt theo từng dịch vụ.
-                </p>
+            <div className="xl:col-span-8 space-y-6">
+              <div className="rounded-[24px] border border-gray-200 bg-gray-50/60 p-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-base font-bold text-gray-900">Breakdown theo tình trạng</h3>
+                    <p className="mt-1 text-sm text-gray-500">Đo mức tập trung pipeline theo từng trạng thái.</p>
+                  </div>
+                  <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-500 shadow-sm">
+                    {sortedStatusBreakdown.length} nhóm
+                  </span>
+                </div>
+
+                {sortedStatusBreakdown.length === 0 ? (
+                  <div className="mt-4 text-sm text-gray-500">
+                    Chưa có dữ liệu theo tình trạng trong khoảng thời gian này.
+                  </div>
+                ) : (
+                  <div className="mt-5 overflow-hidden rounded-2xl border border-gray-200 bg-white">
+                    <div className="grid grid-cols-12 bg-gray-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">
+                      <div className="col-span-1">#</div>
+                      <div className="col-span-5">Tình trạng</div>
+                      <div className="col-span-2 text-right">SL</div>
+                      <div className="col-span-2 text-right">Tỷ lệ</div>
+                      <div className="col-span-2 text-right">Đánh giá</div>
+                    </div>
+                    <div className="divide-y divide-gray-100">
+                      {sortedStatusBreakdown.map((item, index) => {
+                        const rate = totalLeads > 0 ? (item.total / totalLeads) * 100 : 0;
+                        const width = maxStatusTotal > 0 ? (item.total / maxStatusTotal) * 100 : 0;
+
+                        return (
+                          <div key={item.label} className="grid grid-cols-12 items-center px-4 py-4">
+                            <div className="col-span-1">
+                              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-50 text-xs font-bold text-blue-600">
+                                {index + 1}
+                              </div>
+                            </div>
+                            <div className="col-span-5 pr-4">
+                              <div className="text-sm font-semibold text-gray-900">{item.label}</div>
+                              <div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-100">
+                                <div
+                                  className="h-full rounded-full bg-blue-500 transition-all"
+                                  style={{ width: `${Math.min(width, 100)}%` }}
+                                />
+                              </div>
+                            </div>
+                            <div className="col-span-2 text-right text-base font-bold text-gray-900">
+                              {item.total.toLocaleString('vi-VN')}
+                            </div>
+                            <div className="col-span-2 text-right text-sm font-medium text-gray-500">
+                              {rate.toFixed(1)}%
+                            </div>
+                            <div className="col-span-2 flex justify-end">
+                              <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                                rate >= 50
+                                  ? 'bg-emerald-50 text-emerald-600'
+                                  : rate >= 20
+                                  ? 'bg-amber-50 text-amber-600'
+                                  : 'bg-gray-100 text-gray-600'
+                              }`}>
+                                {rate >= 50 ? 'Cao' : rate >= 20 ? 'TB' : 'Thấp'}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="space-y-5">
-                <div className="rounded-[24px] border border-sky-200 bg-sky-50/60 p-5">
-                  <div className="flex items-center justify-between gap-4">
+              <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                <div className="rounded-[24px] border border-gray-200 bg-gray-50/60 p-5">
+                  <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-base font-bold text-gray-900">1. Số lead theo tháng trong năm</h3>
-                      <p className="mt-1 text-sm text-gray-500">Theo dõi nhịp tăng trưởng lead theo từng tháng.</p>
+                      <h3 className="text-base font-bold text-gray-900">Mức độ quan tâm dịch vụ</h3>
+                      <p className="mt-1 text-sm text-gray-500">Xếp hạng dịch vụ được khách hỏi nhiều nhất.</p>
                     </div>
-                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-sky-700 shadow-sm">
-                      Năm {reportYear}
+                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-500 shadow-sm">
+                      {serviceBreakdown.length} dịch vụ
                     </span>
                   </div>
 
-                  {monthlyLeadRateSeries.length === 0 ? (
-                    <div className="mt-4 rounded-2xl bg-white px-4 py-6 text-sm text-gray-500">
+                  {serviceBreakdown.length === 0 ? (
+                    <div className="mt-4 text-sm text-gray-500">
+                      Chưa có dữ liệu dịch vụ trong khoảng thời gian này.
+                    </div>
+                  ) : (
+                    <div className="mt-5 space-y-3">
+                      {serviceBreakdown.map((item, index) => (
+                        <div key={item.label} className="rounded-2xl border border-gray-200 bg-white p-4">
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex min-w-0 items-center gap-3">
+                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-sm font-bold text-blue-600">
+                                {index + 1}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-semibold text-gray-900">{item.label}</div>
+                                <div className="mt-1 text-xs text-gray-500">{item.total.toLocaleString('vi-VN')} lead</div>
+                              </div>
+                            </div>
+                            <div className="text-sm font-bold text-gray-900">{item.rate.toFixed(1)}%</div>
+                          </div>
+                          <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-100">
+                            <div
+                              className="h-full rounded-full bg-blue-500 transition-all"
+                              style={{ width: `${Math.min(maxServiceBreakdown > 0 ? (item.rate / maxServiceBreakdown) * 100 : 0, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-[24px] border border-gray-200 bg-gray-50/60 p-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-base font-bold text-gray-900">Nguồn khách hàng</h3>
+                      <p className="mt-1 text-sm text-gray-500">So sánh hiệu quả tạo lead theo nguồn.</p>
+                    </div>
+                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-500 shadow-sm">
+                      {sourceBreakdown.length} nguồn
+                    </span>
+                  </div>
+
+                  {sourceBreakdown.length === 0 ? (
+                    <div className="mt-4 text-sm text-gray-500">
+                      Chưa có dữ liệu nguồn khách hàng trong khoảng thời gian này.
+                    </div>
+                  ) : (
+                    <div className="mt-5 space-y-3">
+                      {sourceBreakdown.map((item, index) => (
+                        <div key={item.label} className="rounded-2xl border border-gray-200 bg-white p-4">
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex min-w-0 items-center gap-3">
+                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-sm font-bold text-emerald-600">
+                                {index + 1}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-semibold text-gray-900">{item.label}</div>
+                                <div className="mt-1 text-xs text-gray-500">{item.total.toLocaleString('vi-VN')} lead</div>
+                              </div>
+                            </div>
+                            <div className="text-sm font-bold text-gray-900">{item.rate.toFixed(1)}%</div>
+                          </div>
+                          <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-100">
+                            <div
+                              className="h-full rounded-full bg-emerald-500 transition-all"
+                              style={{ width: `${Math.min(maxSourceBreakdown > 0 ? (item.rate / maxSourceBreakdown) * 100 : 0, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-[24px] border border-gray-200 bg-gray-50/60 p-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-base font-bold text-gray-900">Lead theo địa chỉ</h3>
+                      <p className="mt-1 text-sm text-gray-500">Xem khu vực nào đang tạo ra nhiều lead hơn.</p>
+                    </div>
+                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-500 shadow-sm">
+                      {addressBreakdown.length} địa chỉ
+                    </span>
+                  </div>
+
+                  {addressBreakdown.length === 0 ? (
+                    <div className="mt-4 text-sm text-gray-500">
+                      Chưa có dữ liệu địa chỉ trong khoảng thời gian này.
+                    </div>
+                  ) : (
+                    <div className="mt-5 space-y-3">
+                      {addressBreakdown.map((item, index) => (
+                        <div key={item.label} className="rounded-2xl border border-gray-200 bg-white p-4">
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex min-w-0 items-center gap-3">
+                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-50 text-sm font-bold text-violet-600">
+                                {index + 1}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-semibold text-gray-900">{item.label}</div>
+                                <div className="mt-1 text-xs text-gray-500">{item.total.toLocaleString('vi-VN')} lead</div>
+                              </div>
+                            </div>
+                            <div className="text-sm font-bold text-gray-900">{item.rate.toFixed(1)}%</div>
+                          </div>
+                          <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-100">
+                            <div
+                              className="h-full rounded-full bg-violet-500 transition-all"
+                              style={{ width: `${Math.min(maxAddressBreakdown > 0 ? (item.rate / maxAddressBreakdown) * 100 : 0, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-[24px] border border-gray-200 bg-gray-50/60 p-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-base font-bold text-gray-900">Lead theo tháng năm {reportYear}</h3>
+                      <p className="mt-1 text-sm text-gray-500">Theo dõi nhịp tăng trưởng lead theo từng tháng.</p>
+                    </div>
+                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-500 shadow-sm">
+                      12 tháng
+                    </span>
+                  </div>
+
+                  {monthlyLeadSeries.length === 0 ? (
+                    <div className="mt-4 text-sm text-gray-500">
                       Chưa có dữ liệu lead theo tháng.
                     </div>
                   ) : (
-                    <div className="mt-6 overflow-x-auto">
-                      <div className="flex min-w-[860px] items-end gap-3 rounded-2xl bg-white p-5">
-                        {monthlyLeadRateSeries.map((item) => (
-                          <div key={item.label} className="flex w-full min-w-[60px] flex-col items-center">
-                            <div className="mb-2 text-sm font-bold text-gray-900">
-                              {item.total.toLocaleString('vi-VN')}
-                            </div>
-                            <div className="flex h-56 w-full items-end rounded-2xl bg-sky-50 px-2 py-2">
-                              <div
-                                className="w-full rounded-xl bg-sky-500 transition-all"
-                                style={{ height: `${Math.max(item.height, item.total > 0 ? 8 : 0)}%` }}
-                              />
-                            </div>
-                            <div className="mt-3 text-sm font-semibold text-gray-900">{item.label}</div>
-                            <div className="mt-1 text-xs font-medium text-gray-500">{item.rate.toFixed(1)}%</div>
+                    <div className="mt-5 space-y-3">
+                      {monthlyLeadSeries.map((item) => (
+                        <div key={item.label} className="rounded-2xl border border-gray-200 bg-white p-4">
+                          <div className="mb-2 flex items-center justify-between text-sm">
+                            <span className="font-semibold text-gray-900">{item.label}</span>
+                            <span className="font-bold text-gray-700">{item.total.toLocaleString('vi-VN')}</span>
                           </div>
-                        ))}
-                      </div>
+                          <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                            <div
+                              className="h-full rounded-full bg-sky-500 transition-all"
+                              style={{ width: `${Math.min(maxMonthlyLead > 0 ? (item.total / maxMonthlyLead) * 100 : 0, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
+              </div>
 
-                <div className="rounded-[24px] border border-cyan-200 bg-cyan-50/60 p-5">
-                  <div className="flex items-center justify-between gap-4">
+              <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                <div className="rounded-[24px] border border-gray-200 bg-gray-50/60 p-5">
+                  <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-base font-bold text-gray-900">2. Số lead theo ngày trong kỳ đã chọn</h3>
-                      <p className="mt-1 text-sm text-gray-500">Theo dõi nhịp tăng trưởng lead theo từng ngày trong tháng đang xem.</p>
+                      <h3 className="text-base font-bold text-gray-900">
+                        Lead theo ngày {String(reportMonth).padStart(2, '0')}/{reportYear}
+                      </h3>
+                      <p className="mt-1 text-sm text-gray-500">Nhìn chi tiết nhịp lead từng ngày trong tháng.</p>
                     </div>
-                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-cyan-700 shadow-sm">
-                      {String(reportMonth).padStart(2, '0')}/{reportYear}
+                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-500 shadow-sm">
+                      {dailyLeadSeries.length} ngày
                     </span>
                   </div>
 
-                  {dailyLeadRateSeries.length === 0 ? (
-                    <div className="mt-4 rounded-2xl bg-white px-4 py-6 text-sm text-gray-500">
-                      Chưa có dữ liệu lead theo ngày trong kỳ đã chọn.
+                  {dailyLeadSeries.length === 0 ? (
+                    <div className="mt-4 text-sm text-gray-500">
+                      Chưa có dữ liệu lead theo ngày trong tháng.
                     </div>
                   ) : (
-                    <div className="mt-6 overflow-x-auto">
-                      <div className="flex min-w-[1100px] items-end gap-2 rounded-2xl bg-white p-5">
-                        {dailyLeadRateSeries.map((item) => (
-                          <div key={item.label} className="flex w-full min-w-[26px] flex-col items-center">
-                            <div className="mb-2 text-[11px] font-bold text-gray-900">
-                              {item.total.toLocaleString('vi-VN')}
-                            </div>
-                            <div className="flex h-56 w-full items-end rounded-xl bg-cyan-50 px-1.5 py-1.5">
-                              <div
-                                className="w-full rounded-lg bg-cyan-500 transition-all"
-                                style={{ height: `${Math.max(item.height, item.total > 0 ? 6 : 0)}%` }}
-                              />
-                            </div>
-                            <div className="mt-2 text-[11px] font-semibold text-gray-900">{item.label}</div>
-                            <div className="mt-1 text-[10px] font-medium text-gray-500">{item.rate.toFixed(1)}%</div>
+                    <div className="mt-5 max-h-[520px] space-y-2 overflow-y-auto pr-1">
+                      {dailyLeadSeries.map((item) => (
+                        <div key={item.label} className="rounded-2xl border border-gray-200 bg-white px-4 py-3">
+                          <div className="mb-2 flex items-center justify-between text-sm">
+                            <span className="font-semibold text-gray-900">{item.label}</span>
+                            <span className="font-bold text-gray-700">{item.total.toLocaleString('vi-VN')}</span>
                           </div>
-                        ))}
-                      </div>
+                          <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                            <div
+                              className="h-full rounded-full bg-cyan-500 transition-all"
+                              style={{ width: `${Math.min(maxDailyLead > 0 ? (item.total / maxDailyLead) * 100 : 0, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
 
-                <div className="rounded-[24px] border border-amber-200 bg-amber-50/60 p-5">
+                <div className="rounded-[24px] border border-gray-200 bg-gray-50/60 p-5">
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <h3 className="text-base font-bold text-gray-900">3. Bảng chỉ tiêu và kết quả</h3>
-                      <p className="mt-1 text-sm text-gray-500">Theo dõi mức hoàn thành mục tiêu kinh doanh trong năm.</p>
+                      <h3 className="text-base font-bold text-gray-900">Chỉ tiêu và kết quả</h3>
+                      <p className="mt-1 text-sm text-gray-500">Theo dõi mức hoàn thành mục tiêu kinh doanh trong kỳ.</p>
                     </div>
-                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-amber-700 shadow-sm">
+                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-500 shadow-sm">
                       Năm {reportYear}
                     </span>
                   </div>
 
-                  <div className="mt-5 overflow-x-auto rounded-2xl border border-amber-200 bg-white">
-                    <table className="min-w-[1200px] text-sm">
-                      <thead className="bg-amber-50 text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500">
-                        <tr>
-                          <th className="px-4 py-3 text-left">Chỉ số</th>
-                          {Array.from({ length: 12 }, (_, index) => (
-                            <th key={index + 1} className="px-3 py-3 text-center">T{index + 1}</th>
-                          ))}
-                          <th className="px-4 py-3 text-center">Cả năm</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {monthlyTargetRows.map((row) => (
-                          <tr key={row.label} className="hover:bg-amber-50/40">
-                            <td className="px-4 py-3">
-                              <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${row.colorClass}`}>
-                                {row.label}
+                  <div className="mt-5 overflow-hidden rounded-2xl border border-gray-200 bg-white">
+                    <div className="grid grid-cols-12 bg-gray-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">
+                      <div className="col-span-4">Chỉ số</div>
+                      <div className="col-span-2 text-right">Target</div>
+                      <div className="col-span-2 text-right">Kết quả</div>
+                      <div className="col-span-2 text-right">Hoàn thành</div>
+                      <div className="col-span-2 text-right">Đánh giá</div>
+                    </div>
+
+                    <div className="divide-y divide-gray-100 text-sm">
+                      {[
+                        {
+                          label: 'Tổng lead',
+                          target: reportTargets.total_leads,
+                          result: totalLeads,
+                          completion: leadCompletionRate,
+                          suffix: '',
+                          assessment: leadCompletionRate >= 100 ? 'Đạt' : leadCompletionRate >= 70 ? 'Tiệm cận' : 'Thiếu',
+                        },
+                        {
+                          label: 'Lead đã chốt',
+                          target: reportTargets.won_leads,
+                          result: wonLeadCount,
+                          completion: wonCompletionRate,
+                          suffix: '',
+                          assessment: wonCompletionRate >= 100 ? 'Đạt' : wonCompletionRate >= 70 ? 'Tiệm cận' : 'Thiếu',
+                        },
+                        {
+                          label: 'Giá trị pipeline',
+                          target: reportTargets.pipeline_value,
+                          result: reportSummary.total_pipeline_value,
+                          completion: pipelineCompletionRate,
+                          suffix: '₫',
+                          assessment: pipelineCompletionRate >= 100 ? 'Đạt' : pipelineCompletionRate >= 70 ? 'Tiệm cận' : 'Thiếu',
+                        },
+                        {
+                          label: 'Tỷ lệ từ chối tối đa',
+                          target: reportTargets.rejected_rate_max,
+                          result: Number(rejectedRate.toFixed(1)),
+                          completion: reportTargets.rejected_rate_max > 0 ? (rejectedRate / reportTargets.rejected_rate_max) * 100 : 0,
+                          suffix: '%',
+                          assessment: rejectedRate <= reportTargets.rejected_rate_max ? 'Trong ngưỡng' : 'Vượt ngưỡng',
+                          inverse: true,
+                        },
+                      ].map((row) => {
+                        const completionText = row.inverse
+                          ? `${row.result.toLocaleString('vi-VN')}${row.suffix} / ${row.target.toLocaleString('vi-VN')}${row.suffix}`
+                          : `${row.completion.toFixed(1)}%`;
+
+                        return (
+                          <div key={row.label} className="grid grid-cols-12 items-center px-4 py-4">
+                            <div className="col-span-4 font-medium text-gray-900">{row.label}</div>
+                            <div className="col-span-2 text-right text-gray-600">
+                              {row.target.toLocaleString('vi-VN')}{row.suffix}
+                            </div>
+                            <div className="col-span-2 text-right font-semibold text-gray-900">
+                              {row.result.toLocaleString('vi-VN')}{row.suffix}
+                            </div>
+                            <div className="col-span-2 text-right text-gray-600">{completionText}</div>
+                            <div className="col-span-2 flex justify-end">
+                              <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                                row.assessment === 'Đạt' || row.assessment === 'Trong ngưỡng'
+                                  ? 'bg-emerald-50 text-emerald-600'
+                                  : row.assessment === 'Tiệm cận'
+                                  ? 'bg-amber-50 text-amber-600'
+                                  : 'bg-rose-50 text-rose-600'
+                              }`}>
+                                {row.assessment}
                               </span>
-                            </td>
-                            {row.values.map((value, index) => (
-                              <td key={index} className="px-3 py-3 text-center font-medium text-gray-900">
-                                {typeof value === 'number' ? value.toLocaleString('vi-VN') : value}
-                              </td>
-                            ))}
-                            <td className="px-4 py-3 text-center font-bold text-gray-900">
-                              {typeof row.total === 'number' ? row.total.toLocaleString('vi-VN') : row.total}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
+              </div>
 
-                <div className="rounded-[24px] border border-violet-200 bg-violet-50/60 p-5">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <h3 className="text-base font-bold text-gray-900">4. Số lead quan tâm theo loại dịch vụ từng tháng trong năm</h3>
-                      <p className="mt-1 text-sm text-gray-500">Mỗi hàng là một dịch vụ trong hệ thống, mỗi cột thể hiện lượng lead quan tâm trong tháng tương ứng.</p>
-                    </div>
-                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-violet-700 shadow-sm">
-                      {masterData.services.length} dịch vụ
-                    </span>
+              <div className="rounded-[24px] border border-gray-200 bg-gray-50/60 p-5">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-base font-bold text-gray-900">
+                      Khách đã chốt theo loại dịch vụ từng tháng trong năm {reportYear}
+                    </h3>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Bảng này giúp nhìn dịch vụ nào chốt tốt theo từng tháng để hỗ trợ kế hoạch kinh doanh.
+                    </p>
                   </div>
+                  <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-500 shadow-sm">
+                    {wonServiceMonthly.length} dịch vụ
+                  </span>
+                </div>
 
-                  <div className="mt-5 overflow-x-auto rounded-2xl border border-violet-200 bg-white">
-                    <table className="min-w-[1200px] text-sm">
-                      <thead className="bg-violet-50 text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500">
+                {wonServiceMonthly.length === 0 ? (
+                  <div className="mt-4 text-sm text-gray-500">
+                    Chưa có dữ liệu chốt theo dịch vụ trong năm này.
+                  </div>
+                ) : (
+                  <div className="mt-5 overflow-x-auto rounded-2xl border border-gray-200 bg-white">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-gray-50 text-[11px] uppercase tracking-[0.18em] text-gray-400">
                         <tr>
-                          <th className="px-4 py-3 text-left">Dịch vụ</th>
-                          {Array.from({ length: 12 }, (_, index) => (
-                            <th key={index + 1} className="px-3 py-3 text-center">T{index + 1}</th>
+                          <th className="px-4 py-3 text-left font-semibold">Dịch vụ</th>
+                          {Array.from({ length: 12 }, (_, i) => (
+                            <th key={i + 1} className="px-3 py-3 text-center font-semibold">
+                              T{i + 1}
+                            </th>
                           ))}
-                          <th className="px-4 py-3 text-right">Tổng</th>
+                          <th className="px-4 py-3 text-right font-semibold">Tổng</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {normalizedServiceInterestMonthly.map((row) => (
-                          <tr key={row.service_label} className="hover:bg-violet-50/40">
-                            <td className="px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">{row.service_label}</td>
-                            {row.monthly_totals.map((item) => (
-                              <td key={item.month} className="px-3 py-3 text-center text-gray-800">
-                                {item.total.toLocaleString('vi-VN')}
+                        {wonServiceMonthly.map((row) => {
+                          const monthMap = Object.fromEntries(row.monthly_totals.map((m) => [m.month, m.total]));
+                          return (
+                            <tr key={row.service_label} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">
+                                {row.service_label}
                               </td>
-                            ))}
-                            <td className="px-4 py-3 text-right font-bold text-gray-900">
-                              {row.total.toLocaleString('vi-VN')}
-                            </td>
-                          </tr>
-                        ))}
+                              {Array.from({ length: 12 }, (_, i) => (
+                                <td key={i + 1} className="px-3 py-3 text-center text-gray-700">
+                                  {(monthMap[i + 1] || 0).toLocaleString('vi-VN')}
+                                </td>
+                              ))}
+                              <td className="px-4 py-3 text-right font-bold text-gray-900">
+                                {row.total.toLocaleString('vi-VN')}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
-                </div>
-
-                <div className="rounded-[24px] border border-rose-200 bg-rose-50/60 p-5">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <h3 className="text-base font-bold text-gray-900">5. Số lead đã chốt theo loại dịch vụ từng tháng trong năm</h3>
-                      <p className="mt-1 text-sm text-gray-500">Mỗi hàng là một dịch vụ, mỗi ô thể hiện số lead đã chốt của dịch vụ đó theo từng tháng.</p>
-                    </div>
-                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-rose-700 shadow-sm">
-                      {masterData.services.length} dịch vụ
-                    </span>
-                  </div>
-
-                  <div className="mt-5 overflow-x-auto rounded-2xl border border-rose-200 bg-white">
-                    <table className="min-w-[1200px] text-sm">
-                      <thead className="bg-rose-50 text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500">
-                        <tr>
-                          <th className="px-4 py-3 text-left">Dịch vụ</th>
-                          {Array.from({ length: 12 }, (_, index) => (
-                            <th key={index + 1} className="px-3 py-3 text-center">T{index + 1}</th>
-                          ))}
-                          <th className="px-4 py-3 text-right">Tổng</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {normalizedWonServiceMonthly.map((row) => (
-                          <tr key={row.service_label} className="hover:bg-rose-50/40">
-                            <td className="px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">{row.service_label}</td>
-                            {row.monthly_totals.map((item) => (
-                              <td key={item.month} className="px-3 py-3 text-center text-gray-800">
-                                {item.total.toLocaleString('vi-VN')}
-                              </td>
-                            ))}
-                            <td className="px-4 py-3 text-right font-bold text-gray-900">
-                              {row.total.toLocaleString('vi-VN')}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
           </div>
         </div>
-
+      </div>
     )}
 
 

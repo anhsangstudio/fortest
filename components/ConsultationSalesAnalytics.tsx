@@ -75,6 +75,8 @@ const recommendationStyleMap: Record<
   },
 };
 
+const SO_LEAD_TOI_THIEU_DE_SO_SANH = 5;
+
 const getToday = () => new Date().toISOString().slice(0, 10);
 
 const getFirstDayOfMonth = () => {
@@ -211,6 +213,69 @@ const ConsultationSalesAnalytics: React.FC = () => {
   const tongChotTatCaNhanVien = useMemo(() => {
     return hieuSuatNhanVien.reduce((sum, item) => sum + Number(item.lead_da_chot || 0), 0);
   }, [hieuSuatNhanVien]);
+
+  const danhSachNhanVienDuDieuKienSoSanh = useMemo(() => {
+    return hieuSuatNhanVien.filter(
+      (item) => Number(item.tong_lead || 0) >= SO_LEAD_TOI_THIEU_DE_SO_SANH
+    );
+  }, [hieuSuatNhanVien]);
+
+  const nhanVienManhNhat = useMemo(() => {
+    if (!danhSachNhanVienDuDieuKienSoSanh.length) return null;
+
+    return [...danhSachNhanVienDuDieuKienSoSanh].sort((a, b) => {
+      const tyLeB = Number(b.ty_le_chot || 0);
+      const tyLeA = Number(a.ty_le_chot || 0);
+
+      if (tyLeB !== tyLeA) return tyLeB - tyLeA;
+
+      const leadB = Number(b.tong_lead || 0);
+      const leadA = Number(a.tong_lead || 0);
+
+      return leadB - leadA;
+    })[0];
+  }, [danhSachNhanVienDuDieuKienSoSanh]);
+
+  const nhanVienCanHoTroNhat = useMemo(() => {
+    if (!danhSachNhanVienDuDieuKienSoSanh.length) return null;
+
+    return [...danhSachNhanVienDuDieuKienSoSanh].sort((a, b) => {
+      const tyLeA = Number(a.ty_le_chot || 0);
+      const tyLeB = Number(b.ty_le_chot || 0);
+
+      if (tyLeA !== tyLeB) return tyLeA - tyLeB;
+
+      const leadB = Number(b.tong_lead || 0);
+      const leadA = Number(a.tong_lead || 0);
+
+      return leadB - leadA;
+    })[0];
+  }, [danhSachNhanVienDuDieuKienSoSanh]);
+
+  const doLechTyLeChot = useMemo(() => {
+    if (!nhanVienManhNhat || !nhanVienCanHoTroNhat) return 0;
+
+    return Math.max(
+      0,
+      Number(nhanVienManhNhat.ty_le_chot || 0) - Number(nhanVienCanHoTroNhat.ty_le_chot || 0)
+    );
+  }, [nhanVienManhNhat, nhanVienCanHoTroNhat]);
+
+  const nhanDinhSoSanhNhanVien = useMemo(() => {
+    if (!nhanVienManhNhat || !nhanVienCanHoTroNhat) {
+      return 'Chưa đủ dữ liệu để so sánh nhân viên. Cần ít nhất vài nhân viên có đủ số lượng khách để đánh giá công bằng.';
+    }
+
+    if (doLechTyLeChot >= 30) {
+      return 'Chênh lệch hiệu suất đang khá lớn. Nên ưu tiên xem lại cách làm của nhân viên mạnh nhất để chuẩn hóa cho cả nhóm.';
+    }
+
+    if (doLechTyLeChot >= 15) {
+      return 'Đã có khoảng cách hiệu suất rõ ràng giữa các nhân viên. Nên kèm cặp thêm cho nhóm đang yếu ở các bước giữa và bước chốt.';
+    }
+
+    return 'Chênh lệch hiệu suất chưa quá lớn. Nhóm sale đang khá đồng đều, nên tiếp tục theo dõi theo tuần để phát hiện sớm dấu hiệu giảm hiệu quả.';
+  }, [nhanVienManhNhat, nhanVienCanHoTroNhat, doLechTyLeChot]);
 
   const danhSachNhanVien = useMemo(() => {
     return hieuSuatNhanVien.map((item) => item.nhan_vien_tu_van).filter(Boolean);
@@ -586,6 +651,144 @@ const ConsultationSalesAnalytics: React.FC = () => {
                 </div>
               );
             })}
+          </div>
+        )}
+      </div>
+
+      {/* So sánh nhanh nhân viên */}
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="mb-4 flex items-center gap-2">
+          <BarChart3 size={18} className="text-gray-500" />
+          <h2 className="text-base font-semibold text-gray-800">
+            So sánh nhanh nhân viên
+          </h2>
+        </div>
+
+        {!loading && !error && hieuSuatNhanVien.length === 0 && (
+          <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-sm text-gray-500">
+            Chưa có dữ liệu nhân viên để so sánh.
+          </div>
+        )}
+
+        {!loading && !error && hieuSuatNhanVien.length > 0 && (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-sm text-slate-600">
+                Chỉ so sánh các nhân viên có từ <strong>{SO_LEAD_TOI_THIEU_DE_SO_SANH}</strong> khách trở lên để tránh sai lệch do mẫu quá nhỏ.
+              </div>
+            </div>
+
+            {!nhanVienManhNhat || !nhanVienCanHoTroNhat ? (
+              <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-sm text-gray-500">
+                Chưa đủ dữ liệu để xác định nhân viên mạnh nhất và nhân viên cần hỗ trợ nhất.
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+                    <div className="text-sm font-semibold text-emerald-800">
+                      Nhân viên nổi bật nhất
+                    </div>
+                    <div className="mt-2 text-xl font-bold text-gray-900">
+                      {nhanVienManhNhat.nhan_vien_tu_van}
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <div className="text-gray-500">Tổng lead</div>
+                        <div className="font-semibold text-gray-900">
+                          {formatNumber(nhanVienManhNhat.tong_lead)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500">Đã chốt</div>
+                        <div className="font-semibold text-gray-900">
+                          {formatNumber(nhanVienManhNhat.lead_da_chot)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500">Tỷ lệ chốt</div>
+                        <div className="font-semibold text-gray-900">
+                          {formatPercent(nhanVienManhNhat.ty_le_chot)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500">Giá trị dự kiến</div>
+                        <div className="font-semibold text-gray-900">
+                          {formatNumber(nhanVienManhNhat.tong_gia_tri_du_kien)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+                    <div className="text-sm font-semibold text-amber-800">
+                      Nhân viên cần hỗ trợ nhất
+                    </div>
+                    <div className="mt-2 text-xl font-bold text-gray-900">
+                      {nhanVienCanHoTroNhat.nhan_vien_tu_van}
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <div className="text-gray-500">Tổng lead</div>
+                        <div className="font-semibold text-gray-900">
+                          {formatNumber(nhanVienCanHoTroNhat.tong_lead)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500">Đã chốt</div>
+                        <div className="font-semibold text-gray-900">
+                          {formatNumber(nhanVienCanHoTroNhat.lead_da_chot)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500">Tỷ lệ chốt</div>
+                        <div className="font-semibold text-gray-900">
+                          {formatPercent(nhanVienCanHoTroNhat.ty_le_chot)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500">Giá trị dự kiến</div>
+                        <div className="font-semibold text-gray-900">
+                          {formatNumber(nhanVienCanHoTroNhat.tong_gia_tri_du_kien)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                    <div className="text-sm text-gray-500">Chênh lệch tỷ lệ chốt</div>
+                    <div className="mt-2 text-2xl font-bold text-gray-900">
+                      {formatPercent(doLechTyLeChot)}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                    <div className="text-sm text-gray-500">Người mạnh nhất</div>
+                    <div className="mt-2 text-lg font-bold text-gray-900">
+                      {nhanVienManhNhat.nhan_vien_tu_van}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                    <div className="text-sm text-gray-500">Người cần hỗ trợ</div>
+                    <div className="mt-2 text-lg font-bold text-gray-900">
+                      {nhanVienCanHoTroNhat.nhan_vien_tu_van}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+                  <div className="text-sm font-semibold text-blue-800">
+                    Nhận định quản lý
+                  </div>
+                  <div className="mt-2 text-sm leading-6 text-blue-900">
+                    {nhanDinhSoSanhNhanVien}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>

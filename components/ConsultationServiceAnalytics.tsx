@@ -72,6 +72,8 @@ const recommendationStyleMap: Record<
 
 const NGUONG_NHU_CAU_CAO = 15;
 const NGUONG_TY_LE_CHOT_TOT = 25;
+const NGUONG_DIEM_UU_TIEN_CAO = 70;
+const NGUONG_DIEM_UU_TIEN_TRUNG_BINH = 45;
 
 const getToday = () => new Date().toISOString().slice(0, 10);
 
@@ -247,6 +249,110 @@ const ConsultationServiceAnalytics: React.FC = () => {
     dichVuNhuCauThapChotTot,
     dichVuNhuCauThapChotKem,
   ]);
+
+
+  const xepHangUuTienXuLy = useMemo(() => {
+    return [...serviceDataWithGap]
+      .filter((item) => Number(item.tong_lead || 0) > 0)
+      .map((item) => {
+        const tyTrongNhuCau = Number(item.ty_trong_nhu_cau || 0);
+        const tyLeChot = Number(item.ty_le_chot || 0);
+        const leadChuaDapUng = Number(item.lead_chua_dap_ung || 0);
+        const tyLeChuaDapUng = Number(item.ty_le_chua_dap_ung || 0);
+
+        const diemTheoNhuCau = Math.min(40, tyTrongNhuCau * 2);
+        const diemTheoTiLeChuaDapUng = Math.min(35, tyLeChuaDapUng * 0.35);
+        const diemTheoSoLeadMatDi = Math.min(25, leadChuaDapUng * 2.5);
+        const diemUuTien = Math.round(
+          diemTheoNhuCau + diemTheoTiLeChuaDapUng + diemTheoSoLeadMatDi
+        );
+
+        let mucDoUuTien: 'Ưu tiên ngay' | 'Nên xử lý sớm' | 'Theo dõi';
+        if (diemUuTien >= NGUONG_DIEM_UU_TIEN_CAO) {
+          mucDoUuTien = 'Ưu tiên ngay';
+        } else if (diemUuTien >= NGUONG_DIEM_UU_TIEN_TRUNG_BINH) {
+          mucDoUuTien = 'Nên xử lý sớm';
+        } else {
+          mucDoUuTien = 'Theo dõi';
+        }
+
+        let huongXuLy = 'Tiếp tục theo dõi thêm và giữ nhịp tối ưu ổn định.';
+        if (
+          tyTrongNhuCau >= NGUONG_NHU_CAU_CAO &&
+          tyLeChot < NGUONG_TY_LE_CHOT_TOT
+        ) {
+          huongXuLy =
+            'Ưu tiên rà soát gói dịch vụ, giá bán, nội dung tư vấn và cách theo dõi lại khách.';
+        } else if (
+          tyTrongNhuCau < NGUONG_NHU_CAU_CAO &&
+          tyLeChot >= NGUONG_TY_LE_CHOT_TOT
+        ) {
+          huongXuLy =
+            'Dịch vụ bán tốt nhưng chưa có nhiều lead. Nên tăng quảng bá đúng tệp khách hàng.';
+        } else if (
+          tyTrongNhuCau < NGUONG_NHU_CAU_CAO &&
+          tyLeChot < NGUONG_TY_LE_CHOT_TOT
+        ) {
+          huongXuLy =
+            'Cần xem lại mức độ ưu tiên đầu tư, cấu trúc gói và thông điệp truyền thông của dịch vụ này.';
+        }
+
+        return {
+          ...item,
+          diem_uu_tien: diemUuTien,
+          muc_do_uu_tien: mucDoUuTien,
+          huong_xu_ly: huongXuLy,
+        };
+      })
+      .sort((a, b) => {
+        const diemB = Number(b.diem_uu_tien || 0);
+        const diemA = Number(a.diem_uu_tien || 0);
+        if (diemB !== diemA) return diemB - diemA;
+
+        const matB = Number(b.lead_chua_dap_ung || 0);
+        const matA = Number(a.lead_chua_dap_ung || 0);
+        if (matB !== matA) return matB - matA;
+
+        return Number(b.ty_trong_nhu_cau || 0) - Number(a.ty_trong_nhu_cau || 0);
+      });
+  }, [serviceDataWithGap]);
+
+  const dichVuUuTienSo1 = useMemo(() => {
+    return xepHangUuTienXuLy.length > 0 ? xepHangUuTienXuLy[0] : null;
+  }, [xepHangUuTienXuLy]);
+
+  const dichVuUuTienSo2 = useMemo(() => {
+    return xepHangUuTienXuLy.length > 1 ? xepHangUuTienXuLy[1] : null;
+  }, [xepHangUuTienXuLy]);
+
+  const tongLeadChuaDapUng = useMemo(() => {
+    return serviceDataWithGap.reduce(
+      (sum, item) => sum + Number(item.lead_chua_dap_ung || 0),
+      0
+    );
+  }, [serviceDataWithGap]);
+
+  const tongTyTrongNhuCauCanXuLyGap = useMemo(() => {
+    return xepHangUuTienXuLy
+      .filter((item) => item.muc_do_uu_tien === 'Ưu tiên ngay')
+      .reduce((sum, item) => sum + Number(item.ty_trong_nhu_cau || 0), 0);
+  }, [xepHangUuTienXuLy]);
+
+  const nhanDinhUuTienXuLy = useMemo(() => {
+    if (!xepHangUuTienXuLy.length) {
+      return 'Chưa có dữ liệu để xếp hạng mức độ ưu tiên xử lý theo dịch vụ.';
+    }
+
+    if (dichVuUuTienSo1 && dichVuUuTienSo2) {
+      return `Nếu chỉ có nguồn lực cải thiện ngắn hạn, nên ưu tiên xử lý trước ${dichVuUuTienSo1.ten_dich_vu} và ${dichVuUuTienSo2.ten_dich_vu}. Đây là 2 dịch vụ đang có mức độ mất cơ hội lớn nhất theo nhu cầu thị trường và phần chưa đáp ứng.`;
+    }
+
+    if (dichVuUuTienSo1) {
+      return `Nếu chỉ chọn một dịch vụ để xử lý trước, nên bắt đầu từ ${dichVuUuTienSo1.ten_dich_vu}. Dịch vụ này đang đứng đầu về mức độ ưu tiên cải thiện.`;
+    }
+
+    return 'Danh sách ưu tiên hiện chưa đủ rõ để đưa ra kết luận mạnh.';
+  }, [xepHangUuTienXuLy, dichVuUuTienSo1, dichVuUuTienSo2]);
 
   const recommendations = useMemo<RecommendationItem[]>(() => {
     if (!serviceData.length) return [];
@@ -835,6 +941,208 @@ const ConsultationServiceAnalytics: React.FC = () => {
           </div>
         )}
       </div>
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="mb-4 flex items-center gap-2">
+          <BarChart3 size={18} className="text-gray-500" />
+          <h2 className="text-base font-semibold text-gray-800">Ưu tiên xử lý nhu cầu chưa đáp ứng</h2>
+        </div>
+
+        {!loading && !error && serviceDataWithGap.length === 0 && (
+          <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-sm text-gray-500">
+            Chưa có dữ liệu để xếp hạng dịch vụ cần ưu tiên xử lý.
+          </div>
+        )}
+
+        {!loading && !error && serviceDataWithGap.length > 0 && (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+              <div className="text-sm font-semibold text-blue-800">Nguyên tắc xếp hạng</div>
+              <div className="mt-2 text-sm leading-6 text-blue-900">
+                Mức độ ưu tiên được tính dựa trên 3 yếu tố: mức quan tâm của thị trường, tỷ lệ nhu cầu chưa được đáp ứng và số lead đang bị mất đi. Mục tiêu là giúp bạn biết nếu chỉ có nguồn lực cải thiện 1 đến 2 dịch vụ thì nên bắt đầu từ đâu.
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                <div className="text-sm text-gray-500">Lead chưa đáp ứng toàn bộ</div>
+                <div className="mt-2 text-2xl font-bold text-gray-900">
+                  {formatNumber(tongLeadChuaDapUng)}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                <div className="text-sm text-gray-500">Dịch vụ cần ưu tiên ngay</div>
+                <div className="mt-2 text-2xl font-bold text-gray-900">
+                  {formatNumber(
+                    xepHangUuTienXuLy.filter((item) => item.muc_do_uu_tien === 'Ưu tiên ngay').length
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                <div className="text-sm text-gray-500">Nhu cầu nằm trong nhóm cần xử lý gấp</div>
+                <div className="mt-2 text-2xl font-bold text-gray-900">
+                  {formatPercent(tongTyTrongNhuCauCanXuLyGap)}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                <div className="text-sm text-gray-500">Dịch vụ nên xử lý đầu tiên</div>
+                <div className="mt-2 text-lg font-bold text-gray-900">
+                  {dichVuUuTienSo1?.ten_dich_vu || '--'}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <div className="text-sm font-semibold text-amber-800">Nhận định ưu tiên</div>
+              <div className="mt-2 text-sm leading-6 text-amber-900">{nhanDinhUuTienXuLy}</div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+              {[dichVuUuTienSo1, dichVuUuTienSo2].map((item, index) => (
+                <div
+                  key={item?.dich_vu_id || `empty-priority-${index}`}
+                  className="rounded-2xl border border-red-200 bg-red-50 p-5"
+                >
+                  {!item ? (
+                    <div className="text-sm text-red-800">
+                      Chưa đủ dữ liệu để xác định dịch vụ ưu tiên tiếp theo.
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <div className="text-sm font-semibold text-red-800">
+                            Ưu tiên {index + 1}
+                          </div>
+                          <div className="mt-2 text-xl font-bold text-gray-900">
+                            {item.ten_dich_vu}
+                          </div>
+                        </div>
+                        <div className="rounded-xl bg-white px-3 py-2 text-right shadow-sm">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            Điểm ưu tiên
+                          </div>
+                          <div className="text-xl font-bold text-gray-900">
+                            {formatNumber(item.diem_uu_tien)}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <div className="text-gray-500">Mức quan tâm</div>
+                          <div className="font-semibold text-gray-900">
+                            {formatPercent(item.ty_trong_nhu_cau)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-gray-500">Tỷ lệ chốt</div>
+                          <div className="font-semibold text-gray-900">
+                            {formatPercent(item.ty_le_chot)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-gray-500">Lead chưa đáp ứng</div>
+                          <div className="font-semibold text-gray-900">
+                            {formatNumber(item.lead_chua_dap_ung)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-gray-500">% chưa đáp ứng</div>
+                          <div className="font-semibold text-gray-900">
+                            {formatPercent(item.ty_le_chua_dap_ung)}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 rounded-xl border border-red-200 bg-white/80 p-4">
+                        <div className="text-sm font-semibold text-red-800">
+                          Hướng xử lý đề xuất
+                        </div>
+                        <div className="mt-2 text-sm leading-6 text-gray-700">
+                          {item.huong_xu_ly}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full border-separate border-spacing-y-2">
+                <thead>
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Xếp hạng
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Dịch vụ
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Điểm ưu tiên
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Nhu cầu
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Chưa đáp ứng
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Tỷ lệ chốt
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Mức ưu tiên
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {xepHangUuTienXuLy.map((item, index) => (
+                    <tr key={`priority-${item.dich_vu_id}`} className="bg-gray-50">
+                      <td className="rounded-l-xl px-4 py-3 text-sm font-semibold text-gray-900">
+                        {index + 1}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="text-sm font-medium text-gray-900">{item.ten_dich_vu}</div>
+                        <div className="mt-1 text-sm text-gray-500">{item.huong_xu_ly}</div>
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
+                        {formatNumber(item.diem_uu_tien)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-700">
+                        {formatPercent(item.ty_trong_nhu_cau)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-700">
+                        {formatNumber(item.lead_chua_dap_ung)} ({formatPercent(item.ty_le_chua_dap_ung)})
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-700">
+                        {formatPercent(item.ty_le_chot)}
+                      </td>
+                      <td className="rounded-r-xl px-4 py-3">
+                        <span
+                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                            item.muc_do_uu_tien === 'Ưu tiên ngay'
+                              ? 'bg-red-100 text-red-800'
+                              : item.muc_do_uu_tien === 'Nên xử lý sớm'
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-slate-200 text-slate-800'
+                          }`}
+                        >
+                          {item.muc_do_uu_tien}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+
 
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
         <div className="mb-4 flex items-center gap-2">

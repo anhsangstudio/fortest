@@ -72,6 +72,26 @@ type ServiceStaffPerformanceRow = {
   xep_hang_nhan_vien: number;
 };
 
+type ServiceSourcePerformanceRow = {
+  nguon_khach_hang: string;
+  dich_vu_id: string;
+  ten_dich_vu: string;
+  tong_lead: number;
+  lead_da_chot: number;
+  ty_le_chot: number;
+  ty_trong_trong_nguon: number;
+};
+
+type ServiceAddressPerformanceRow = {
+  dia_chi: string;
+  dich_vu_id: string;
+  ten_dich_vu: string;
+  tong_lead: number;
+  lead_da_chot: number;
+  ty_le_chot: number;
+  ty_trong_trong_dia_chi: number;
+};
+
 type StrategicGroupKey =
   | 'nhu_cau_cao_chot_tot'
   | 'nhu_cau_cao_chot_kem'
@@ -177,15 +197,21 @@ const ConsultationServiceAnalytics: React.FC = () => {
   const [rejectionError, setRejectionError] = useState<string | null>(null);
   const [serviceFunnelError, setServiceFunnelError] = useState<string | null>(null);
   const [serviceStaffError, setServiceStaffError] = useState<string | null>(null);
+  const [sourcePerformanceError, setSourcePerformanceError] = useState<string | null>(null);
+  const [addressPerformanceError, setAddressPerformanceError] = useState<string | null>(null);
 
   const [serviceData, setServiceData] = useState<ServicePerformanceRow[]>([]);
   const [trendData, setTrendData] = useState<ServiceTrendRow[]>([]);
   const [rejectionData, setRejectionData] = useState<ServiceRejectionReasonRow[]>([]);
   const [serviceFunnelData, setServiceFunnelData] = useState<ServiceFunnelRow[]>([]);
   const [serviceStaffData, setServiceStaffData] = useState<ServiceStaffPerformanceRow[]>([]);
+  const [serviceSourceData, setServiceSourceData] = useState<ServiceSourcePerformanceRow[]>([]);
+  const [serviceAddressData, setServiceAddressData] = useState<ServiceAddressPerformanceRow[]>([]);
 
   const [selectedServiceId, setSelectedServiceId] = useState<string>('');
   const [selectedStaffName, setSelectedStaffName] = useState<string>('');
+  const [selectedSourceName, setSelectedSourceName] = useState<string>('');
+  const [selectedAddressName, setSelectedAddressName] = useState<string>('');
 
   const totalLeads = useMemo(
     () => serviceData.reduce((sum, item) => sum + Number(item.tong_lead || 0), 0),
@@ -701,6 +727,105 @@ const ConsultationServiceAnalytics: React.FC = () => {
   ]);
 
 
+
+  const sourceOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        serviceSourceData
+          .map((item) => (item.nguon_khach_hang || '').trim())
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b, 'vi'));
+  }, [serviceSourceData]);
+
+  const addressOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        serviceAddressData
+          .map((item) => (item.dia_chi || '').trim())
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b, 'vi'));
+  }, [serviceAddressData]);
+
+  const selectedSourceRows = useMemo(() => {
+    if (!selectedSourceName) return [];
+    return serviceSourceData
+      .filter((item) => item.nguon_khach_hang === selectedSourceName)
+      .sort((a, b) => Number(b.tong_lead || 0) - Number(a.tong_lead || 0));
+  }, [serviceSourceData, selectedSourceName]);
+
+  const selectedAddressRows = useMemo(() => {
+    if (!selectedAddressName) return [];
+    return serviceAddressData
+      .filter((item) => item.dia_chi === selectedAddressName)
+      .sort((a, b) => Number(b.tong_lead || 0) - Number(a.tong_lead || 0));
+  }, [serviceAddressData, selectedAddressName]);
+
+  const topServiceInSelectedSource = useMemo(() => {
+    return selectedSourceRows[0] || null;
+  }, [selectedSourceRows]);
+
+  const weakCloseServiceInSelectedSource = useMemo(() => {
+    if (!selectedSourceRows.length) return null;
+    return [...selectedSourceRows]
+      .filter((item) => Number(item.tong_lead || 0) > 0)
+      .sort((a, b) => {
+        const closeA = Number(a.ty_le_chot || 0);
+        const closeB = Number(b.ty_le_chot || 0);
+        if (closeA !== closeB) return closeA - closeB;
+        return Number(b.tong_lead || 0) - Number(a.tong_lead || 0);
+      })[0] || null;
+  }, [selectedSourceRows]);
+
+  const topServiceInSelectedAddress = useMemo(() => {
+    return selectedAddressRows[0] || null;
+  }, [selectedAddressRows]);
+
+  const weakCloseServiceInSelectedAddress = useMemo(() => {
+    if (!selectedAddressRows.length) return null;
+    return [...selectedAddressRows]
+      .filter((item) => Number(item.tong_lead || 0) > 0)
+      .sort((a, b) => {
+        const closeA = Number(a.ty_le_chot || 0);
+        const closeB = Number(b.ty_le_chot || 0);
+        if (closeA !== closeB) return closeA - closeB;
+        return Number(b.tong_lead || 0) - Number(a.tong_lead || 0);
+      })[0] || null;
+  }, [selectedAddressRows]);
+
+  const sourceInsight = useMemo(() => {
+    if (!selectedSourceName) {
+      return 'Chọn một nguồn khách để xem nguồn đó đang kéo dịch vụ nào lên và dịch vụ nào đang chốt kém.';
+    }
+
+    if (!selectedSourceRows.length) {
+      return `Chưa có đủ dữ liệu dịch vụ theo nguồn khách "${selectedSourceName}".`;
+    }
+
+    if (topServiceInSelectedSource && weakCloseServiceInSelectedSource) {
+      return `Nguồn "${selectedSourceName}" đang quan tâm nhiều nhất tới "${topServiceInSelectedSource.ten_dich_vu}". Tuy nhiên, dịch vụ cần xem lại trước ở nguồn này là "${weakCloseServiceInSelectedSource.ten_dich_vu}" vì tỷ lệ chốt đang thấp hơn các dịch vụ còn lại.`;
+    }
+
+    return `Đã có dữ liệu theo nguồn khách "${selectedSourceName}", nhưng chưa đủ để tạo nhận định sâu hơn.`;
+  }, [selectedSourceName, selectedSourceRows, topServiceInSelectedSource, weakCloseServiceInSelectedSource]);
+
+  const addressInsight = useMemo(() => {
+    if (!selectedAddressName) {
+      return 'Chọn một khu vực để xem khu vực đó đang quan tâm nhiều tới dịch vụ nào và dịch vụ nào cần ưu tiên cải thiện.';
+    }
+
+    if (!selectedAddressRows.length) {
+      return `Chưa có đủ dữ liệu dịch vụ theo khu vực "${selectedAddressName}".`;
+    }
+
+    if (topServiceInSelectedAddress && weakCloseServiceInSelectedAddress) {
+      return `Khu vực "${selectedAddressName}" đang quan tâm nhiều nhất tới "${topServiceInSelectedAddress.ten_dich_vu}". Dịch vụ cần ưu tiên cải thiện tại khu vực này là "${weakCloseServiceInSelectedAddress.ten_dich_vu}" do tỷ lệ chốt hiện còn thấp.`;
+    }
+
+    return `Đã có dữ liệu theo khu vực "${selectedAddressName}", nhưng chưa đủ để tạo nhận định sâu hơn.`;
+  }, [selectedAddressName, selectedAddressRows, topServiceInSelectedAddress, weakCloseServiceInSelectedAddress]);
+
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
@@ -709,6 +834,8 @@ const ConsultationServiceAnalytics: React.FC = () => {
       setRejectionError(null);
       setServiceFunnelError(null);
       setServiceStaffError(null);
+      setSourcePerformanceError(null);
+      setAddressPerformanceError(null);
 
       if (!supabase) {
         throw new Error('Supabase chưa được cấu hình');
@@ -807,6 +934,60 @@ const ConsultationServiceAnalytics: React.FC = () => {
       } else {
         setServiceStaffData(Array.isArray(serviceStaffRpcData) ? serviceStaffRpcData : []);
       }
+
+      const { data: sourceRpcData, error: sourceRpcError } = await supabase.rpc(
+        'consultation_service_source_performance',
+        {
+          p_from: dateRange.from || null,
+          p_to: dateRange.to || null,
+        }
+      );
+
+      if (sourceRpcError) {
+        console.warn('RPC consultation_service_source_performance chưa sẵn sàng:', sourceRpcError);
+        setServiceSourceData([]);
+        setSourcePerformanceError(
+          'Chưa tải được phần dịch vụ theo nguồn khách. Hãy tạo thêm hàm SQL consultation_service_source_performance.'
+        );
+      } else {
+        const normalizedSourceData = Array.isArray(sourceRpcData) ? sourceRpcData : [];
+        setServiceSourceData(normalizedSourceData);
+        if (normalizedSourceData.length > 0) {
+          setSelectedSourceName((current) => {
+            const hasCurrent = normalizedSourceData.some((item) => item.nguon_khach_hang === current);
+            return hasCurrent ? current : normalizedSourceData[0].nguon_khach_hang;
+          });
+        } else {
+          setSelectedSourceName('');
+        }
+      }
+
+      const { data: addressRpcData, error: addressRpcError } = await supabase.rpc(
+        'consultation_service_address_performance',
+        {
+          p_from: dateRange.from || null,
+          p_to: dateRange.to || null,
+        }
+      );
+
+      if (addressRpcError) {
+        console.warn('RPC consultation_service_address_performance chưa sẵn sàng:', addressRpcError);
+        setServiceAddressData([]);
+        setAddressPerformanceError(
+          'Chưa tải được phần dịch vụ theo khu vực. Hãy tạo thêm hàm SQL consultation_service_address_performance.'
+        );
+      } else {
+        const normalizedAddressData = Array.isArray(addressRpcData) ? addressRpcData : [];
+        setServiceAddressData(normalizedAddressData);
+        if (normalizedAddressData.length > 0) {
+          setSelectedAddressName((current) => {
+            const hasCurrent = normalizedAddressData.some((item) => item.dia_chi === current);
+            return hasCurrent ? current : normalizedAddressData[0].dia_chi;
+          });
+        } else {
+          setSelectedAddressName('');
+        }
+      }
     } catch (err: any) {
       console.error('Lỗi khi tải dữ liệu phân tích dịch vụ:', err);
       setError(err?.message || 'Không thể tải dữ liệu phân tích dịch vụ');
@@ -815,7 +996,11 @@ const ConsultationServiceAnalytics: React.FC = () => {
       setRejectionData([]);
       setServiceFunnelData([]);
       setServiceStaffData([]);
+      setServiceSourceData([]);
+      setServiceAddressData([]);
       setSelectedServiceId('');
+      setSelectedSourceName('');
+      setSelectedAddressName('');
     } finally {
       setLoading(false);
     }
@@ -824,6 +1009,8 @@ const ConsultationServiceAnalytics: React.FC = () => {
   const resetDieuHanhFilters = () => {
     setSelectedServiceId(serviceData.length > 0 ? serviceData[0].dich_vu_id : '');
     setSelectedStaffName('');
+    setSelectedSourceName(serviceSourceData.length > 0 ? serviceSourceData[0].nguon_khach_hang : '');
+    setSelectedAddressName(serviceAddressData.length > 0 ? serviceAddressData[0].dia_chi : '');
   };
 
   useEffect(() => {
@@ -926,6 +1113,89 @@ const ConsultationServiceAnalytics: React.FC = () => {
           </div>
           <div className="mt-1 text-sm text-gray-500">
             {formatNumber(mostInterestedService?.tong_lead || 0)} lead
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="mb-4 flex items-center gap-2">
+          <Filter size={18} className="text-gray-500" />
+          <h2 className="text-base font-semibold text-gray-800">Bộ lọc điều hành nhanh</h2>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
+          <div>
+            <label className="mb-2 block text-sm font-medium text-gray-700">Dịch vụ đang tập trung xem</label>
+            <select
+              value={selectedServiceId}
+              onChange={(e) => setSelectedServiceId(e.target.value)}
+              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            >
+              {serviceData.length === 0 && <option value="">Chưa có dữ liệu dịch vụ</option>}
+              {serviceData.map((item) => (
+                <option key={`${item.dich_vu_id}-filter`} value={item.dich_vu_id}>
+                  {item.ten_dich_vu}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-gray-700">Nhân viên đang tập trung xem</label>
+            <select
+              value={selectedStaffName}
+              onChange={(e) => setSelectedStaffName(e.target.value)}
+              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            >
+              <option value="">Tất cả / chưa chọn</option>
+              {staffFilterOptions.map((staffName) => (
+                <option key={staffName} value={staffName}>
+                  {staffName}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-gray-700">Nguồn khách đang tập trung xem</label>
+            <select
+              value={selectedSourceName}
+              onChange={(e) => setSelectedSourceName(e.target.value)}
+              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            >
+              <option value="">Tất cả / chưa chọn</option>
+              {sourceOptions.map((sourceName) => (
+                <option key={sourceName} value={sourceName}>
+                  {sourceName}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-gray-700">Khu vực đang tập trung xem</label>
+            <select
+              value={selectedAddressName}
+              onChange={(e) => setSelectedAddressName(e.target.value)}
+              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            >
+              <option value="">Tất cả / chưa chọn</option>
+              {addressOptions.map((addressName) => (
+                <option key={addressName} value={addressName}>
+                  {addressName}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={resetDieuHanhFilters}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+            >
+              Đặt lại bộ lọc điều hành
+            </button>
           </div>
         </div>
       </div>
@@ -1508,6 +1778,165 @@ const ConsultationServiceAnalytics: React.FC = () => {
           </div>
         )}
       </div>
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="mb-4 flex items-center gap-2">
+          <Target size={18} className="text-gray-500" />
+          <h2 className="text-base font-semibold text-gray-800">Dịch vụ theo nguồn khách đang chọn</h2>
+        </div>
+
+        {sourcePerformanceError && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            {sourcePerformanceError}
+          </div>
+        )}
+
+        {!sourcePerformanceError && !selectedSourceName && (
+          <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-sm text-gray-500">
+            Chọn một nguồn khách ở phần “Bộ lọc điều hành nhanh” để xem nguồn đó đang kéo dịch vụ nào lên và dịch vụ nào cần ưu tiên cải thiện.
+          </div>
+        )}
+
+        {!sourcePerformanceError && selectedSourceName && (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm leading-6 text-gray-700">
+              {sourceInsight}
+            </div>
+
+            {selectedSourceRows.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-sm text-gray-500">
+                Chưa có dữ liệu dịch vụ theo nguồn khách "{selectedSourceName}".
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                    <div className="text-sm font-semibold text-emerald-800">Dịch vụ được quan tâm nhiều nhất ở nguồn này</div>
+                    <div className="mt-2 text-lg font-bold text-gray-900">{topServiceInSelectedSource?.ten_dich_vu || '--'}</div>
+                    <div className="mt-2 text-sm text-gray-700">
+                      Lead: <strong>{formatNumber(topServiceInSelectedSource?.tong_lead || 0)}</strong> ·
+                      Tỷ lệ chốt: <strong>{formatPercent(topServiceInSelectedSource?.ty_le_chot || 0)}</strong>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                    <div className="text-sm font-semibold text-amber-800">Dịch vụ cần xem lại trước ở nguồn này</div>
+                    <div className="mt-2 text-lg font-bold text-gray-900">{weakCloseServiceInSelectedSource?.ten_dich_vu || '--'}</div>
+                    <div className="mt-2 text-sm text-gray-700">
+                      Lead: <strong>{formatNumber(weakCloseServiceInSelectedSource?.tong_lead || 0)}</strong> ·
+                      Tỷ lệ chốt: <strong>{formatPercent(weakCloseServiceInSelectedSource?.ty_le_chot || 0)}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="min-w-full border-separate border-spacing-y-2">
+                    <thead>
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Dịch vụ</th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Lead</th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Đã chốt</th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Tỷ lệ chốt</th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Tỷ trọng trong nguồn</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedSourceRows.map((item) => (
+                        <tr key={`${item.nguon_khach_hang}-${item.dich_vu_id}`} className="bg-gray-50">
+                          <td className="rounded-l-xl px-4 py-3 text-sm font-medium text-gray-800">{item.ten_dich_vu}</td>
+                          <td className="px-4 py-3 text-right text-sm text-gray-700">{formatNumber(item.tong_lead)}</td>
+                          <td className="px-4 py-3 text-right text-sm text-gray-700">{formatNumber(item.lead_da_chot)}</td>
+                          <td className="px-4 py-3 text-right text-sm text-gray-700">{formatPercent(item.ty_le_chot)}</td>
+                          <td className="rounded-r-xl px-4 py-3 text-right text-sm text-gray-700">{formatPercent(item.ty_trong_trong_nguon)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="mb-4 flex items-center gap-2">
+          <Target size={18} className="text-gray-500" />
+          <h2 className="text-base font-semibold text-gray-800">Dịch vụ theo khu vực đang chọn</h2>
+        </div>
+
+        {addressPerformanceError && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            {addressPerformanceError}
+          </div>
+        )}
+
+        {!addressPerformanceError && !selectedAddressName && (
+          <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-sm text-gray-500">
+            Chọn một khu vực ở phần “Bộ lọc điều hành nhanh” để xem khu vực đó đang quan tâm nhiều tới dịch vụ nào.
+          </div>
+        )}
+
+        {!addressPerformanceError && selectedAddressName && (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm leading-6 text-gray-700">
+              {addressInsight}
+            </div>
+
+            {selectedAddressRows.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-sm text-gray-500">
+                Chưa có dữ liệu dịch vụ theo khu vực "{selectedAddressName}".
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                    <div className="text-sm font-semibold text-emerald-800">Dịch vụ được quan tâm nhiều nhất ở khu vực này</div>
+                    <div className="mt-2 text-lg font-bold text-gray-900">{topServiceInSelectedAddress?.ten_dich_vu || '--'}</div>
+                    <div className="mt-2 text-sm text-gray-700">
+                      Lead: <strong>{formatNumber(topServiceInSelectedAddress?.tong_lead || 0)}</strong> ·
+                      Tỷ lệ chốt: <strong>{formatPercent(topServiceInSelectedAddress?.ty_le_chot || 0)}</strong>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                    <div className="text-sm font-semibold text-amber-800">Dịch vụ cần xem lại trước ở khu vực này</div>
+                    <div className="mt-2 text-lg font-bold text-gray-900">{weakCloseServiceInSelectedAddress?.ten_dich_vu || '--'}</div>
+                    <div className="mt-2 text-sm text-gray-700">
+                      Lead: <strong>{formatNumber(weakCloseServiceInSelectedAddress?.tong_lead || 0)}</strong> ·
+                      Tỷ lệ chốt: <strong>{formatPercent(weakCloseServiceInSelectedAddress?.ty_le_chot || 0)}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="min-w-full border-separate border-spacing-y-2">
+                    <thead>
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Dịch vụ</th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Lead</th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Đã chốt</th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Tỷ lệ chốt</th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Tỷ trọng trong khu vực</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedAddressRows.map((item) => (
+                        <tr key={`${item.dia_chi}-${item.dich_vu_id}`} className="bg-gray-50">
+                          <td className="rounded-l-xl px-4 py-3 text-sm font-medium text-gray-800">{item.ten_dich_vu}</td>
+                          <td className="px-4 py-3 text-right text-sm text-gray-700">{formatNumber(item.tong_lead)}</td>
+                          <td className="px-4 py-3 text-right text-sm text-gray-700">{formatNumber(item.lead_da_chot)}</td>
+                          <td className="px-4 py-3 text-right text-sm text-gray-700">{formatPercent(item.ty_le_chot)}</td>
+                          <td className="rounded-r-xl px-4 py-3 text-right text-sm text-gray-700">{formatPercent(item.ty_trong_trong_dia_chi)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
 
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
         <div className="mb-4 flex items-center gap-2">

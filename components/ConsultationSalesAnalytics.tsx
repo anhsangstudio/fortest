@@ -17,6 +17,17 @@ type RecommendationItem = {
   message: string;
 };
 
+type HieuSuatNhanVienRow = {
+  nhan_vien_tu_van: string;
+  tong_lead: number;
+  lead_da_chot: number;
+  lead_tu_choi: number;
+  lead_dang_xu_ly: number;
+  ty_le_chot: number;
+  ty_le_tu_choi: number;
+  tong_gia_tri_du_kien: number;
+};
+
 const formatPercent = (value?: number | null) => {
   const safeValue = Number(value || 0);
   return `${safeValue.toFixed(1)}%`;
@@ -71,6 +82,7 @@ const ConsultationSalesAnalytics: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const [funnelData, setFunnelData] = useState<FunnelConversionRow[]>([]);
+  const [hieuSuatNhanVien, setHieuSuatNhanVien] = useState<HieuSuatNhanVienRow[]>([]);
 
   const totalStartLeads = useMemo(() => {
     return funnelData.length > 0 ? Number(funnelData[0]?.total_leads || 0) : 0;
@@ -90,6 +102,9 @@ const ConsultationSalesAnalytics: React.FC = () => {
 
 const largestDropStage = useMemo(() => {
   if (funnelData.length <= 1) return null;
+  
+  
+
 
   const stagesAfterFirst = funnelData.slice(1);
 
@@ -176,36 +191,86 @@ const recommendations = useMemo<RecommendationItem[]>(() => {
 }, [funnelData, firstStage, finalStage, overallConversion, largestDropStage, largestDropPercent]);
 
 
-  const loadFunnelData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      if (!supabase) {
-        throw new Error('Supabase chưa được cấu hình');
-      }
-
-      const { data, error: rpcError } = await supabase.rpc(
-        'consultation_sales_funnel_conversion',
-        {
-          p_from: dateRange.from || null,
-          p_to: dateRange.to || null,
-        }
-      );
-
-      if (rpcError) {
-        throw rpcError;
-      }
-
-      setFunnelData(Array.isArray(data) ? data : []);
-    } catch (err: any) {
-      console.error('Lỗi khi tải funnel conversion nâng cao:', err);
-      setError(err?.message || 'Không thể tải dữ liệu funnel conversion');
-      setFunnelData([]);
-    } finally {
-      setLoading(false);
+const loadHieuSuatNhanVien = useCallback(async () => {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase chưa được cấu hình');
     }
-  }, [dateRange.from, dateRange.to]);
+
+    const { data, error } = await supabase.rpc('consultation_sales_by_staff', {
+      p_from: dateRange.from || null,
+      p_to: dateRange.to || null,
+    });
+
+    if (error) throw error;
+
+    setHieuSuatNhanVien(Array.isArray(data) ? data : []);
+  } catch (err: any) {
+    console.error('Lỗi khi tải hiệu suất theo nhân viên:', err);
+    setHieuSuatNhanVien([]);
+  }
+}, [dateRange.from, dateRange.to]);
+
+
+
+const loadFunnelData = useCallback(async () => {
+  try {
+    setLoading(true);
+    setError(null);
+
+    if (!supabase) {
+      throw new Error('Supabase chưa được cấu hình');
+    }
+
+    const { data, error: rpcError } = await supabase.rpc(
+      'consultation_sales_funnel_conversion',
+      {
+        p_from: dateRange.from || null,
+        p_to: dateRange.to || null,
+      }
+    );
+
+    if (rpcError) {
+      throw rpcError;
+    }
+
+    setFunnelData(Array.isArray(data) ? data : []);
+
+    const { data: staffData, error: staffError } = await supabase.rpc(
+      'consultation_sales_by_staff',
+      {
+        p_from: dateRange.from || null,
+        p_to: dateRange.to || null,
+      }
+    );
+
+    if (staffError) {
+      throw staffError;
+    }
+
+    setHieuSuatNhanVien(Array.isArray(staffData) ? staffData : []);
+  } catch (err: any) {
+    console.error('Lỗi khi tải dữ liệu phân tích sale:', err);
+    setError(err?.message || 'Không thể tải dữ liệu phân tích sale');
+    setFunnelData([]);
+    setHieuSuatNhanVien([]);
+  } finally {
+    setLoading(false);
+  }
+}, [dateRange.from, dateRange.to]);
+
+const topNhanVien = useMemo(() => {
+  return hieuSuatNhanVien.length > 0 ? hieuSuatNhanVien[0] : null;
+}, [hieuSuatNhanVien]);
+
+const tongLeadTatCaNhanVien = useMemo(() => {
+  return hieuSuatNhanVien.reduce((sum, item) => sum + Number(item.tong_lead || 0), 0);
+}, [hieuSuatNhanVien]);
+
+const tongChotTatCaNhanVien = useMemo(() => {
+  return hieuSuatNhanVien.reduce((sum, item) => sum + Number(item.lead_da_chot || 0), 0);
+}, [hieuSuatNhanVien]);
+
 
   useEffect(() => {
     loadFunnelData();
@@ -431,7 +496,125 @@ const recommendations = useMemo<RecommendationItem[]>(() => {
       })}
     </div>
   )}
-</div>      
+</div>   
+
+{/* Hiệu suất theo nhân viên */}
+<div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+  <div className="mb-4 flex items-center gap-2">
+    <BarChart3 size={18} className="text-gray-500" />
+    <h2 className="text-base font-semibold text-gray-800">
+      Hiệu suất theo nhân viên tư vấn
+    </h2>
+  </div>
+
+  {!loading && !error && hieuSuatNhanVien.length === 0 && (
+    <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-sm text-gray-500">
+      Chưa có dữ liệu theo nhân viên trong khoảng thời gian đang chọn.
+    </div>
+  )}
+
+  {!loading && !error && hieuSuatNhanVien.length > 0 && (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+          <div className="text-sm text-gray-500">Tổng lead theo nhân viên</div>
+          <div className="mt-2 text-2xl font-bold text-gray-900">
+            {formatNumber(tongLeadTatCaNhanVien)}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+          <div className="text-sm text-gray-500">Tổng khách đã chốt</div>
+          <div className="mt-2 text-2xl font-bold text-gray-900">
+            {formatNumber(tongChotTatCaNhanVien)}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+          <div className="text-sm text-gray-500">Nhân viên nổi bật nhất</div>
+          <div className="mt-2 text-lg font-bold text-gray-900">
+            {topNhanVien?.nhan_vien_tu_van || '--'}
+          </div>
+          <div className="mt-1 text-sm text-gray-500">
+            Tỷ lệ chốt: {formatPercent(topNhanVien?.ty_le_chot || 0)}
+          </div>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="min-w-full border-separate border-spacing-y-2">
+          <thead>
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Nhân viên
+              </th>
+              <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Tổng lead
+              </th>
+              <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Đã chốt
+              </th>
+              <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Từ chối
+              </th>
+              <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Đang xử lý
+              </th>
+              <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Tỷ lệ chốt
+              </th>
+              <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Giá trị dự kiến
+              </th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {hieuSuatNhanVien.map((item) => (
+              <tr key={item.nhan_vien_tu_van} className="bg-gray-50">
+                <td className="rounded-l-xl px-4 py-3">
+                  <div className="text-sm font-medium text-gray-800">
+                    {item.nhan_vien_tu_van}
+                  </div>
+                  <div className="mt-2 h-2 w-40 rounded-full bg-gray-200">
+                    <div
+                      className="h-2 rounded-full bg-blue-600"
+                      style={{ width: `${clampPercent(item.ty_le_chot)}%` }}
+                    />
+                  </div>
+                </td>
+
+                <td className="px-4 py-3 text-right text-sm text-gray-700">
+                  {formatNumber(item.tong_lead)}
+                </td>
+
+                <td className="px-4 py-3 text-right text-sm text-gray-700">
+                  {formatNumber(item.lead_da_chot)}
+                </td>
+
+                <td className="px-4 py-3 text-right text-sm text-gray-700">
+                  {formatNumber(item.lead_tu_choi)}
+                </td>
+
+                <td className="px-4 py-3 text-right text-sm text-gray-700">
+                  {formatNumber(item.lead_dang_xu_ly)}
+                </td>
+
+                <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
+                  {formatPercent(item.ty_le_chot)}
+                </td>
+
+                <td className="rounded-r-xl px-4 py-3 text-right text-sm text-gray-700">
+                  {formatNumber(item.tong_gia_tri_du_kien)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )}
+</div>   
 
       
             {/* Funnel Conversion */}

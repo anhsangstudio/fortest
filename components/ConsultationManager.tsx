@@ -69,6 +69,10 @@ const ConsultationManager: React.FC = () => {
     from: firstDayOfMonth,
     to: today,
   });
+
+
+  const reportYear = new Date(reportDateRange.to || today).getFullYear();
+  const reportMonth = new Date(reportDateRange.to || today).getMonth() + 1;
   
   
   const [filters, setFilters] = useState<Partial<ConsultationFilter>>({

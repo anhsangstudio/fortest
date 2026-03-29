@@ -55,6 +55,34 @@ const ConsultationSalesAnalytics: React.FC = () => {
   const overallConversion = useMemo(() => {
     return finalStage ? Number(finalStage.conversion_from_start || 0) : 0;
   }, [finalStage]);
+  
+  const firstStage = useMemo(() => {
+  return funnelData.length > 0 ? funnelData[0] : null;
+}, [funnelData]);
+
+const largestDropStage = useMemo(() => {
+  if (funnelData.length <= 1) return null;
+
+  const stagesAfterFirst = funnelData.slice(1);
+
+  return stagesAfterFirst.reduce<FunnelConversionRow | null>((lowest, current) => {
+    if (!lowest) return current;
+
+    const lowestValue = Number(lowest.conversion_from_previous || 0);
+    const currentValue = Number(current.conversion_from_previous || 0);
+
+    return currentValue < lowestValue ? current : lowest;
+  }, null);
+}, [funnelData]);
+
+const largestDropPercent = useMemo(() => {
+  if (!largestDropStage) return 0;
+
+  const conversion = Number(largestDropStage.conversion_from_previous || 0);
+  const drop = 100 - conversion;
+
+  return drop > 0 ? drop : 0;
+}, [largestDropStage]);
 
   const loadFunnelData = useCallback(async () => {
     try {
@@ -209,6 +237,72 @@ const ConsultationSalesAnalytics: React.FC = () => {
           </div>
         </div>
       </div>
+      
+      {/* Insight nhanh */}
+<div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+  <div className="mb-4 flex items-center gap-2">
+    <BarChart3 size={18} className="text-gray-500" />
+    <h2 className="text-base font-semibold text-gray-800">
+      Insight nhanh
+    </h2>
+  </div>
+
+  {!loading && !error && funnelData.length === 0 && (
+    <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-sm text-gray-500">
+      Chưa có dữ liệu để phân tích insight.
+    </div>
+  )}
+
+  {!loading && !error && funnelData.length > 0 && (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+        <div className="text-sm font-semibold text-blue-800">
+          Tổng quan funnel
+        </div>
+        <div className="mt-2 text-sm leading-6 text-blue-900">
+          Giai đoạn bắt đầu là <strong>{firstStage?.stage_label || '--'}</strong> với{' '}
+          <strong>{formatNumber(firstStage?.total_leads || 0)}</strong> lead.
+          Giai đoạn cuối hiện tại là <strong>{finalStage?.stage_label || '--'}</strong> với{' '}
+          <strong>{formatNumber(finalStage?.total_leads || 0)}</strong> lead,
+          tương đương <strong>{formatPercent(overallConversion)}</strong> so với đầu funnel.
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
+        <div className="text-sm font-semibold text-amber-800">
+          Điểm rơi lớn nhất
+        </div>
+        <div className="mt-2 text-sm leading-6 text-amber-900">
+          Giai đoạn có tỷ lệ giảm mạnh nhất hiện là <strong>{largestDropStage?.stage_label || '--'}</strong>.
+          Tỷ lệ giữ lại từ bước trước là <strong>{formatPercent(largestDropStage?.conversion_from_previous || 0)}</strong>,
+          tức rơi khoảng <strong>{formatPercent(largestDropPercent)}</strong>.
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+        <div className="text-sm font-semibold text-emerald-800">
+          Nhận định vận hành
+        </div>
+        <div className="mt-2 text-sm leading-6 text-emerald-900">
+          Nếu tỷ lệ từ đầu funnel đến cuối funnel thấp, cần kiểm tra lại chất lượng follow-up,
+          tốc độ phản hồi và nội dung tư vấn ở các giai đoạn giữa.
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div className="text-sm font-semibold text-slate-800">
+          Gợi ý đọc số liệu
+        </div>
+        <div className="mt-2 text-sm leading-6 text-slate-900">
+          Ưu tiên theo dõi <strong>conversion_from_previous</strong> để tìm đúng điểm nghẽn từng bước,
+          và theo dõi <strong>conversion_from_start</strong> để đánh giá hiệu quả toàn bộ funnel.
+        </div>
+      </div>
+    </div>
+  )}
+</div>
+      
+      
 
       {/* Funnel Conversion */}
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">

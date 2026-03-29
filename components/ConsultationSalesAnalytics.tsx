@@ -76,6 +76,7 @@ const recommendationStyleMap: Record<
 };
 
 const SO_LEAD_TOI_THIEU_DE_SO_SANH = 5;
+const TAT_CA_NHAN_VIEN = '__tat_ca__';
 
 const getToday = () => new Date().toISOString().slice(0, 10);
 
@@ -98,27 +99,62 @@ const ConsultationSalesAnalytics: React.FC = () => {
   const [hieuSuatNhanVien, setHieuSuatNhanVien] = useState<HieuSuatNhanVienRow[]>([]);
   const [diemRoiTheoNhanVien, setDiemRoiTheoNhanVien] = useState<DiemRoiTheoNhanVienRow[]>([]);
   const [nhanVienDangXem, setNhanVienDangXem] = useState<string>('');
+  const [boLocNhanVienToanManHinh, setBoLocNhanVienToanManHinh] = useState<string>(TAT_CA_NHAN_VIEN);
+
+  const danhSachNhanVien = useMemo(() => {
+    return Array.from(
+      new Set(hieuSuatNhanVien.map((item) => item.nhan_vien_tu_van).filter(Boolean))
+    );
+  }, [hieuSuatNhanVien]);
+
+  const hieuSuatNhanVienHienThi = useMemo(() => {
+    if (boLocNhanVienToanManHinh === TAT_CA_NHAN_VIEN) {
+      return hieuSuatNhanVien;
+    }
+
+    return hieuSuatNhanVien.filter(
+      (item) => item.nhan_vien_tu_van === boLocNhanVienToanManHinh
+    );
+  }, [hieuSuatNhanVien, boLocNhanVienToanManHinh]);
+
+  const duLieuFunnelHienThi = useMemo<FunnelConversionRow[]>(() => {
+    if (boLocNhanVienToanManHinh === TAT_CA_NHAN_VIEN) {
+      return funnelData;
+    }
+
+    return diemRoiTheoNhanVien
+      .filter((item) => item.nhan_vien_tu_van === boLocNhanVienToanManHinh)
+      .sort((a, b) => Number(a.stage_order || 0) - Number(b.stage_order || 0))
+      .map((item) => ({
+        stage_key: item.stage_key,
+        stage_label: item.stage_label,
+        stage_order: item.stage_order,
+        total_leads: item.total_leads,
+        conversion_from_previous: item.conversion_from_previous,
+        conversion_from_start: item.conversion_from_start,
+      }));
+  }, [boLocNhanVienToanManHinh, funnelData, diemRoiTheoNhanVien]);
 
   const totalStartLeads = useMemo(() => {
-    return funnelData.length > 0 ? Number(funnelData[0]?.total_leads || 0) : 0;
-  }, [funnelData]);
+    return duLieuFunnelHienThi.length > 0 ? Number(duLieuFunnelHienThi[0]?.total_leads || 0) : 0;
+  }, [duLieuFunnelHienThi]);
 
   const finalStage = useMemo(() => {
-    return funnelData.length > 0 ? funnelData[funnelData.length - 1] : null;
-  }, [funnelData]);
+    return duLieuFunnelHienThi.length > 0 ? duLieuFunnelHienThi[duLieuFunnelHienThi.length - 1] : null;
+  }, [duLieuFunnelHienThi]);
 
   const overallConversion = useMemo(() => {
     return finalStage ? Number(finalStage.conversion_from_start || 0) : 0;
   }, [finalStage]);
 
   const firstStage = useMemo(() => {
-    return funnelData.length > 0 ? funnelData[0] : null;
-  }, [funnelData]);
+    return duLieuFunnelHienThi.length > 0 ? duLieuFunnelHienThi[0] : null;
+  }, [duLieuFunnelHienThi]);
 
   const largestDropStage = useMemo(() => {
-    if (funnelData.length <= 1) return null;
+    if (duLieuFunnelHienThi.length <= 1) return null;
 
-    const stagesAfterFirst = funnelData.slice(1);
+    const stagesAfterFirst = duLieuFunnelHienThi.slice(1);
 
     return stagesAfterFirst.reduce<FunnelConversionRow | null>((lowest, current) => {
       if (!lowest) return current;
@@ -128,7 +164,7 @@ const ConsultationSalesAnalytics: React.FC = () => {
 
       return currentValue < lowestValue ? current : lowest;
     }, null);
-  }, [funnelData]);
+  }, [duLieuFunnelHienThi]);
 
   const largestDropPercent = useMemo(() => {
     if (!largestDropStage) return 0;
@@ -140,19 +176,22 @@ const ConsultationSalesAnalytics: React.FC = () => {
   }, [largestDropStage]);
 
   const recommendations = useMemo<RecommendationItem[]>(() => {
-    if (!funnelData.length || !firstStage || !finalStage) {
+    if (!duLieuFunnelHienThi.length || !firstStage || !finalStage) {
       return [];
     }
 
     const items: RecommendationItem[] = [];
     const startLeads = Number(firstStage.total_leads || 0);
     const endLeads = Number(finalStage.total_leads || 0);
+    const nhanXung = boLocNhanVienToanManHinh === TAT_CA_NHAN_VIEN
+      ? 'toàn bộ đội sale'
+      : `nhân viên ${boLocNhanVienToanManHinh}`;
 
     if (overallConversion < 20) {
       items.push({
         level: 'critical',
         title: 'Tỷ lệ chuyển đổi tổng thể đang thấp',
-        message: `Tỷ lệ từ đầu đến cuối funnel hiện chỉ đạt ${formatPercent(
+        message: `Tỷ lệ từ đầu đến cuối của ${nhanXung} hiện chỉ đạt ${formatPercent(
           overallConversion
         )}. Cần ưu tiên rà soát chất lượng tư vấn, tốc độ phản hồi và quy trình theo dõi lại khách.`,
       });
@@ -162,7 +201,7 @@ const ConsultationSalesAnalytics: React.FC = () => {
       items.push({
         level: 'warning',
         title: `Điểm nghẽn lớn tại giai đoạn "${largestDropStage.stage_label}"`,
-        message: `Lead rơi khoảng ${formatPercent(
+        message: `Lead của ${nhanXung} rơi khoảng ${formatPercent(
           largestDropPercent
         )} so với bước trước. Nên kiểm tra lại kịch bản tư vấn, cách xử lý phản đối và chất lượng bàn giao sang bước này.`,
       });
@@ -172,9 +211,9 @@ const ConsultationSalesAnalytics: React.FC = () => {
       items.push({
         level: 'warning',
         title: 'Lead đầu vào có nhưng thất thoát mạnh ở giữa hoặc cuối funnel',
-        message: `Đầu funnel có ${formatNumber(
+        message: `${nhanXung} đang có ${formatNumber(
           startLeads
-        )} lead nhưng giai đoạn cuối chỉ còn ${formatNumber(
+        )} lead ở đầu funnel nhưng giai đoạn cuối chỉ còn ${formatNumber(
           endLeads
         )}. Nên kiểm tra các bước theo dõi ở giữa thay vì chỉ tăng thêm lead mới.`,
       });
@@ -184,7 +223,7 @@ const ConsultationSalesAnalytics: React.FC = () => {
       items.push({
         level: 'positive',
         title: 'Funnel đang giữ lead tương đối tốt',
-        message: `Tỷ lệ từ đầu đến cuối đạt ${formatPercent(
+        message: `Tỷ lệ từ đầu đến cuối của ${nhanXung} đạt ${formatPercent(
           overallConversion
         )}. Có thể xem đây là mốc nền tốt để tiếp tục tối ưu các giai đoạn rơi nhẹ.`,
       });
@@ -200,19 +239,27 @@ const ConsultationSalesAnalytics: React.FC = () => {
     }
 
     return items;
-  }, [funnelData, firstStage, finalStage, overallConversion, largestDropStage, largestDropPercent]);
+  }, [
+    duLieuFunnelHienThi,
+    firstStage,
+    finalStage,
+    overallConversion,
+    largestDropStage,
+    largestDropPercent,
+    boLocNhanVienToanManHinh,
+  ]);
 
   const topNhanVien = useMemo(() => {
-    return hieuSuatNhanVien.length > 0 ? hieuSuatNhanVien[0] : null;
-  }, [hieuSuatNhanVien]);
+    return hieuSuatNhanVienHienThi.length > 0 ? hieuSuatNhanVienHienThi[0] : null;
+  }, [hieuSuatNhanVienHienThi]);
 
   const tongLeadTatCaNhanVien = useMemo(() => {
-    return hieuSuatNhanVien.reduce((sum, item) => sum + Number(item.tong_lead || 0), 0);
-  }, [hieuSuatNhanVien]);
+    return hieuSuatNhanVienHienThi.reduce((sum, item) => sum + Number(item.tong_lead || 0), 0);
+  }, [hieuSuatNhanVienHienThi]);
 
   const tongChotTatCaNhanVien = useMemo(() => {
-    return hieuSuatNhanVien.reduce((sum, item) => sum + Number(item.lead_da_chot || 0), 0);
-  }, [hieuSuatNhanVien]);
+    return hieuSuatNhanVienHienThi.reduce((sum, item) => sum + Number(item.lead_da_chot || 0), 0);
+  }, [hieuSuatNhanVienHienThi]);
 
   const danhSachNhanVienDuDieuKienSoSanh = useMemo(() => {
     return hieuSuatNhanVien.filter(
@@ -276,10 +323,6 @@ const ConsultationSalesAnalytics: React.FC = () => {
 
     return 'Chênh lệch hiệu suất chưa quá lớn. Nhóm sale đang khá đồng đều, nên tiếp tục theo dõi theo tuần để phát hiện sớm dấu hiệu giảm hiệu quả.';
   }, [nhanVienManhNhat, nhanVienCanHoTroNhat, doLechTyLeChot]);
-
-  const danhSachNhanVien = useMemo(() => {
-    return hieuSuatNhanVien.map((item) => item.nhan_vien_tu_van).filter(Boolean);
-  }, [hieuSuatNhanVien]);
 
   const duLieuNhanVienDangXem = useMemo(() => {
     if (!nhanVienDangXem) return [];
@@ -396,8 +439,17 @@ const ConsultationSalesAnalytics: React.FC = () => {
           );
           return hasCurrent ? current : normalizedStaffData[0].nhan_vien_tu_van;
         });
+
+        setBoLocNhanVienToanManHinh((current) => {
+          if (current === TAT_CA_NHAN_VIEN) return current;
+          const hasCurrent = normalizedStaffData.some(
+            (item) => item.nhan_vien_tu_van === current
+          );
+          return hasCurrent ? current : TAT_CA_NHAN_VIEN;
+        });
       } else {
         setNhanVienDangXem('');
+        setBoLocNhanVienToanManHinh(TAT_CA_NHAN_VIEN);
       }
 
       const { data: staffBreakdownData, error: staffBreakdownRpcError } = await supabase.rpc(
@@ -425,6 +477,7 @@ const ConsultationSalesAnalytics: React.FC = () => {
       setHieuSuatNhanVien([]);
       setDiemRoiTheoNhanVien([]);
       setNhanVienDangXem('');
+      setBoLocNhanVienToanManHinh(TAT_CA_NHAN_VIEN);
     } finally {
       setLoading(false);
     }
@@ -433,6 +486,26 @@ const ConsultationSalesAnalytics: React.FC = () => {
   useEffect(() => {
     loadFunnelData();
   }, [loadFunnelData]);
+
+  useEffect(() => {
+    if (boLocNhanVienToanManHinh !== TAT_CA_NHAN_VIEN) {
+      setNhanVienDangXem(boLocNhanVienToanManHinh);
+      return;
+    }
+
+    if (!danhSachNhanVien.length) {
+      setNhanVienDangXem('');
+      return;
+    }
+
+    setNhanVienDangXem((current) => {
+      if (current && danhSachNhanVien.includes(current)) {
+        return current;
+      }
+
+      return danhSachNhanVien[0];
+    });
+  }, [boLocNhanVienToanManHinh, danhSachNhanVien]);
 
   return (
     <div className="space-y-6 p-6">
@@ -473,7 +546,7 @@ const ConsultationSalesAnalytics: React.FC = () => {
           <h2 className="text-base font-semibold text-gray-800">Bộ lọc thời gian</h2>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
           <div>
             <label className="mb-2 block text-sm font-medium text-gray-700">
               Từ ngày
@@ -508,6 +581,24 @@ const ConsultationSalesAnalytics: React.FC = () => {
             />
           </div>
 
+          <div>
+            <label className="mb-2 block text-sm font-medium text-gray-700">
+              Lọc toàn màn hình theo nhân viên
+            </label>
+            <select
+              value={boLocNhanVienToanManHinh}
+              onChange={(e) => setBoLocNhanVienToanManHinh(e.target.value)}
+              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            >
+              <option value={TAT_CA_NHAN_VIEN}>Tất cả nhân viên</option>
+              {danhSachNhanVien.map((tenNhanVien) => (
+                <option key={tenNhanVien} value={tenNhanVien}>
+                  {tenNhanVien}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="flex items-end">
             <button
               type="button"
@@ -520,12 +611,25 @@ const ConsultationSalesAnalytics: React.FC = () => {
             </button>
           </div>
         </div>
+
+        <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+          {boLocNhanVienToanManHinh === TAT_CA_NHAN_VIEN ? (
+            <>Bạn đang xem số liệu của toàn bộ đội sale.</>
+          ) : (
+            <>
+              Bạn đang xem số liệu riêng của <strong>{boLocNhanVienToanManHinh}</strong>.
+              Tất cả phần funnel, insight, khuyến nghị và bảng chi tiết bên dưới đã đổi theo nhân viên này.
+            </>
+          )}
+        </div>
       </div>
 
       {/* KPI */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="text-sm text-gray-500">Lead đầu funnel</div>
+          <div className="text-sm text-gray-500">
+            {boLocNhanVienToanManHinh === TAT_CA_NHAN_VIEN ? 'Lead đầu funnel' : 'Lead đầu funnel của nhân viên'}
+          </div>
           <div className="mt-2 text-3xl font-bold text-gray-900">
             {formatNumber(totalStartLeads)}
           </div>
@@ -534,7 +638,7 @@ const ConsultationSalesAnalytics: React.FC = () => {
         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="text-sm text-gray-500">Số giai đoạn</div>
           <div className="mt-2 text-3xl font-bold text-gray-900">
-            {formatNumber(funnelData.length)}
+            {formatNumber(duLieuFunnelHienThi.length)}
           </div>
         </div>
 
@@ -562,13 +666,13 @@ const ConsultationSalesAnalytics: React.FC = () => {
           </h2>
         </div>
 
-        {!loading && !error && funnelData.length === 0 && (
+        {!loading && !error && duLieuFunnelHienThi.length === 0 && (
           <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-sm text-gray-500">
             Chưa có dữ liệu để phân tích insight.
           </div>
         )}
 
-        {!loading && !error && funnelData.length > 0 && (
+        {!loading && !error && duLieuFunnelHienThi.length > 0 && (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
               <div className="text-sm font-semibold text-blue-800">
@@ -617,7 +721,7 @@ const ConsultationSalesAnalytics: React.FC = () => {
         )}
       </div>
 
-      {/* Recommendation rule-based */}
+      {/* Khuyến nghị hành động */}
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
         <div className="mb-4 flex items-center gap-2">
           <BarChart3 size={18} className="text-gray-500" />
@@ -626,7 +730,7 @@ const ConsultationSalesAnalytics: React.FC = () => {
           </h2>
         </div>
 
-        {!loading && !error && funnelData.length === 0 && (
+        {!loading && !error && duLieuFunnelHienThi.length === 0 && (
           <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-sm text-gray-500">
             Chưa có dữ liệu để đưa ra khuyến nghị.
           </div>
@@ -664,132 +768,140 @@ const ConsultationSalesAnalytics: React.FC = () => {
           </h2>
         </div>
 
-        {!loading && !error && hieuSuatNhanVien.length === 0 && (
+        {boLocNhanVienToanManHinh !== TAT_CA_NHAN_VIEN ? (
           <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-sm text-gray-500">
-            Chưa có dữ liệu nhân viên để so sánh.
+            Phần so sánh nhanh chỉ hiển thị khi bạn đang xem toàn bộ đội sale. Hãy chuyển bộ lọc về <strong>Tất cả nhân viên</strong> để so sánh.
           </div>
-        )}
-
-        {!loading && !error && hieuSuatNhanVien.length > 0 && (
-          <div className="space-y-4">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-sm text-slate-600">
-                Chỉ so sánh các nhân viên có từ <strong>{SO_LEAD_TOI_THIEU_DE_SO_SANH}</strong> khách trở lên để tránh sai lệch do mẫu quá nhỏ.
-              </div>
-            </div>
-
-            {!nhanVienManhNhat || !nhanVienCanHoTroNhat ? (
+        ) : (
+          <>
+            {!loading && !error && hieuSuatNhanVien.length === 0 && (
               <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-sm text-gray-500">
-                Chưa đủ dữ liệu để xác định nhân viên mạnh nhất và nhân viên cần hỗ trợ nhất.
+                Chưa có dữ liệu nhân viên để so sánh.
               </div>
-            ) : (
-              <>
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
-                    <div className="text-sm font-semibold text-emerald-800">
-                      Nhân viên nổi bật nhất
-                    </div>
-                    <div className="mt-2 text-xl font-bold text-gray-900">
-                      {nhanVienManhNhat.nhan_vien_tu_van}
-                    </div>
-                    <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                      <div>
-                        <div className="text-gray-500">Tổng lead</div>
-                        <div className="font-semibold text-gray-900">
-                          {formatNumber(nhanVienManhNhat.tong_lead)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-gray-500">Đã chốt</div>
-                        <div className="font-semibold text-gray-900">
-                          {formatNumber(nhanVienManhNhat.lead_da_chot)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-gray-500">Tỷ lệ chốt</div>
-                        <div className="font-semibold text-gray-900">
-                          {formatPercent(nhanVienManhNhat.ty_le_chot)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-gray-500">Giá trị dự kiến</div>
-                        <div className="font-semibold text-gray-900">
-                          {formatNumber(nhanVienManhNhat.tong_gia_tri_du_kien)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
-                    <div className="text-sm font-semibold text-amber-800">
-                      Nhân viên cần hỗ trợ nhất
-                    </div>
-                    <div className="mt-2 text-xl font-bold text-gray-900">
-                      {nhanVienCanHoTroNhat.nhan_vien_tu_van}
-                    </div>
-                    <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                      <div>
-                        <div className="text-gray-500">Tổng lead</div>
-                        <div className="font-semibold text-gray-900">
-                          {formatNumber(nhanVienCanHoTroNhat.tong_lead)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-gray-500">Đã chốt</div>
-                        <div className="font-semibold text-gray-900">
-                          {formatNumber(nhanVienCanHoTroNhat.lead_da_chot)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-gray-500">Tỷ lệ chốt</div>
-                        <div className="font-semibold text-gray-900">
-                          {formatPercent(nhanVienCanHoTroNhat.ty_le_chot)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-gray-500">Giá trị dự kiến</div>
-                        <div className="font-semibold text-gray-900">
-                          {formatNumber(nhanVienCanHoTroNhat.tong_gia_tri_du_kien)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                  <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-                    <div className="text-sm text-gray-500">Chênh lệch tỷ lệ chốt</div>
-                    <div className="mt-2 text-2xl font-bold text-gray-900">
-                      {formatPercent(doLechTyLeChot)}
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-                    <div className="text-sm text-gray-500">Người mạnh nhất</div>
-                    <div className="mt-2 text-lg font-bold text-gray-900">
-                      {nhanVienManhNhat.nhan_vien_tu_van}
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-                    <div className="text-sm text-gray-500">Người cần hỗ trợ</div>
-                    <div className="mt-2 text-lg font-bold text-gray-900">
-                      {nhanVienCanHoTroNhat.nhan_vien_tu_van}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
-                  <div className="text-sm font-semibold text-blue-800">
-                    Nhận định quản lý
-                  </div>
-                  <div className="mt-2 text-sm leading-6 text-blue-900">
-                    {nhanDinhSoSanhNhanVien}
-                  </div>
-                </div>
-              </>
             )}
-          </div>
+
+            {!loading && !error && hieuSuatNhanVien.length > 0 && (
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="text-sm text-slate-600">
+                    Chỉ so sánh các nhân viên có từ <strong>{SO_LEAD_TOI_THIEU_DE_SO_SANH}</strong> khách trở lên để tránh sai lệch do mẫu quá nhỏ.
+                  </div>
+                </div>
+
+                {!nhanVienManhNhat || !nhanVienCanHoTroNhat ? (
+                  <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-sm text-gray-500">
+                    Chưa đủ dữ liệu để xác định nhân viên mạnh nhất và nhân viên cần hỗ trợ nhất.
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+                        <div className="text-sm font-semibold text-emerald-800">
+                          Nhân viên nổi bật nhất
+                        </div>
+                        <div className="mt-2 text-xl font-bold text-gray-900">
+                          {nhanVienManhNhat.nhan_vien_tu_van}
+                        </div>
+                        <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <div className="text-gray-500">Tổng lead</div>
+                            <div className="font-semibold text-gray-900">
+                              {formatNumber(nhanVienManhNhat.tong_lead)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-gray-500">Đã chốt</div>
+                            <div className="font-semibold text-gray-900">
+                              {formatNumber(nhanVienManhNhat.lead_da_chot)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-gray-500">Tỷ lệ chốt</div>
+                            <div className="font-semibold text-gray-900">
+                              {formatPercent(nhanVienManhNhat.ty_le_chot)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-gray-500">Giá trị dự kiến</div>
+                            <div className="font-semibold text-gray-900">
+                              {formatNumber(nhanVienManhNhat.tong_gia_tri_du_kien)}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+                        <div className="text-sm font-semibold text-amber-800">
+                          Nhân viên cần hỗ trợ nhất
+                        </div>
+                        <div className="mt-2 text-xl font-bold text-gray-900">
+                          {nhanVienCanHoTroNhat.nhan_vien_tu_van}
+                        </div>
+                        <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <div className="text-gray-500">Tổng lead</div>
+                            <div className="font-semibold text-gray-900">
+                              {formatNumber(nhanVienCanHoTroNhat.tong_lead)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-gray-500">Đã chốt</div>
+                            <div className="font-semibold text-gray-900">
+                              {formatNumber(nhanVienCanHoTroNhat.lead_da_chot)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-gray-500">Tỷ lệ chốt</div>
+                            <div className="font-semibold text-gray-900">
+                              {formatPercent(nhanVienCanHoTroNhat.ty_le_chot)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-gray-500">Giá trị dự kiến</div>
+                            <div className="font-semibold text-gray-900">
+                              {formatNumber(nhanVienCanHoTroNhat.tong_gia_tri_du_kien)}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                      <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                        <div className="text-sm text-gray-500">Chênh lệch tỷ lệ chốt</div>
+                        <div className="mt-2 text-2xl font-bold text-gray-900">
+                          {formatPercent(doLechTyLeChot)}
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                        <div className="text-sm text-gray-500">Người mạnh nhất</div>
+                        <div className="mt-2 text-lg font-bold text-gray-900">
+                          {nhanVienManhNhat.nhan_vien_tu_van}
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                        <div className="text-sm text-gray-500">Người cần hỗ trợ</div>
+                        <div className="mt-2 text-lg font-bold text-gray-900">
+                          {nhanVienCanHoTroNhat.nhan_vien_tu_van}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+                      <div className="text-sm font-semibold text-blue-800">
+                        Nhận định quản lý
+                      </div>
+                      <div className="mt-2 text-sm leading-6 text-blue-900">
+                        {nhanDinhSoSanhNhanVien}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -802,13 +914,13 @@ const ConsultationSalesAnalytics: React.FC = () => {
           </h2>
         </div>
 
-        {!loading && !error && hieuSuatNhanVien.length === 0 && (
+        {!loading && !error && hieuSuatNhanVienHienThi.length === 0 && (
           <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-sm text-gray-500">
             Chưa có dữ liệu theo nhân viên trong khoảng thời gian đang chọn.
           </div>
         )}
 
-        {!loading && !error && hieuSuatNhanVien.length > 0 && (
+        {!loading && !error && hieuSuatNhanVienHienThi.length > 0 && (
           <div className="space-y-4">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
@@ -865,7 +977,7 @@ const ConsultationSalesAnalytics: React.FC = () => {
                 </thead>
 
                 <tbody>
-                  {hieuSuatNhanVien.map((item) => (
+                  {hieuSuatNhanVienHienThi.map((item) => (
                     <tr key={item.nhan_vien_tu_van} className="bg-gray-50">
                       <td className="rounded-l-xl px-4 py-3">
                         <div className="text-sm font-medium text-gray-800">
@@ -928,7 +1040,8 @@ const ConsultationSalesAnalytics: React.FC = () => {
             <select
               value={nhanVienDangXem}
               onChange={(e) => setNhanVienDangXem(e.target.value)}
-              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              disabled={boLocNhanVienToanManHinh !== TAT_CA_NHAN_VIEN}
+              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-gray-100"
             >
               {danhSachNhanVien.length === 0 && <option value="">Chưa có dữ liệu nhân viên</option>}
               {danhSachNhanVien.map((tenNhanVien) => (
@@ -937,6 +1050,11 @@ const ConsultationSalesAnalytics: React.FC = () => {
                 </option>
               ))}
             </select>
+            {boLocNhanVienToanManHinh !== TAT_CA_NHAN_VIEN && (
+              <div className="mt-2 text-xs text-gray-500">
+                Đang khóa theo bộ lọc toàn màn hình.
+              </div>
+            )}
           </div>
 
           <div className="lg:col-span-2 rounded-2xl border border-gray-200 bg-gray-50 p-4">
@@ -1101,7 +1219,7 @@ const ConsultationSalesAnalytics: React.FC = () => {
           </div>
         )}
 
-        {!loading && !error && funnelData.length === 0 && (
+        {!loading && !error && duLieuFunnelHienThi.length === 0 && (
           <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-6 py-10 text-center">
             <div className="text-base font-medium text-gray-700">Chưa có dữ liệu</div>
             <div className="mt-2 text-sm text-gray-500">
@@ -1110,7 +1228,7 @@ const ConsultationSalesAnalytics: React.FC = () => {
           </div>
         )}
 
-        {!loading && funnelData.length > 0 && (
+        {!loading && duLieuFunnelHienThi.length > 0 && (
           <div className="space-y-4">
             <div className="overflow-x-auto">
               <table className="min-w-full border-separate border-spacing-y-2">
@@ -1132,7 +1250,7 @@ const ConsultationSalesAnalytics: React.FC = () => {
                 </thead>
 
                 <tbody>
-                  {funnelData.map((item) => (
+                  {duLieuFunnelHienThi.map((item) => (
                     <tr key={item.stage_key} className="bg-gray-50">
                       <td className="rounded-l-xl px-4 py-3">
                         <div className="flex items-center gap-3">
@@ -1173,7 +1291,7 @@ const ConsultationSalesAnalytics: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              {funnelData.map((item) => (
+              {duLieuFunnelHienThi.map((item) => (
                 <div
                   key={`${item.stage_key}-card`}
                   className="rounded-2xl border border-gray-200 bg-white p-4"

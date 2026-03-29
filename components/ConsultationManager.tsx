@@ -35,10 +35,6 @@ const ConsultationManager: React.FC = () => {
     by_status: [] as Array<{ label: string; total: number }>,
     funnel: [] as Array<{ label: string; total: number }>,
   });
-
-  const [serviceBreakdown, setServiceBreakdown] = useState<
-    Array<{ label: string; total: number; rate: number }>
-  >([]);
   
   
   const today = new Date().toISOString().slice(0, 10);
@@ -209,8 +205,7 @@ const ConsultationManager: React.FC = () => {
   useEffect(() => {
     loadData();
     loadReportSummary();
-    loadServiceBreakdown();
-  }, [loadData, loadReportSummary, loadServiceBreakdown]);
+  }, [loadData, loadReportSummary]);
   
   useEffect(() => {
     const nextMap: Record<string, string> = {};
@@ -1090,10 +1085,7 @@ const ConsultationManager: React.FC = () => {
             <div className="flex items-end">
               <button
                 type="button"
-                onClick={() => {
-                  loadReportSummary();
-                  loadServiceBreakdown();
-                }}
+                onClick={() => loadReportSummary()}
                 className="w-full rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-medium hover:bg-blue-700"
               >
                 Xem báo cáo

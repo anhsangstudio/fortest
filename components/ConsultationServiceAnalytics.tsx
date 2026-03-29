@@ -14,6 +14,14 @@ type ServicePerformanceRow = {
   tong_gia_tri_du_kien: number;
 };
 
+type ServiceTrendRow = {
+  thang: number;
+  ten_dich_vu: string;
+  tong_lead: number;
+  lead_da_chot: number;
+  ty_le_chot: number;
+};
+
 type RecommendationItem = {
   level: 'critical' | 'warning' | 'positive' | 'neutral';
   title: string;
@@ -33,6 +41,11 @@ const clampPercent = (value?: number | null) => {
   const n = Number(value || 0);
   if (!Number.isFinite(n)) return 0;
   return Math.max(0, Math.min(100, n));
+};
+
+const getMonthLabel = (month?: number | null) => {
+  const safeMonth = Number(month || 0);
+  return safeMonth > 0 ? `Tháng ${safeMonth}` : '--';
 };
 
 const recommendationStyleMap: Record<
@@ -72,8 +85,10 @@ const ConsultationServiceAnalytics: React.FC = () => {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [trendError, setTrendError] = useState<string | null>(null);
 
   const [serviceData, setServiceData] = useState<ServicePerformanceRow[]>([]);
+  const [serviceTrendData, setServiceTrendData] = useState<ServiceTrendRow[]>([]);
 
   const totalLeadThiTruong = useMemo(() => {
     return serviceData.reduce((sum, item) => sum + Number(item.tong_lead || 0), 0);
@@ -84,9 +99,9 @@ const ConsultationServiceAnalytics: React.FC = () => {
   }, [serviceData]);
 
   const tyLeDapUngToanBo = useMemo(() => {
-    if (totalLeadThiTruong === 0) return 0;
+    if (totalLeadThiTruong <= 0) return 0;
     return (totalLeadDaChot / totalLeadThiTruong) * 100;
-  }, [totalLeadDaChot, totalLeadThiTruong]);
+  }, [totalLeadThiTruong, totalLeadDaChot]);
 
   const dichVuQuanTamNhieuNhat = useMemo(() => {
     return serviceData.length > 0 ? serviceData[0] : null;
@@ -105,6 +120,7 @@ const ConsultationServiceAnalytics: React.FC = () => {
 
         const leadB = Number(b.tong_lead || 0);
         const leadA = Number(a.tong_lead || 0);
+
         return leadB - leadA;
       })[0] || null;
   }, [serviceData]);
@@ -115,7 +131,6 @@ const ConsultationServiceAnalytics: React.FC = () => {
     return [...serviceData]
       .filter(
         (item) =>
-          Number(item.tong_lead || 0) > 0 &&
           Number(item.ty_trong_nhu_cau || 0) >= 10 &&
           Number(item.ty_le_chot || 0) < 25
       )
@@ -189,10 +204,89 @@ const ConsultationServiceAnalytics: React.FC = () => {
     return items;
   }, [serviceData, tyLeDapUngToanBo, dichVuCoCoHoiTangTruong, dichVuQuanTamNhieuNhat]);
 
+  const danhSachThang = useMemo(() => {
+    return [...new Set(serviceTrendData.map((item) => Number(item.thang || 0)).filter((month) => month > 0))].sort(
+      (a, b) => a - b
+    );
+  }, [serviceTrendData]);
+
+  const topDichVuTheoXuHuong = useMemo(() => {
+    const serviceMap = new Map<string, { ten_dich_vu: string; tong_lead: number }>();
+
+    serviceTrendData.forEach((item) => {
+      const current = serviceMap.get(item.ten_dich_vu) || {
+        ten_dich_vu: item.ten_dich_vu,
+        tong_lead: 0,
+      };
+
+      current.tong_lead += Number(item.tong_lead || 0);
+      serviceMap.set(item.ten_dich_vu, current);
+    });
+
+    return [...serviceMap.values()]
+      .sort((a, b) => b.tong_lead - a.tong_lead)
+      .slice(0, 5)
+      .map((item) => item.ten_dich_vu);
+  }, [serviceTrendData]);
+
+  const xuHuongTheoDichVu = useMemo(() => {
+    return topDichVuTheoXuHuong.map((tenDichVu) => {
+      const rows = serviceTrendData
+        .filter((item) => item.ten_dich_vu === tenDichVu)
+        .sort((a, b) => Number(a.thang || 0) - Number(b.thang || 0));
+
+      const thangCuoi = rows.length > 0 ? rows[rows.length - 1] : null;
+      const thangTruoc = rows.length > 1 ? rows[rows.length - 2] : null;
+      const chenhLechLead =
+        Number(thangCuoi?.tong_lead || 0) - Number(thangTruoc?.tong_lead || 0);
+
+      return {
+        ten_dich_vu: tenDichVu,
+        rows,
+        thangCuoi,
+        thangTruoc,
+        chenhLechLead,
+      };
+    });
+  }, [serviceTrendData, topDichVuTheoXuHuong]);
+
+  const dichVuTangNhanhNhat = useMemo(() => {
+    if (!xuHuongTheoDichVu.length) return null;
+
+    return [...xuHuongTheoDichVu]
+      .filter((item) => item.chenhLechLead > 0)
+      .sort((a, b) => b.chenhLechLead - a.chenhLechLead)[0] || null;
+  }, [xuHuongTheoDichVu]);
+
+  const dichVuGiamNhieuNhat = useMemo(() => {
+    if (!xuHuongTheoDichVu.length) return null;
+
+    return [...xuHuongTheoDichVu]
+      .filter((item) => item.chenhLechLead < 0)
+      .sort((a, b) => a.chenhLechLead - b.chenhLechLead)[0] || null;
+  }, [xuHuongTheoDichVu]);
+
+  const nhanDinhXuHuong = useMemo(() => {
+    if (!serviceTrendData.length) {
+      return 'Chưa có dữ liệu xu hướng theo tháng để đưa ra nhận định.';
+    }
+
+    if (dichVuTangNhanhNhat && Number(dichVuTangNhanhNhat.chenhLechLead || 0) >= 3) {
+      return `Dịch vụ "${dichVuTangNhanhNhat.ten_dich_vu}" đang tăng nhanh nhất ở giai đoạn gần đây. Nên kiểm tra lại nội dung quảng bá, giá bán và khả năng phục vụ để đón nhu cầu tăng.`;
+    }
+
+    if (dichVuGiamNhieuNhat && Math.abs(Number(dichVuGiamNhieuNhat.chenhLechLead || 0)) >= 3) {
+      return `Dịch vụ "${dichVuGiamNhieuNhat.ten_dich_vu}" đang giảm mức quan tâm rõ rệt so với kỳ trước. Nên xem lại gói sản phẩm, hình ảnh truyền thông và lý do khách không còn ưu tiên dịch vụ này.`;
+    }
+
+    return 'Xu hướng giữa các dịch vụ hiện chưa biến động quá mạnh. Nên tiếp tục theo dõi thêm theo tháng để xác nhận dịch vụ nào đang thật sự tăng hoặc giảm.';
+  }, [serviceTrendData, dichVuTangNhanhNhat, dichVuGiamNhieuNhat]);
+
   const loadServiceData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
+      setTrendError(null);
 
       if (!supabase) {
         throw new Error('Supabase chưa được cấu hình');
@@ -211,10 +305,31 @@ const ConsultationServiceAnalytics: React.FC = () => {
       }
 
       setServiceData(Array.isArray(data) ? data : []);
+
+      const { data: trendData, error: trendRpcError } = await supabase.rpc(
+        'consultation_service_trend_by_month',
+        {
+          p_from: dateRange.from || null,
+          p_to: dateRange.to || null,
+        }
+      );
+
+      if (trendRpcError) {
+        console.warn('RPC consultation_service_trend_by_month chưa sẵn sàng:', trendRpcError);
+        setServiceTrendData([]);
+        setTrendError(
+          'Chưa tải được phần xu hướng theo tháng. Hãy tạo thêm hàm SQL consultation_service_trend_by_month.'
+        );
+      } else {
+        setServiceTrendData(Array.isArray(trendData) ? trendData : []);
+        setTrendError(null);
+      }
     } catch (err: any) {
       console.error('Lỗi khi tải dữ liệu phân tích theo dịch vụ:', err);
       setError(err?.message || 'Không thể tải dữ liệu phân tích theo dịch vụ');
       setServiceData([]);
+      setServiceTrendData([]);
+      setTrendError(null);
     } finally {
       setLoading(false);
     }
@@ -238,7 +353,7 @@ const ConsultationServiceAnalytics: React.FC = () => {
                 Phân Tích Nhu Cầu Và Hiệu Quả Theo Dịch Vụ
               </h1>
               <p className="mt-1 text-sm text-gray-500">
-                Giúp nhìn rõ khách đang quan tâm nhiều đến dịch vụ nào và studio đang đáp ứng được bao nhiêu phần trăm nhu cầu đó.
+                Giúp nhìn rõ khách đang quan tâm nhiều đến dịch vụ nào, xu hướng đang tăng ở đâu và studio đang đáp ứng được bao nhiêu phần trăm nhu cầu đó.
               </p>
             </div>
           </div>
@@ -442,6 +557,186 @@ const ConsultationServiceAnalytics: React.FC = () => {
                 </div>
               );
             })}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="mb-4 flex items-center gap-2">
+          <BarChart3 size={18} className="text-gray-500" />
+          <h2 className="text-base font-semibold text-gray-800">
+            Xu hướng theo tháng của dịch vụ
+          </h2>
+        </div>
+
+        {trendError && (
+          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            {trendError}
+          </div>
+        )}
+
+        {!loading && !error && !trendError && serviceTrendData.length === 0 && (
+          <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-sm text-gray-500">
+            Chưa có dữ liệu xu hướng theo tháng trong khoảng thời gian đang chọn.
+          </div>
+        )}
+
+        {!loading && !error && !trendError && serviceTrendData.length > 0 && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                <div className="text-sm font-semibold text-blue-800">Dịch vụ tăng nhanh nhất</div>
+                <div className="mt-2 text-sm leading-6 text-blue-900">
+                  {dichVuTangNhanhNhat ? (
+                    <>
+                      <strong>{dichVuTangNhanhNhat.ten_dich_vu}</strong> đang tăng khoảng{' '}
+                      <strong>{formatNumber(dichVuTangNhanhNhat.chenhLechLead)}</strong> lead so với kỳ trước.
+                    </>
+                  ) : (
+                    <>Chưa có dịch vụ nào tăng rõ rệt so với kỳ trước.</>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
+                <div className="text-sm font-semibold text-amber-800">Dịch vụ giảm rõ nhất</div>
+                <div className="mt-2 text-sm leading-6 text-amber-900">
+                  {dichVuGiamNhieuNhat ? (
+                    <>
+                      <strong>{dichVuGiamNhieuNhat.ten_dich_vu}</strong> đang giảm khoảng{' '}
+                      <strong>{formatNumber(Math.abs(dichVuGiamNhieuNhat.chenhLechLead))}</strong> lead so với kỳ trước.
+                    </>
+                  ) : (
+                    <>Chưa có dịch vụ nào giảm rõ rệt so với kỳ trước.</>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+                <div className="text-sm font-semibold text-emerald-800">Nhận định xu hướng</div>
+                <div className="mt-2 text-sm leading-6 text-emerald-900">
+                  {nhanDinhXuHuong}
+                </div>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full border-separate border-spacing-y-2">
+                <thead>
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Dịch vụ
+                    </th>
+                    {danhSachThang.map((thang) => (
+                      <th
+                        key={`thang-${thang}`}
+                        className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-500"
+                      >
+                        {getMonthLabel(thang)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {xuHuongTheoDichVu.map((serviceItem) => (
+                    <tr key={serviceItem.ten_dich_vu} className="bg-gray-50">
+                      <td className="rounded-l-xl px-4 py-3 text-sm font-medium text-gray-800">
+                        {serviceItem.ten_dich_vu}
+                      </td>
+
+                      {danhSachThang.map((thang, index) => {
+                        const monthRow =
+                          serviceItem.rows.find((row) => Number(row.thang || 0) === thang) || null;
+
+                        const previousMonth = index > 0 ? danhSachThang[index - 1] : null;
+                        const previousRow =
+                          previousMonth !== null
+                            ? serviceItem.rows.find((row) => Number(row.thang || 0) === previousMonth) || null
+                            : null;
+
+                        const growth =
+                          Number(monthRow?.tong_lead || 0) - Number(previousRow?.tong_lead || 0);
+
+                        return (
+                          <td
+                            key={`${serviceItem.ten_dich_vu}-${thang}`}
+                            className={`px-4 py-3 text-center text-sm ${
+                              index === danhSachThang.length - 1 ? 'rounded-r-xl' : ''
+                            }`}
+                          >
+                            <div className="font-semibold text-gray-900">
+                              {formatNumber(monthRow?.tong_lead || 0)}
+                            </div>
+                            <div className="mt-1 text-xs text-gray-500">
+                              Chốt {formatNumber(monthRow?.lead_da_chot || 0)}
+                            </div>
+                            <div className="mt-1 text-xs text-gray-500">
+                              {index === 0
+                                ? 'Mốc đầu'
+                                : growth > 0
+                                ? `+${formatNumber(growth)}`
+                                : formatNumber(growth)}
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              {xuHuongTheoDichVu.map((serviceItem) => (
+                <div
+                  key={`${serviceItem.ten_dich_vu}-trend-card`}
+                  className="rounded-2xl border border-gray-200 bg-white p-4"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="text-sm font-semibold text-gray-800">
+                        {serviceItem.ten_dich_vu}
+                      </div>
+                      <div className="mt-1 text-sm text-gray-500">
+                        {serviceItem.rows.length} mốc theo dõi
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <div className="text-sm text-gray-500">Biến động gần nhất</div>
+                      <div className="text-lg font-bold text-gray-900">
+                        {serviceItem.chenhLechLead > 0
+                          ? `+${formatNumber(serviceItem.chenhLechLead)}`
+                          : formatNumber(serviceItem.chenhLechLead)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex items-end gap-2">
+                    {serviceItem.rows.map((row) => (
+                      <div key={`${serviceItem.ten_dich_vu}-${row.thang}`} className="flex-1">
+                        <div
+                          className="w-full rounded-t-lg bg-blue-600"
+                          style={{
+                            height: `${Math.max(16, clampPercent((Number(row.tong_lead || 0) / Math.max(1, Number(serviceItem.thangCuoi?.tong_lead || 1), ...serviceItem.rows.map((item) => Number(item.tong_lead || 0)))) * 100))}px`,
+                          }}
+                        />
+                        <div className="mt-2 text-center text-[11px] text-gray-500">
+                          T{row.thang}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-3 text-sm leading-6 text-gray-600">
+                    Kỳ gần nhất là <strong>{getMonthLabel(serviceItem.thangCuoi?.thang || 0)}</strong> với{' '}
+                    <strong>{formatNumber(serviceItem.thangCuoi?.tong_lead || 0)}</strong> lead và tỷ lệ chốt{' '}
+                    <strong>{formatPercent(serviceItem.thangCuoi?.ty_le_chot || 0)}</strong>.
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

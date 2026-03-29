@@ -185,6 +185,7 @@ const ConsultationServiceAnalytics: React.FC = () => {
   const [serviceStaffData, setServiceStaffData] = useState<ServiceStaffPerformanceRow[]>([]);
 
   const [selectedServiceId, setSelectedServiceId] = useState<string>('');
+  const [selectedStaffName, setSelectedStaffName] = useState<string>('');
 
   const totalLeads = useMemo(
     () => serviceData.reduce((sum, item) => sum + Number(item.tong_lead || 0), 0),
@@ -626,6 +627,80 @@ const ConsultationServiceAnalytics: React.FC = () => {
     return `Nếu chỉ chọn một việc để làm trước, nên bắt đầu từ "${first.dich_vu_lien_quan}". Sau đó lần lượt xử lý theo thứ tự: sửa gói hoặc báo giá, tăng marketing cho dịch vụ chốt tốt, rồi chuẩn hóa cách làm của đội sale.`;
   }, [businessActionItems]);
 
+
+  const staffFilterOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        serviceStaffData
+          .map((item) => (item.nhan_vien_tu_van || '').trim())
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b, 'vi'));
+  }, [serviceStaffData]);
+
+  const selectedStaffRowsAcrossServices = useMemo(() => {
+    if (!selectedStaffName) return [];
+    return serviceStaffData
+      .filter((item) => item.nhan_vien_tu_van === selectedStaffName)
+      .sort((a, b) => {
+        const leadB = Number(b.tong_lead || 0);
+        const leadA = Number(a.tong_lead || 0);
+        if (leadB !== leadA) return leadB - leadA;
+        return Number(b.ty_le_chot || 0) - Number(a.ty_le_chot || 0);
+      });
+  }, [serviceStaffData, selectedStaffName]);
+
+  const selectedStaffTopService = useMemo(() => {
+    if (!selectedStaffRowsAcrossServices.length) return null;
+    return [...selectedStaffRowsAcrossServices].sort((a, b) => {
+      const closeB = Number(b.ty_le_chot || 0);
+      const closeA = Number(a.ty_le_chot || 0);
+      if (closeB !== closeA) return closeB - closeA;
+      return Number(b.tong_lead || 0) - Number(a.tong_lead || 0);
+    })[0];
+  }, [selectedStaffRowsAcrossServices]);
+
+  const selectedStaffWeakService = useMemo(() => {
+    if (!selectedStaffRowsAcrossServices.length) return null;
+    return [...selectedStaffRowsAcrossServices].sort((a, b) => {
+      const closeA = Number(a.ty_le_chot || 0);
+      const closeB = Number(b.ty_le_chot || 0);
+      if (closeA !== closeB) return closeA - closeB;
+      return Number(b.tong_lead || 0) - Number(a.tong_lead || 0);
+    })[0];
+  }, [selectedStaffRowsAcrossServices]);
+
+  const selectedStaffInsight = useMemo(() => {
+    if (!selectedStaffName) {
+      return 'Chọn một nhân viên để xem người đó đang mạnh ở dịch vụ nào và còn yếu ở dịch vụ nào.';
+    }
+
+    if (!selectedStaffRowsAcrossServices.length) {
+      return `Chưa có đủ dữ liệu theo dịch vụ cho nhân viên "${selectedStaffName}".`;
+    }
+
+    if (selectedStaffTopService && selectedStaffWeakService) {
+      const gap = Math.max(
+        0,
+        Number(selectedStaffTopService.ty_le_chot || 0) - Number(selectedStaffWeakService.ty_le_chot || 0)
+      );
+
+      if (gap >= 20) {
+        return `Nhân viên "${selectedStaffName}" đang có sự chênh lệch hiệu suất khá lớn giữa các dịch vụ. Nên tập trung kèm thêm ở dịch vụ "${selectedStaffWeakService.ten_dich_vu}" trước.`;
+      }
+
+      return `Nhân viên "${selectedStaffName}" đang có hiệu suất khá đồng đều giữa các dịch vụ. Dịch vụ làm tốt nhất hiện là "${selectedStaffTopService.ten_dich_vu}".`;
+    }
+
+    return `Đã có dữ liệu theo dịch vụ cho nhân viên "${selectedStaffName}", nhưng chưa đủ để tạo nhận định sâu hơn.`;
+  }, [
+    selectedStaffName,
+    selectedStaffRowsAcrossServices,
+    selectedStaffTopService,
+    selectedStaffWeakService,
+  ]);
+
+
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
@@ -745,6 +820,11 @@ const ConsultationServiceAnalytics: React.FC = () => {
       setLoading(false);
     }
   }, [dateRange.from, dateRange.to]);
+
+  const resetDieuHanhFilters = () => {
+    setSelectedServiceId(serviceData.length > 0 ? serviceData[0].dich_vu_id : '');
+    setSelectedStaffName('');
+  };
 
   useEffect(() => {
     loadData();
@@ -998,6 +1078,113 @@ const ConsultationServiceAnalytics: React.FC = () => {
                       <td className="px-4 py-3 text-right text-sm text-gray-700">{formatNumber(item.lead_chua_dap_ung)}</td>
                       <td className="px-4 py-3 text-right text-sm text-gray-700">{formatPercent(item.ty_le_chua_dap_ung)}</td>
                       <td className="rounded-r-xl px-4 py-3 text-right text-sm text-gray-700">{formatPercent(item.ty_trong_nhu_cau)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="mb-4 flex items-center gap-2">
+          <Users size={18} className="text-gray-500" />
+          <h2 className="text-base font-semibold text-gray-800">Dịch vụ theo nhân viên đang chọn</h2>
+        </div>
+
+        {!selectedStaffName ? (
+          <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-sm text-gray-500">
+            Chọn một nhân viên ở phần “Bộ lọc điều hành nhanh” để xem người đó đang mạnh ở dịch vụ nào và đang yếu ở dịch vụ nào.
+          </div>
+        ) : selectedStaffRowsAcrossServices.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-sm text-gray-500">
+            Chưa có dữ liệu theo dịch vụ cho nhân viên "{selectedStaffName}".
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+                <div className="text-sm font-semibold text-emerald-800">Dịch vụ làm tốt nhất của {selectedStaffName}</div>
+                <div className="mt-2 text-xl font-bold text-gray-900">
+                  {selectedStaffTopService?.ten_dich_vu || '--'}
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <div className="text-gray-500">Tổng lead</div>
+                    <div className="font-semibold text-gray-900">{formatNumber(selectedStaffTopService?.tong_lead || 0)}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Đã chốt</div>
+                    <div className="font-semibold text-gray-900">{formatNumber(selectedStaffTopService?.lead_da_chot || 0)}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Tỷ lệ chốt</div>
+                    <div className="font-semibold text-gray-900">{formatPercent(selectedStaffTopService?.ty_le_chot || 0)}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Giá trị dự kiến</div>
+                    <div className="font-semibold text-gray-900">{formatNumber(selectedStaffTopService?.tong_gia_tri_du_kien || 0)}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+                <div className="text-sm font-semibold text-amber-800">Dịch vụ cần kèm thêm của {selectedStaffName}</div>
+                <div className="mt-2 text-xl font-bold text-gray-900">
+                  {selectedStaffWeakService?.ten_dich_vu || '--'}
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <div className="text-gray-500">Tổng lead</div>
+                    <div className="font-semibold text-gray-900">{formatNumber(selectedStaffWeakService?.tong_lead || 0)}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Đã chốt</div>
+                    <div className="font-semibold text-gray-900">{formatNumber(selectedStaffWeakService?.lead_da_chot || 0)}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Tỷ lệ chốt</div>
+                    <div className="font-semibold text-gray-900">{formatPercent(selectedStaffWeakService?.ty_le_chot || 0)}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Giá trị dự kiến</div>
+                    <div className="font-semibold text-gray-900">{formatNumber(selectedStaffWeakService?.tong_gia_tri_du_kien || 0)}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full border-separate border-spacing-y-2">
+                <thead>
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Dịch vụ</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Tổng lead</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Đã chốt</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Từ chối</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Đang xử lý</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Tỷ lệ chốt</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedStaffRowsAcrossServices.map((item) => (
+                    <tr key={`${item.dich_vu_id}-${item.nhan_vien_tu_van}`} className="bg-gray-50">
+                      <td className="rounded-l-xl px-4 py-3">
+                        <div className="text-sm font-medium text-gray-800">{item.ten_dich_vu}</div>
+                        <div className="mt-2 h-2 w-40 rounded-full bg-gray-200">
+                          <div
+                            className="h-2 rounded-full bg-blue-600"
+                            style={{ width: `${clampPercent(item.ty_le_chot)}%` }}
+                          />
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-700">{formatNumber(item.tong_lead)}</td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-700">{formatNumber(item.lead_da_chot)}</td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-700">{formatNumber(item.lead_tu_choi)}</td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-700">{formatNumber(item.lead_dang_xu_ly)}</td>
+                      <td className="rounded-r-xl px-4 py-3 text-right text-sm font-semibold text-gray-900">{formatPercent(item.ty_le_chot)}</td>
                     </tr>
                   ))}
                 </tbody>

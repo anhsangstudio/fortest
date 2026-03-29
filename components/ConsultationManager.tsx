@@ -1565,75 +1565,6 @@ const ConsultationManager: React.FC = () => {
             </div>
 
             <div className="rounded-[24px] border border-gray-200 bg-gray-50/60 p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-base font-bold text-gray-900">Breakdown theo tình trạng</h3>
-                  <p className="mt-1 text-sm text-gray-500">Đo mức tập trung pipeline theo từng trạng thái.</p>
-                </div>
-                <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-500 shadow-sm">
-                  {sortedStatusBreakdown.length} nhóm
-                </span>
-              </div>
-
-              {sortedStatusBreakdown.length === 0 ? (
-                <div className="mt-4 text-sm text-gray-500">
-                  Chưa có dữ liệu theo tình trạng trong khoảng thời gian này.
-                </div>
-              ) : (
-                <div className="mt-5 overflow-hidden rounded-2xl border border-gray-200 bg-white">
-                  <div className="grid grid-cols-12 bg-gray-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">
-                    <div className="col-span-1">#</div>
-                    <div className="col-span-5">Tình trạng</div>
-                    <div className="col-span-2 text-right">SL</div>
-                    <div className="col-span-2 text-right">Tỷ lệ</div>
-                    <div className="col-span-2 text-right">Đánh giá</div>
-                  </div>
-                  <div className="divide-y divide-gray-100">
-                    {sortedStatusBreakdown.map((item, index) => {
-                      const rate = totalLeads > 0 ? (item.total / totalLeads) * 100 : 0;
-                      const width = maxStatusTotal > 0 ? (item.total / maxStatusTotal) * 100 : 0;
-
-                      return (
-                        <div key={item.label} className="grid grid-cols-12 items-center px-4 py-4">
-                          <div className="col-span-1">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-50 text-xs font-bold text-blue-600">
-                              {index + 1}
-                            </div>
-                          </div>
-                          <div className="col-span-5 pr-4">
-                            <div className="text-sm font-semibold text-gray-900">{item.label}</div>
-                            <div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-100">
-                              <div
-                                className="h-full rounded-full bg-blue-500 transition-all"
-                                style={{ width: `${Math.min(width, 100)}%` }}
-                              />
-                            </div>
-                          </div>
-                          <div className="col-span-2 text-right text-base font-bold text-gray-900">
-                            {item.total.toLocaleString('vi-VN')}
-                          </div>
-                          <div className="col-span-2 text-right text-sm font-medium text-gray-500">
-                            {rate.toFixed(1)}%
-                          </div>
-                          <div className="col-span-2 flex justify-end">
-                            <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                              rate >= 50
-                                ? 'bg-emerald-50 text-emerald-600'
-                                : rate >= 20
-                                ? 'bg-amber-50 text-amber-600'
-                                : 'bg-gray-100 text-gray-600'
-                            }`}>
-                              {rate >= 50 ? 'Cao' : rate >= 20 ? 'TB' : 'Thấp'}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-                <div className="rounded-[24px] border border-gray-200 bg-gray-50/60 p-5">
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="text-base font-bold text-gray-900">Lead theo tháng năm {reportYear}</h3>
@@ -1685,43 +1616,64 @@ const ConsultationManager: React.FC = () => {
 
               <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
                 <div className="rounded-[24px] border border-gray-200 bg-gray-50/60 p-5">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-base font-bold text-gray-900">
-                        Lead theo ngày {String(reportMonth).padStart(2, '0')}/{reportYear}
-                      </h3>
-                      <p className="mt-1 text-sm text-gray-500">Nhìn chi tiết nhịp lead từng ngày trong tháng.</p>
-                    </div>
-                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-500 shadow-sm">
-                      {dailyLeadSeries.length} ngày
-                    </span>
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-base font-bold text-gray-900">
+                      Khách đã chốt theo loại dịch vụ từng tháng trong năm {reportYear}
+                    </h3>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Bảng này giúp nhìn dịch vụ nào chốt tốt theo từng tháng để hỗ trợ kế hoạch kinh doanh.
+                    </p>
                   </div>
-
-                  {dailyLeadSeries.length === 0 ? (
-                    <div className="mt-4 text-sm text-gray-500">
-                      Chưa có dữ liệu lead theo ngày trong tháng.
-                    </div>
-                  ) : (
-                    <div className="mt-5 max-h-[520px] space-y-2 overflow-y-auto pr-1">
-                      {dailyLeadSeries.map((item) => (
-                        <div key={item.label} className="rounded-2xl border border-gray-200 bg-white px-4 py-3">
-                          <div className="mb-2 flex items-center justify-between text-sm">
-                            <span className="font-semibold text-gray-900">{item.label}</span>
-                            <span className="font-bold text-gray-700">{item.total.toLocaleString('vi-VN')}</span>
-                          </div>
-                          <div className="h-2 overflow-hidden rounded-full bg-gray-100">
-                            <div
-                              className="h-full rounded-full bg-cyan-500 transition-all"
-                              style={{ width: `${Math.min(maxDailyLead > 0 ? (item.total / maxDailyLead) * 100 : 0, 100)}%` }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-500 shadow-sm">
+                    {wonServiceMonthly.length} dịch vụ
+                  </span>
                 </div>
 
-                <div className="rounded-[24px] border border-gray-200 bg-gray-50/60 p-5">
+                {wonServiceMonthly.length === 0 ? (
+                  <div className="mt-4 text-sm text-gray-500">
+                    Chưa có dữ liệu chốt theo dịch vụ trong năm này.
+                  </div>
+                ) : (
+                  <div className="mt-5 overflow-x-auto rounded-2xl border border-gray-200 bg-white">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-gray-50 text-[11px] uppercase tracking-[0.18em] text-gray-400">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-semibold">Dịch vụ</th>
+                          {Array.from({ length: 12 }, (_, i) => (
+                            <th key={i + 1} className="px-3 py-3 text-center font-semibold">
+                              T{i + 1}
+                            </th>
+                          ))}
+                          <th className="px-4 py-3 text-right font-semibold">Tổng</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {wonServiceMonthly.map((row) => {
+                          const monthMap = Object.fromEntries(row.monthly_totals.map((m) => [m.month, m.total]));
+                          return (
+                            <tr key={row.service_label} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">
+                                {row.service_label}
+                              </td>
+                              {Array.from({ length: 12 }, (_, i) => (
+                                <td key={i + 1} className="px-3 py-3 text-center text-gray-700">
+                                  {(monthMap[i + 1] || 0).toLocaleString('vi-VN')}
+                                </td>
+                              ))}
+                              <td className="px-4 py-3 text-right font-bold text-gray-900">
+                                {row.total.toLocaleString('vi-VN')}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+<div className="rounded-[24px] border border-gray-200 bg-gray-50/60 p-5">
                   <div className="flex items-center justify-between gap-4">
                     <div>
                       <h3 className="text-base font-bold text-gray-900">Chỉ tiêu và kết quả</h3>
@@ -1810,63 +1762,7 @@ const ConsultationManager: React.FC = () => {
                 </div>
               </div>
 
-              <div className="rounded-[24px] border border-gray-200 bg-gray-50/60 p-5">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <h3 className="text-base font-bold text-gray-900">
-                      Khách đã chốt theo loại dịch vụ từng tháng trong năm {reportYear}
-                    </h3>
-                    <p className="mt-1 text-sm text-gray-500">
-                      Bảng này giúp nhìn dịch vụ nào chốt tốt theo từng tháng để hỗ trợ kế hoạch kinh doanh.
-                    </p>
-                  </div>
-                  <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-500 shadow-sm">
-                    {wonServiceMonthly.length} dịch vụ
-                  </span>
-                </div>
-
-                {wonServiceMonthly.length === 0 ? (
-                  <div className="mt-4 text-sm text-gray-500">
-                    Chưa có dữ liệu chốt theo dịch vụ trong năm này.
-                  </div>
-                ) : (
-                  <div className="mt-5 overflow-x-auto rounded-2xl border border-gray-200 bg-white">
-                    <table className="min-w-full text-sm">
-                      <thead className="bg-gray-50 text-[11px] uppercase tracking-[0.18em] text-gray-400">
-                        <tr>
-                          <th className="px-4 py-3 text-left font-semibold">Dịch vụ</th>
-                          {Array.from({ length: 12 }, (_, i) => (
-                            <th key={i + 1} className="px-3 py-3 text-center font-semibold">
-                              T{i + 1}
-                            </th>
-                          ))}
-                          <th className="px-4 py-3 text-right font-semibold">Tổng</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {wonServiceMonthly.map((row) => {
-                          const monthMap = Object.fromEntries(row.monthly_totals.map((m) => [m.month, m.total]));
-                          return (
-                            <tr key={row.service_label} className="hover:bg-gray-50">
-                              <td className="px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">
-                                {row.service_label}
-                              </td>
-                              {Array.from({ length: 12 }, (_, i) => (
-                                <td key={i + 1} className="px-3 py-3 text-center text-gray-700">
-                                  {(monthMap[i + 1] || 0).toLocaleString('vi-VN')}
-                                </td>
-                              ))}
-                              <td className="px-4 py-3 text-right font-bold text-gray-900">
-                                {row.total.toLocaleString('vi-VN')}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
+              
             </div>
           </div>
         

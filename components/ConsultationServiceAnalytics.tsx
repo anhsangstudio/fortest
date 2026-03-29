@@ -120,6 +120,16 @@ type BusinessActionItem = {
   noi_dung: string;
 };
 
+type MarketingDecisionRow = {
+  nhom: 'Nguồn' | 'Khu vực' | 'Phân công sale';
+  muc_do: 'Rất cao' | 'Cao' | 'Trung bình';
+  tieu_de: string;
+  doi_tuong: string;
+  dich_vu: string;
+  chi_so_chinh: string;
+  hanh_dong: string;
+};
+
 const getToday = () => new Date().toISOString().slice(0, 10);
 
 const getFirstDayOfMonth = () => {
@@ -652,6 +662,199 @@ const ConsultationServiceAnalytics: React.FC = () => {
     const first = businessActionItems[0];
     return `Nếu chỉ chọn một việc để làm trước, nên bắt đầu từ "${first.dich_vu_lien_quan}". Sau đó lần lượt xử lý theo thứ tự: sửa gói hoặc báo giá, tăng marketing cho dịch vụ chốt tốt, rồi chuẩn hóa cách làm của đội sale.`;
   }, [businessActionItems]);
+
+
+  const sourceCloseThreshold = useMemo(() => {
+    if (!serviceSourceData.length) return 0;
+    return (
+      serviceSourceData.reduce((sum, item) => sum + Number(item.ty_le_chot || 0), 0) /
+      serviceSourceData.length
+    );
+  }, [serviceSourceData]);
+
+  const addressCloseThreshold = useMemo(() => {
+    if (!serviceAddressData.length) return 0;
+    return (
+      serviceAddressData.reduce((sum, item) => sum + Number(item.ty_le_chot || 0), 0) /
+      serviceAddressData.length
+    );
+  }, [serviceAddressData]);
+
+  const topSourceMarketingOpportunity = useMemo(() => {
+    return [...serviceSourceData]
+      .filter((item) => Number(item.tong_lead || 0) > 0 && Number(item.ty_le_chot || 0) >= sourceCloseThreshold)
+      .sort((a, b) => {
+        const scoreB =
+          Number(b.ty_trong_trong_nguon || 0) * 0.55 +
+          Number(b.ty_le_chot || 0) * 0.45;
+        const scoreA =
+          Number(a.ty_trong_trong_nguon || 0) * 0.55 +
+          Number(a.ty_le_chot || 0) * 0.45;
+        if (scoreB !== scoreA) return scoreB - scoreA;
+        return Number(b.tong_lead || 0) - Number(a.tong_lead || 0);
+      })[0] || null;
+  }, [serviceSourceData, sourceCloseThreshold]);
+
+  const sourceNeedFixMost = useMemo(() => {
+    return [...serviceSourceData]
+      .filter((item) => Number(item.tong_lead || 0) > 0)
+      .sort((a, b) => {
+        const scoreB =
+          Number(b.tong_lead || 0) * (100 - Number(b.ty_le_chot || 0));
+        const scoreA =
+          Number(a.tong_lead || 0) * (100 - Number(a.ty_le_chot || 0));
+        if (scoreB !== scoreA) return scoreB - scoreA;
+        return Number(a.ty_le_chot || 0) - Number(b.ty_le_chot || 0);
+      })[0] || null;
+  }, [serviceSourceData]);
+
+  const topAddressMarketingOpportunity = useMemo(() => {
+    return [...serviceAddressData]
+      .filter((item) => Number(item.tong_lead || 0) > 0 && Number(item.ty_le_chot || 0) >= addressCloseThreshold)
+      .sort((a, b) => {
+        const scoreB =
+          Number(b.ty_trong_trong_dia_chi || 0) * 0.55 +
+          Number(b.ty_le_chot || 0) * 0.45;
+        const scoreA =
+          Number(a.ty_trong_trong_dia_chi || 0) * 0.55 +
+          Number(a.ty_le_chot || 0) * 0.45;
+        if (scoreB !== scoreA) return scoreB - scoreA;
+        return Number(b.tong_lead || 0) - Number(a.tong_lead || 0);
+      })[0] || null;
+  }, [serviceAddressData, addressCloseThreshold]);
+
+  const addressNeedFixMost = useMemo(() => {
+    return [...serviceAddressData]
+      .filter((item) => Number(item.tong_lead || 0) > 0)
+      .sort((a, b) => {
+        const scoreB =
+          Number(b.tong_lead || 0) * (100 - Number(b.ty_le_chot || 0));
+        const scoreA =
+          Number(a.tong_lead || 0) * (100 - Number(a.ty_le_chot || 0));
+        if (scoreB !== scoreA) return scoreB - scoreA;
+        return Number(a.ty_le_chot || 0) - Number(b.ty_le_chot || 0);
+      })[0] || null;
+  }, [serviceAddressData]);
+
+  const saleAssignmentOpportunity = useMemo(() => {
+    const targetService =
+      serviceToPushMarketing ||
+      coreServiceToProtect ||
+      topPriorityServices[0] ||
+      null;
+
+    if (!targetService) return null;
+
+    const matchedRows = serviceStaffData
+      .filter((item) => item.dich_vu_id === targetService.dich_vu_id)
+      .sort((a, b) => {
+        const closeB = Number(b.ty_le_chot || 0);
+        const closeA = Number(a.ty_le_chot || 0);
+        if (closeB !== closeA) return closeB - closeA;
+        return Number(b.tong_lead || 0) - Number(a.tong_lead || 0);
+      });
+
+    if (!matchedRows.length) return null;
+
+    return {
+      dich_vu_id: targetService.dich_vu_id,
+      ten_dich_vu: targetService.ten_dich_vu,
+      nhan_vien: matchedRows[0].nhan_vien_tu_van,
+      ty_le_chot: matchedRows[0].ty_le_chot,
+      tong_lead: matchedRows[0].tong_lead,
+    };
+  }, [serviceToPushMarketing, coreServiceToProtect, topPriorityServices, serviceStaffData]);
+
+  const marketingDecisionItems = useMemo<MarketingDecisionRow[]>(() => {
+    const items: MarketingDecisionRow[] = [];
+
+    if (topSourceMarketingOpportunity) {
+      items.push({
+        nhom: 'Nguồn',
+        muc_do: 'Rất cao',
+        tieu_de: 'Nên tăng ngân sách vào nguồn đang mang đúng nhu cầu',
+        doi_tuong: topSourceMarketingOpportunity.nguon_khach_hang,
+        dich_vu: topSourceMarketingOpportunity.ten_dich_vu,
+        chi_so_chinh: `${formatNumber(topSourceMarketingOpportunity.tong_lead)} lead | chốt ${formatPercent(
+          topSourceMarketingOpportunity.ty_le_chot
+        )}`,
+        hanh_dong: `Ưu tiên tăng nội dung và ngân sách cho nguồn "${topSourceMarketingOpportunity.nguon_khach_hang}" với dịch vụ "${topSourceMarketingOpportunity.ten_dich_vu}" vì vừa có tỷ trọng tốt trong nguồn vừa chốt ổn.`,
+      });
+    }
+
+    if (sourceNeedFixMost) {
+      items.push({
+        nhom: 'Nguồn',
+        muc_do: 'Cao',
+        tieu_de: 'Nguồn cần xem lại chất lượng chuyển đổi',
+        doi_tuong: sourceNeedFixMost.nguon_khach_hang,
+        dich_vu: sourceNeedFixMost.ten_dich_vu,
+        chi_so_chinh: `${formatNumber(sourceNeedFixMost.tong_lead)} lead | chốt ${formatPercent(
+          sourceNeedFixMost.ty_le_chot
+        )}`,
+        hanh_dong: `Nguồn "${sourceNeedFixMost.nguon_khach_hang}" đang mang nhiều quan tâm cho "${sourceNeedFixMost.ten_dich_vu}" nhưng chốt chưa tốt. Nên rà lại thông điệp quảng cáo, tệp khách và cách tiếp nhận lead đầu vào.`,
+      });
+    }
+
+    if (topAddressMarketingOpportunity) {
+      items.push({
+        nhom: 'Khu vực',
+        muc_do: 'Cao',
+        tieu_de: 'Khu vực nên đẩy truyền thông trước',
+        doi_tuong: topAddressMarketingOpportunity.dia_chi,
+        dich_vu: topAddressMarketingOpportunity.ten_dich_vu,
+        chi_so_chinh: `${formatNumber(topAddressMarketingOpportunity.tong_lead)} lead | chốt ${formatPercent(
+          topAddressMarketingOpportunity.ty_le_chot
+        )}`,
+        hanh_dong: `Khu vực "${topAddressMarketingOpportunity.dia_chi}" đang phản hồi tốt với "${topAddressMarketingOpportunity.ten_dich_vu}". Có thể ưu tiên nội dung địa phương hóa và chạy chiến dịch tập trung vào khu vực này.`,
+      });
+    }
+
+    if (addressNeedFixMost) {
+      items.push({
+        nhom: 'Khu vực',
+        muc_do: 'Trung bình',
+        tieu_de: 'Khu vực cần xem lại mức phù hợp dịch vụ',
+        doi_tuong: addressNeedFixMost.dia_chi,
+        dich_vu: addressNeedFixMost.ten_dich_vu,
+        chi_so_chinh: `${formatNumber(addressNeedFixMost.tong_lead)} lead | chốt ${formatPercent(
+          addressNeedFixMost.ty_le_chot
+        )}`,
+        hanh_dong: `Khu vực "${addressNeedFixMost.dia_chi}" có nhiều quan tâm tới "${addressNeedFixMost.ten_dich_vu}" nhưng tỷ lệ chốt thấp. Nên xem lại gói phù hợp khu vực, thông điệp giá trị và cách theo dõi lại khách.`,
+      });
+    }
+
+    if (saleAssignmentOpportunity) {
+      items.push({
+        nhom: 'Phân công sale',
+        muc_do: 'Cao',
+        tieu_de: 'Nên giao đúng người cho đúng dịch vụ chủ lực',
+        doi_tuong: saleAssignmentOpportunity.nhan_vien,
+        dich_vu: saleAssignmentOpportunity.ten_dich_vu,
+        chi_so_chinh: `chốt ${formatPercent(saleAssignmentOpportunity.ty_le_chot)} | ${formatNumber(
+          saleAssignmentOpportunity.tong_lead
+        )} lead`,
+        hanh_dong: `Ưu tiên để "${saleAssignmentOpportunity.nhan_vien}" phụ trách hoặc kèm nhóm ở dịch vụ "${saleAssignmentOpportunity.ten_dich_vu}" vì đây là người đang có hiệu suất tốt nhất cho dịch vụ này.`,
+      });
+    }
+
+    return items;
+  }, [
+    topSourceMarketingOpportunity,
+    sourceNeedFixMost,
+    topAddressMarketingOpportunity,
+    addressNeedFixMost,
+    saleAssignmentOpportunity,
+  ]);
+
+  const marketingDecisionSummary = useMemo(() => {
+    if (!marketingDecisionItems.length) {
+      return 'Chưa đủ dữ liệu để đưa ra bảng quyết định marketing.';
+    }
+
+    const first = marketingDecisionItems[0];
+    return `Nếu cần quyết định nhanh trong kỳ này, hãy bắt đầu từ "${first.doi_tuong}" với dịch vụ "${first.dich_vu}". Sau đó mới mở rộng sang khu vực mạnh và phân công đúng sale cho dịch vụ chủ lực.`;
+  }, [marketingDecisionItems]);
 
 
   const staffFilterOptions = useMemo(() => {
@@ -1498,6 +1701,92 @@ const ConsultationServiceAnalytics: React.FC = () => {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        )}
+      </div>
+
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="mb-4 flex items-center gap-2">
+          <Target size={18} className="text-gray-500" />
+          <h2 className="text-base font-semibold text-gray-800">Bảng quyết định marketing</h2>
+        </div>
+
+        {!loading && marketingDecisionItems.length === 0 && (
+          <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-sm text-gray-500">
+            Chưa đủ dữ liệu để tổng hợp quyết định marketing theo nguồn, khu vực và phân công sale.
+          </div>
+        )}
+
+        {!loading && marketingDecisionItems.length > 0 && (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700">
+              {marketingDecisionSummary}
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+              {marketingDecisionItems.map((item, index) => (
+                <div
+                  key={`${item.nhom}-${item.doi_tuong}-${item.dich_vu}-${index}`}
+                  className="rounded-2xl border border-gray-200 bg-white p-4"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                      {item.nhom}
+                    </span>
+                    <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
+                      Mức ưu tiên: {item.muc_do}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 text-sm font-semibold text-gray-900">{item.tieu_de}</div>
+
+                  <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+                    <div className="rounded-xl bg-gray-50 p-3">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Đối tượng</div>
+                      <div className="mt-1 text-sm font-semibold text-gray-900">{item.doi_tuong}</div>
+                    </div>
+                    <div className="rounded-xl bg-gray-50 p-3">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Dịch vụ</div>
+                      <div className="mt-1 text-sm font-semibold text-gray-900">{item.dich_vu}</div>
+                    </div>
+                    <div className="rounded-xl bg-gray-50 p-3">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Chỉ số chính</div>
+                      <div className="mt-1 text-sm font-semibold text-gray-900">{item.chi_so_chinh}</div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50 p-3 text-sm leading-6 text-blue-900">
+                    {item.hanh_dong}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full border-separate border-spacing-y-2">
+                <thead>
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Nhóm quyết định</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Đối tượng</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Dịch vụ</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Mức ưu tiên</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Hành động gợi ý</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {marketingDecisionItems.map((item, index) => (
+                    <tr key={`${item.nhom}-table-${index}`} className="bg-gray-50">
+                      <td className="rounded-l-xl px-4 py-3 text-sm font-semibold text-gray-900">{item.nhom}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700">{item.doi_tuong}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700">{item.dich_vu}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700">{item.muc_do}</td>
+                      <td className="rounded-r-xl px-4 py-3 text-sm text-gray-700">{item.hanh_dong}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}

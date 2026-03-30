@@ -2122,3 +2122,146 @@ export const fetchPrintCostData = async (
 
   return { rows, summary };
 };
+
+
+// ================================
+// PRINT MASTER DATA CRUD
+// ================================
+
+export const createPrintVendor = async (payload: {
+  ten_xuong_in: string;
+}) => {
+  const { data, error } = await supabase
+    .from('print_vendors')
+    .insert({
+      ten_xuong_in: payload.ten_xuong_in.trim(),
+      dang_su_dung: true,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+export const updatePrintVendor = async (
+  id: string,
+  payload: { ten_xuong_in: string }
+) => {
+  const { data, error } = await supabase
+    .from('print_vendors')
+    .update({
+      ten_xuong_in: payload.ten_xuong_in.trim(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+export const softDeletePrintVendor = async (id: string) => {
+  const { error } = await supabase
+    .from('print_vendors')
+    .update({
+      dang_su_dung: false,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id);
+
+  if (error) throw error;
+};
+
+export const createPrintSize = async (payload: {
+  ten_kich_thuoc: string;
+}) => {
+  const { data, error } = await supabase
+    .from('print_sizes')
+    .insert({
+      ten_kich_thuoc: payload.ten_kich_thuoc.trim(),
+      dang_su_dung: true,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+export const updatePrintSize = async (
+  id: string,
+  payload: { ten_kich_thuoc: string }
+) => {
+  const { data, error } = await supabase
+    .from('print_sizes')
+    .update({
+      ten_kich_thuoc: payload.ten_kich_thuoc.trim(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+export const softDeletePrintSize = async (id: string) => {
+  const { error } = await supabase
+    .from('print_sizes')
+    .update({
+      dang_su_dung: false,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id);
+
+  if (error) throw error;
+};
+
+export const createPrintMaterial = async (payload: {
+  ten_chat_lieu: string;
+}) => {
+  const { data, error } = await supabase
+    .from('print_materials')
+    .insert({
+      ten_chat_lieu: payload.ten_chat_lieu.trim(),
+      dang_su_dung: true,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+export const updatePrintMaterial = async (
+  id: string,
+  payload: { ten_chat_lieu: string }
+) => {
+  const { data, error } = await supabase
+    .from('print_materials')
+    .update({
+      ten_chat_lieu: payload.ten_chat_lieu.trim(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+export const softDeletePrintMaterial = async (id: string) => {
+  const { error } = await supabase
+    .from('print_materials')
+    .update({
+      dang_su_dung: false,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id);
+
+  if (error) throw error;
+};

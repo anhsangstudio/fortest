@@ -31,7 +31,14 @@ import { Service,
 		ConsultationFilter,
 		ConsultationLogService,
 		PrintOrder,
-		PrintCatalogOption,} from './types';
+		PrintCatalogOption,
+		PrintVendorPrice,
+		CreatePrintVendorPriceInput,
+		UpdatePrintVendorPriceInput,
+		PrintVendorPriceFilters,
+		PrintCostRow,
+		PrintCostFilters,
+		PrintCostSummary,} from './types';
 
 const SUPABASE_URL = (import.meta as any).env?.VITE_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
@@ -1633,4 +1640,380 @@ export const softDeletePrintOrder = async (id: string): Promise<void> => {
     .eq('id', id);
 
   throwIfError(res, 'softDeletePrintOrder');
+};
+
+
+const printVendorPriceFromDb = (db: any): PrintVendorPrice => ({
+  id: db.id,
+  vendorId: db.vendor_id,
+  vendorName: db.print_vendors?.ten_xuong_in || db.ten_xuong_in || '',
+  sizeId: db.size_id ?? null,
+  sizeName: db.print_sizes?.ten_kich_thuoc || db.ten_kich_thuoc || '',
+  materialId: db.material_id ?? null,
+  materialName: db.print_materials?.ten_chat_lieu || db.ten_chat_lieu || '',
+  printServiceId: db.print_service_id ?? null,
+  printServiceName: db.print_services?.ten_dich_vu_in || db.ten_dich_vu_in || '',
+  donGia: Number(db.don_gia || 0),
+  ghiChu: db.ghi_chu || '',
+  isActive: db.dang_su_dung !== false,
+  createdAt: db.created_at || '',
+  updatedAt: db.updated_at || '',
+});
+
+const applyPrintVendorPriceFilters = (query: any, filters?: PrintVendorPriceFilters) => {
+  let nextQuery = query;
+  if (filters?.vendorId) nextQuery = nextQuery.eq('vendor_id', filters.vendorId);
+  if (filters?.sizeId) nextQuery = nextQuery.eq('size_id', filters.sizeId);
+  if (filters?.materialId) nextQuery = nextQuery.eq('material_id', filters.materialId);
+  if (typeof filters?.isActive === 'boolean') nextQuery = nextQuery.eq('dang_su_dung', filters.isActive);
+  return nextQuery;
+};
+
+const assertPrintVendorPriceInput = (
+  input: CreatePrintVendorPriceInput | UpdatePrintVendorPriceInput,
+  context: 'create' | 'update'
+) => {
+  if (context === 'create' && !input.vendorId) {
+    throw new Error('Nhà cung cấp là bắt buộc.');
+  }
+  if ('donGia' in input && input.donGia !== undefined) {
+    const donGia = Number(input.donGia);
+    if (!Number.isFinite(donGia) || donGia < 0) {
+      throw new Error('Đơn giá phải là số không âm.');
+    }
+  }
+};
+
+const ensureNoDuplicatePrintVendorPrice = async (
+  input: {
+    vendorId: string;
+    sizeId?: string | null;
+    materialId?: string | null;
+    printServiceId?: string | null;
+  },
+  excludeId?: string
+) => {
+  if (!supabase) return;
+
+  let query = supabase
+    .from('print_vendor_prices')
+    .select('id')
+    .eq('vendor_id', input.vendorId)
+    .eq('dang_su_dung', true);
+
+  if (input.sizeId) query = query.eq('size_id', input.sizeId);
+  else query = query.is('size_id', null);
+
+  if (input.materialId) query = query.eq('material_id', input.materialId);
+  else query = query.is('material_id', null);
+
+  if (input.printServiceId) query = query.eq('print_service_id', input.printServiceId);
+  else query = query.is('print_service_id', null);
+
+  if (excludeId) query = query.neq('id', excludeId);
+
+  const res = await query.limit(1);
+  throwIfError(res, 'ensureNoDuplicatePrintVendorPrice');
+
+  if ((res.data || []).length > 0) {
+    throw new Error('Đã tồn tại báo giá đang hoạt động cho tổ hợp nhà cung cấp / kích thước / chất liệu này.');
+  }
+};
+
+export const fetchPrintVendorPrices = async (
+  filters?: PrintVendorPriceFilters
+): Promise<PrintVendorPrice[]> => {
+  if (!supabase) return [];
+
+  const baseQuery = supabase
+    .from('print_vendor_prices')
+    .select(`
+      id,
+      vendor_id,
+      size_id,
+      material_id,
+      print_service_id,
+      don_gia,
+      ghi_chu,
+      dang_su_dung,
+      created_at,
+      updated_at,
+      print_vendors (
+        ten_xuong_in
+      ),
+      print_sizes (
+        ten_kich_thuoc
+      ),
+      print_materials (
+        ten_chat_lieu
+      ),
+      print_services (
+        ten_dich_vu_in
+      )
+    `)
+    .order('updated_at', { ascending: false });
+
+  const res = await applyPrintVendorPriceFilters(baseQuery, filters);
+  throwIfError(res, 'fetchPrintVendorPrices');
+  return (res.data || []).map(printVendorPriceFromDb);
+};
+
+export const createPrintVendorPrice = async (
+  input: CreatePrintVendorPriceInput
+): Promise<PrintVendorPrice> => {
+  if (!supabase) {
+    throw new Error('Supabase chưa được cấu hình.');
+  }
+
+  assertPrintVendorPriceInput(input, 'create');
+  await ensureNoDuplicatePrintVendorPrice(input);
+
+  const insertData = {
+    vendor_id: input.vendorId,
+    size_id: input.sizeId ?? null,
+    material_id: input.materialId ?? null,
+    print_service_id: input.printServiceId ?? null,
+    don_gia: Number(input.donGia || 0),
+    ghi_chu: input.ghiChu || '',
+    dang_su_dung: true,
+  };
+
+  const res = await supabase
+    .from('print_vendor_prices')
+    .insert(insertData)
+    .select(`
+      id,
+      vendor_id,
+      size_id,
+      material_id,
+      print_service_id,
+      don_gia,
+      ghi_chu,
+      dang_su_dung,
+      created_at,
+      updated_at,
+      print_vendors (
+        ten_xuong_in
+      ),
+      print_sizes (
+        ten_kich_thuoc
+      ),
+      print_materials (
+        ten_chat_lieu
+      ),
+      print_services (
+        ten_dich_vu_in
+      )
+    `)
+    .single();
+
+  throwIfError(res, 'createPrintVendorPrice');
+  return printVendorPriceFromDb(res.data);
+};
+
+export const updatePrintVendorPrice = async (
+  id: string,
+  input: UpdatePrintVendorPriceInput
+): Promise<PrintVendorPrice> => {
+  if (!supabase) {
+    throw new Error('Supabase chưa được cấu hình.');
+  }
+
+  assertPrintVendorPriceInput(input, 'update');
+
+  const currentRes = await supabase
+    .from('print_vendor_prices')
+    .select('id, vendor_id, size_id, material_id, print_service_id')
+    .eq('id', id)
+    .single();
+  throwIfError(currentRes, 'updatePrintVendorPrice.current');
+
+  const nextUniqueKey = {
+    vendorId: input.vendorId ?? currentRes.data.vendor_id,
+    sizeId: input.sizeId === undefined ? currentRes.data.size_id : input.sizeId,
+    materialId: input.materialId === undefined ? currentRes.data.material_id : input.materialId,
+    printServiceId: input.printServiceId === undefined ? currentRes.data.print_service_id : input.printServiceId,
+  };
+
+  if ((input.isActive ?? true) !== false) {
+    await ensureNoDuplicatePrintVendorPrice(nextUniqueKey, id);
+  }
+
+  const patch: Record<string, any> = {};
+  if (input.vendorId !== undefined) patch.vendor_id = input.vendorId;
+  if (input.sizeId !== undefined) patch.size_id = input.sizeId ?? null;
+  if (input.materialId !== undefined) patch.material_id = input.materialId ?? null;
+  if (input.printServiceId !== undefined) patch.print_service_id = input.printServiceId ?? null;
+  if (input.donGia !== undefined) patch.don_gia = Number(input.donGia || 0);
+  if (input.ghiChu !== undefined) patch.ghi_chu = input.ghiChu || '';
+  if (input.isActive !== undefined) patch.dang_su_dung = input.isActive;
+
+  const res = await supabase
+    .from('print_vendor_prices')
+    .update(patch)
+    .eq('id', id)
+    .select(`
+      id,
+      vendor_id,
+      size_id,
+      material_id,
+      print_service_id,
+      don_gia,
+      ghi_chu,
+      dang_su_dung,
+      created_at,
+      updated_at,
+      print_vendors (
+        ten_xuong_in
+      ),
+      print_sizes (
+        ten_kich_thuoc
+      ),
+      print_materials (
+        ten_chat_lieu
+      ),
+      print_services (
+        ten_dich_vu_in
+      )
+    `)
+    .single();
+
+  throwIfError(res, 'updatePrintVendorPrice');
+  return printVendorPriceFromDb(res.data);
+};
+
+export const softDeletePrintVendorPrice = async (id: string): Promise<void> => {
+  if (!supabase) {
+    throw new Error('Supabase chưa được cấu hình.');
+  }
+
+  const res = await supabase
+    .from('print_vendor_prices')
+    .update({ dang_su_dung: false })
+    .eq('id', id);
+
+  throwIfError(res, 'softDeletePrintVendorPrice');
+};
+
+const isWithinDateRange = (value: string, from?: string, to?: string) => {
+  if (!value) return false;
+  if (from && value < from) return false;
+  if (to && value > to) return false;
+  return true;
+};
+
+const findMatchingPrintVendorPrice = (
+  prices: PrintVendorPrice[],
+  vendorId?: string | null,
+  sizeId?: string | null,
+  materialId?: string | null
+): PrintVendorPrice | null => {
+  if (!vendorId || !sizeId || !materialId) return null;
+  return (
+    prices.find((price) =>
+      price.isActive &&
+      price.vendorId === vendorId &&
+      price.sizeId === sizeId &&
+      price.materialId === materialId
+    ) || null
+  );
+};
+
+const createPrintCostRowFromOrder = (
+  order: PrintOrder,
+  lineType: 'large' | 'small',
+  prices: PrintVendorPrice[]
+): PrintCostRow | null => {
+  const isLarge = lineType === 'large';
+  const quantity = isLarge ? order.soLuongAnhLon : order.soLuongAnhNho;
+  const sizeId = isLarge ? order.kichThuocAnhLonId : order.kichThuocAnhNhoId;
+  const sizeName = isLarge ? order.kichThuocAnhLon : order.kichThuocAnhNho;
+  const materialId = isLarge ? order.chatLieuAnhLonId : order.chatLieuAnhNhoId;
+  const materialName = isLarge ? order.chatLieuAnhLon : order.chatLieuAnhNho;
+
+  if (!quantity || quantity <= 0) return null;
+
+  const matchedPrice = findMatchingPrintVendorPrice(prices, order.vendorId, sizeId, materialId);
+
+  return {
+    rowId: `${order.id}-${lineType}`,
+    orderId: order.id,
+    lineType,
+    ngayGuiIn: order.ngayGuiIn,
+    tenKhachHang: order.tenKhachHang,
+    vendorId: order.vendorId ?? null,
+    vendorName: order.tenXuongIn || '',
+    sizeId: sizeId ?? null,
+    sizeName: sizeName || '',
+    materialId: materialId ?? null,
+    materialName: materialName || '',
+    quantity,
+    unitPrice: matchedPrice ? matchedPrice.donGia : null,
+    amount: matchedPrice ? quantity * matchedPrice.donGia : null,
+    pricingStatus: matchedPrice ? 'matched' : 'missing_price',
+    contractId: order.contractId ?? null,
+    contractCode: order.contractCode || '',
+  };
+};
+
+export const buildPrintCostRows = (
+  orders: PrintOrder[],
+  prices: PrintVendorPrice[],
+  filters?: PrintCostFilters
+): { rows: PrintCostRow[]; summary: PrintCostSummary } => {
+  const filteredOrders = orders.filter((order) => {
+    if (!isWithinDateRange(order.ngayGuiIn, filters?.from, filters?.to)) return false;
+    if (filters?.vendorId && order.vendorId !== filters.vendorId) return false;
+    return true;
+  });
+
+  const rows = filteredOrders
+    .flatMap((order) => [
+      createPrintCostRowFromOrder(order, 'large', prices),
+      createPrintCostRowFromOrder(order, 'small', prices),
+    ])
+    .filter(Boolean) as PrintCostRow[];
+
+  const byVendorMap = new Map<string, PrintCostSummary['byVendor'][number]>();
+
+  rows.forEach((row) => {
+    const key = row.vendorId || 'unknown';
+    const current = byVendorMap.get(key) || {
+      vendorId: row.vendorId || '',
+      vendorName: row.vendorName || 'Chưa chọn xưởng in',
+      totalRows: 0,
+      totalQuantity: 0,
+      totalAmount: 0,
+      missingPriceRows: 0,
+    };
+
+    current.totalRows += 1;
+    current.totalQuantity += row.quantity;
+    current.totalAmount += Number(row.amount || 0);
+    if (row.pricingStatus === 'missing_price') current.missingPriceRows += 1;
+
+    byVendorMap.set(key, current);
+  });
+
+  const summary: PrintCostSummary = {
+    totalRows: rows.length,
+    totalOrders: new Set(rows.map((row) => row.orderId)).size,
+    totalQuantity: rows.reduce((sum, row) => sum + row.quantity, 0),
+    totalAmount: rows.reduce((sum, row) => sum + Number(row.amount || 0), 0),
+    missingPriceRows: rows.filter((row) => row.pricingStatus === 'missing_price').length,
+    byVendor: Array.from(byVendorMap.values()).sort((a, b) => b.totalAmount - a.totalAmount),
+  };
+
+  return { rows, summary };
+};
+
+export const fetchPrintCostData = async (
+  filters?: PrintCostFilters
+): Promise<{ rows: PrintCostRow[]; summary: PrintCostSummary }> => {
+  const [orders, prices] = await Promise.all([
+    fetchPrintOrders(),
+    fetchPrintVendorPrices({ isActive: true }),
+  ]);
+
+  return buildPrintCostRows(orders, prices, filters);
 };

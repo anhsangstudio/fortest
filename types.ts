@@ -439,3 +439,59 @@ export const STAFF_ROLES = [
   'Giám đốc', 'Quản lý', 'Nhiếp ảnh gia', 'Makeup Artist', 
   'Sale & CSKH', 'Hậu kỳ / Editor', 'Trợ lý'
 ];
+
+
+// ================================
+// PRINT PRODUCTION MODULE TYPES
+// ================================
+
+export interface PrintCatalogOption {
+  id: string;
+  name: string;
+  sortOrder?: number;
+  isActive?: boolean;
+}
+
+export interface PrintOrder {
+  id: string;
+  contractId?: string | null;
+  contractCode: string;
+  customerId?: string | null;
+  tenKhachHang: string;
+  ngayGuiIn: string;
+  linkTheTrello: string;
+  linkFiles: string;
+  imageAttachments?: string[];
+
+  soLuongAnhLon: number;
+  kichThuocAnhLonId?: string | null;
+  kichThuocAnhLon: string;
+  chatLieuAnhLonId?: string | null;
+  chatLieuAnhLon: string;
+
+  soLuongAnhNho: number;
+  kichThuocAnhNhoId?: string | null;
+  kichThuocAnhNho: string;
+  chatLieuAnhNhoId?: string | null;
+  chatLieuAnhNho: string;
+
+  printServiceId?: string | null;
+  tenDichVuIn?: string;
+  vendorId?: string | null;
+  tenXuongIn: string;
+  statusId?: string | null;
+  tenTrangThai: string;
+
+  nguoiKiemTraNhanAnh: string;
+  ghiChu: string;
+
+  thongBaoDaCoAnh: boolean;
+  thongBaoDaGiaoAnh: boolean;
+  thongBaoDangInAnh: boolean;
+  checkFlag: boolean;
+
+  donGiaIn: number;
+  thanhTien: number;
+  createdAt: string;
+  updatedAt: string;
+}

@@ -1660,6 +1660,71 @@ const printVendorPriceFromDb = (db: any): PrintVendorPrice => ({
   updatedAt: db.updated_at || '',
 });
 
+const printVendorPriceFromViewRow = (row: any): PrintVendorPrice => ({
+  id: row.id,
+  vendorId: row.vendor_id,
+  vendorName: row.ten_xuong_in || '',
+  sizeId: row.size_id ?? null,
+  sizeName: row.ten_kich_thuoc || '',
+  materialId: row.material_id ?? null,
+  materialName: row.ten_chat_lieu || '',
+  printServiceId: row.print_service_id ?? null,
+  printServiceName: row.ten_dich_vu_in || '',
+  donGia: Number(row.don_gia || 0),
+  ghiChu: row.ghi_chu || '',
+  isActive: row.dang_su_dung !== false,
+  createdAt: row.created_at || '',
+  updatedAt: row.updated_at || '',
+});
+
+const printCostRowFromRpc = (row: any): PrintCostRow => ({
+  rowId: `${row.print_order_id}-${row.line_type}`,
+  orderId: row.print_order_id,
+  lineType: row.line_type,
+  ngayGuiIn: row.ngay_gui_in || '',
+  tenKhachHang: row.ten_khach_hang || '',
+  vendorId: row.vendor_id ?? null,
+  vendorName: row.ten_xuong_in || '',
+  sizeId: row.size_id ?? null,
+  sizeName: row.ten_kich_thuoc || '',
+  materialId: row.material_id ?? null,
+  materialName: row.ten_chat_lieu || '',
+  quantity: Number(row.so_luong || 0),
+  unitPrice: row.don_gia !== null && row.don_gia !== undefined ? Number(row.don_gia) : null,
+  amount: row.thanh_tien !== null && row.thanh_tien !== undefined ? Number(row.thanh_tien) : null,
+  pricingStatus: row.pricing_status || 'missing_price',
+  contractId: row.contract_id ?? null,
+  contractCode: row.contract_code || '',
+});
+
+const emptyPrintCostSummary = (): PrintCostSummary => ({
+  totalRows: 0,
+  totalOrders: 0,
+  totalQuantity: 0,
+  totalAmount: 0,
+  missingPriceRows: 0,
+  byVendor: [],
+});
+
+const buildPrintCostSummaryFromRpc = (
+  rows: PrintCostRow[],
+  summaryRows: any[]
+): PrintCostSummary => ({
+  totalRows: rows.length,
+  totalOrders: new Set(rows.map((row) => row.orderId)).size,
+  totalQuantity: rows.reduce((sum, row) => sum + Number(row.quantity || 0), 0),
+  totalAmount: rows.reduce((sum, row) => sum + Number(row.amount || 0), 0),
+  missingPriceRows: rows.filter((row) => row.pricingStatus === 'missing_price').length,
+  byVendor: (summaryRows || []).map((row: any) => ({
+    vendorId: row.vendor_id || '',
+    vendorName: row.ten_xuong_in || '',
+    totalRows: Number(row.tong_so_dong || 0),
+    totalQuantity: Number(row.tong_so_luong || 0),
+    totalAmount: Number(row.tong_thanh_tien || 0),
+    missingPriceRows: Number(row.tong_dong_thieu_bao_gia || 0),
+  })),
+});
+
 const applyPrintVendorPriceFilters = (query: any, filters?: PrintVendorPriceFilters) => {
   let nextQuery = query;
   if (filters?.vendorId) nextQuery = nextQuery.eq('vendor_id', filters.vendorId);
@@ -1726,36 +1791,13 @@ export const fetchPrintVendorPrices = async (
   if (!supabase) return [];
 
   const baseQuery = supabase
-    .from('print_vendor_prices')
-    .select(`
-      id,
-      vendor_id,
-      size_id,
-      material_id,
-      print_service_id,
-      don_gia,
-      ghi_chu,
-      dang_su_dung,
-      created_at,
-      updated_at,
-      print_vendors (
-        ten_xuong_in
-      ),
-      print_sizes (
-        ten_kich_thuoc
-      ),
-      print_materials (
-        ten_chat_lieu
-      ),
-      print_services (
-        ten_dich_vu_in
-      )
-    `)
+    .from('print_vendor_prices_view')
+    .select('*')
     .order('updated_at', { ascending: false });
 
   const res = await applyPrintVendorPriceFilters(baseQuery, filters);
   throwIfError(res, 'fetchPrintVendorPrices');
-  return (res.data || []).map(printVendorPriceFromDb);
+  return (res.data || []).map(printVendorPriceFromViewRow);
 };
 
 export const createPrintVendorPrice = async (
@@ -2007,13 +2049,76 @@ export const buildPrintCostRows = (
   return { rows, summary };
 };
 
+export const fetchPrintCostRowsFromRpc = async (
+  filters?: PrintCostFilters
+): Promise<PrintCostRow[]> => {
+  if (!supabase) return [];
+
+  const res = await supabase.rpc('rpc_get_print_cost_rows', {
+    p_date_from: filters?.from || null,
+    p_date_to: filters?.to || null,
+    p_vendor_id: filters?.vendorId || null,
+  });
+
+  throwIfError(res, 'fetchPrintCostRowsFromRpc');
+  return (res.data || []).map(printCostRowFromRpc);
+};
+
+export const fetchPrintCostSummaryFromRpc = async (
+  filters?: PrintCostFilters
+): Promise<PrintCostSummary> => {
+  if (!supabase) {
+    return emptyPrintCostSummary();
+  }
+
+  const [rowsRes, summaryRes] = await Promise.all([
+    supabase.rpc('rpc_get_print_cost_rows', {
+      p_date_from: filters?.from || null,
+      p_date_to: filters?.to || null,
+      p_vendor_id: filters?.vendorId || null,
+    }),
+    supabase.rpc('rpc_get_print_cost_summary_by_vendor', {
+      p_date_from: filters?.from || null,
+      p_date_to: filters?.to || null,
+      p_vendor_id: filters?.vendorId || null,
+    }),
+  ]);
+
+  throwIfError(rowsRes, 'fetchPrintCostSummaryFromRpc.rows');
+  throwIfError(summaryRes, 'fetchPrintCostSummaryFromRpc.summary');
+
+  const rows = (rowsRes.data || []).map(printCostRowFromRpc);
+  return buildPrintCostSummaryFromRpc(rows, summaryRes.data || []);
+};
+
 export const fetchPrintCostData = async (
   filters?: PrintCostFilters
 ): Promise<{ rows: PrintCostRow[]; summary: PrintCostSummary }> => {
-  const [orders, prices] = await Promise.all([
-    fetchPrintOrders(),
-    fetchPrintVendorPrices({ isActive: true }),
+  if (!supabase) {
+    return {
+      rows: [],
+      summary: emptyPrintCostSummary(),
+    };
+  }
+
+  const [rowsRes, summaryRes] = await Promise.all([
+    supabase.rpc('rpc_get_print_cost_rows', {
+      p_date_from: filters?.from || null,
+      p_date_to: filters?.to || null,
+      p_vendor_id: filters?.vendorId || null,
+    }),
+    supabase.rpc('rpc_get_print_cost_summary_by_vendor', {
+      p_date_from: filters?.from || null,
+      p_date_to: filters?.to || null,
+      p_vendor_id: filters?.vendorId || null,
+    }),
   ]);
 
-  return buildPrintCostRows(orders, prices, filters);
+  throwIfError(rowsRes, 'fetchPrintCostData.rows');
+  throwIfError(summaryRes, 'fetchPrintCostData.summary');
+
+  const rows = (rowsRes.data || []).map(printCostRowFromRpc);
+  const summary = buildPrintCostSummaryFromRpc(rows, summaryRes.data || []);
+
+  return { rows, summary };
 };

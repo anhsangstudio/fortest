@@ -1,12 +1,13 @@
 
 -- =========================================
 -- MODULE: PRINT PRODUCTION / BÁO CÁO IN ẤN
--- STEP 1: SCHEMA NỀN TẢNG
+-- STEP 1: SCHEMA NỀN TẢNG - BẢN ĐÃ SỬA
+-- Ghi chú:
+-- - Khớp với hệ thống hiện tại dùng:
+--   contracts.id = text
+--   customers.id = text
+--   staff.id = text
 -- =========================================
-
--- Khuyến nghị:
--- 1) Chạy trong Supabase SQL Editor
--- 2) Nếu project đã có hàm cập nhật updated_at riêng thì có thể bỏ phần trigger helper bên dưới
 
 create extension if not exists pgcrypto;
 
@@ -108,7 +109,6 @@ execute function public.set_updated_at();
 
 -- -----------------------------------------
 -- 5. Bảng giá in theo xưởng
--- 1 dòng = 1 cấu hình giá cho xưởng + dịch vụ + kích thước + chất liệu
 -- -----------------------------------------
 create table if not exists public.print_vendor_prices (
   id uuid primary key default gen_random_uuid(),
@@ -158,53 +158,48 @@ execute function public.set_updated_at();
 -- -----------------------------------------
 -- 7. Bảng chính: print_orders
 -- Ghi chú:
+-- - contract_id / customer_id / created_by dùng TEXT để khớp schema hiện tại
 -- - contract_code: mã hợp đồng
 -- - link_files: link file in ấn
 -- - image_attachments: danh sách link ảnh đính kèm (mảng text)
 -- -----------------------------------------
-create table if not exists public.print_orders (
+drop table if exists public.print_orders cascade;
+
+create table public.print_orders (
   id uuid primary key default gen_random_uuid(),
 
-  -- liên kết nghiệp vụ
-  contract_id uuid null references public.contracts(id),
+  contract_id text null references public.contracts(id),
   contract_code text null,
-  customer_id uuid null references public.customers(id),
+  customer_id text null references public.customers(id),
 
-  -- dữ liệu hiển thị / thao tác
   ten_khach_hang text not null,
   ngay_gui_in date null,
   link_the_trello text null,
   link_files text null,
   image_attachments text[] not null default '{}',
 
-  -- thông tin trello để đồng bộ tránh trùng
   trello_card_id text null,
   trello_board_id text null,
   trello_list_id text null,
 
-  -- ảnh lớn
   so_luong_anh_lon integer not null default 0 check (so_luong_anh_lon >= 0),
   kich_thuoc_anh_lon_id uuid null references public.print_sizes(id),
   chat_lieu_anh_lon_id uuid null references public.print_materials(id),
 
-  -- ảnh nhỏ
   so_luong_anh_nho integer not null default 0 check (so_luong_anh_nho >= 0),
   kich_thuoc_anh_nho_id uuid null references public.print_sizes(id),
   chat_lieu_anh_nho_id uuid null references public.print_materials(id),
 
-  -- thông tin nghiệp vụ in
   print_service_id uuid null references public.print_services(id),
   vendor_id uuid null references public.print_vendors(id),
   status_id uuid null references public.print_statuses(id),
 
-  -- kiểm tra / giao nhận
   nguoi_kiem_tra_nhan_anh text null,
   thong_bao_da_co_anh boolean not null default false,
   thong_bao_da_giao_anh boolean not null default false,
   thong_bao_dang_in_anh boolean not null default false,
   check_flag boolean not null default false,
 
-  -- chi phí
   don_gia_in numeric(14,2) not null default 0,
   thanh_tien numeric(14,2) generated always as (
     (
@@ -215,7 +210,7 @@ create table if not exists public.print_orders (
   ghi_chu text null,
   dang_su_dung boolean not null default true,
 
-  created_by uuid null references public.staff(id),
+  created_by text null references public.staff(id),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -239,7 +234,7 @@ for each row
 execute function public.set_updated_at();
 
 -- -----------------------------------------
--- 8. Seed trạng thái mặc định (idempotent)
+-- 8. Seed trạng thái mặc định
 -- -----------------------------------------
 insert into public.print_statuses (ten_trang_thai, ma_mau, thu_tu_hien_thi, la_hoan_tat)
 values
@@ -313,5 +308,5 @@ left join public.print_statuses pst on pst.id = po.status_id
 where po.dang_su_dung = true;
 
 -- =========================================
--- Hết Step 1
+-- Hết Step 1 - Bản đã sửa
 -- =========================================

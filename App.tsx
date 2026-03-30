@@ -15,6 +15,7 @@ import TaskManager from './components/TaskManager';
 import ConsultationManager from './components/ConsultationManager';
 import ConsultationSalesAnalytics from './components/ConsultationSalesAnalytics';
 import ConsultationServiceAnalytics from './components/ConsultationServiceAnalytics';
+import PrintProductionManager from './components/PrintProductionManager';
 import { 
   Contract, Customer, Staff, Service, Transaction, Schedule, 
   Task, StudioInfo, ExpenseCategoryItem, ServiceTypeItem, ServiceGroupItem 
@@ -256,6 +257,11 @@ export default function App() {
                  icon={BarChart3} label="Phân tích dịch vụ" id="consultation_service_analytics" activeTab={activeTab} setActiveTab={setActiveTab}
                  visible={true}
                />
+
+               <SidebarItem 
+                  icon={Printer}  label="In ấn" id="print_production" activeTab={activeTab} setActiveTab={setActiveTab}
+                  visible={canAccess('print_production')}
+               />
 				
                <SidebarItem 
                   icon={DollarSign} label="Thu & Chi" id="finance" activeTab={activeTab} setActiveTab={setActiveTab} 
@@ -312,6 +318,7 @@ export default function App() {
 				  {activeTab === 'consultation' && 'Nhật ký tư vấn'}
 				  {activeTab === 'consultation_sales_analytics' && 'Phân Tích Hiệu Suất Sale Nâng Cao'}
                   {activeTab === 'consultation_service_analytics' && 'Phân Tích Dịch Vụ'}
+				  {activeTab === 'print_production' && 'Quản lý In ấn'}
                   {activeTab === 'finance' && 'Quản lý Tài chính'}
                   {activeTab === 'payroll' && 'Bảng lương nhân sự'}
                   {activeTab === 'staff' && 'Danh sách nhân viên'}
@@ -373,6 +380,10 @@ export default function App() {
                 currentUser={currentUser!}
                 isQuickView={activeTab === 'quick_expense'}
               />
+            )}
+
+		    {activeTab === 'print_production' && canAccess('print_production') && (
+              <PrintProductionManager />
             )}
             {activeTab === 'payroll' && canAccess('staff') && (
               <PayrollManager 

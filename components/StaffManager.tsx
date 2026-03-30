@@ -40,6 +40,16 @@ const StaffManager: React.FC<Props> = ({ staff, setStaff, schedules }) => {
       id: 'schedules', label: 'Lịch làm việc', 
       subs: [{ id: 'main', label: 'Lịch tổng' }, { id: 'assignment', label: 'Phân công thợ' }] 
     },
+
+{ 
+  id: 'print_production',
+  label: 'In ấn',
+  subs: [
+    { id: 'list', label: 'Danh sách in ấn' },
+    { id: 'report', label: 'Báo cáo in ấn' }
+  ]
+},
+    
     { 
       id: 'finance', label: 'Thu & Chi', 
       subs: [{ id: 'income', label: 'Thu Tiền' }, { id: 'expense', label: 'Chi Tiền' }, { id: 'report', label: 'Báo cáo chi' }] 

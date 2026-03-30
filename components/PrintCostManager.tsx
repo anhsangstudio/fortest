@@ -1,597 +1,588 @@
-
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Plus,
   RefreshCw,
   Search,
-  Pencil,
-  Trash2,
-  X,
-  Save,
-  Loader2,
   Package,
   BarChart3,
+  Edit,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
-import type {
-  PrintCatalogOption,
-  PrintVendorPrice,
-  CreatePrintVendorPriceInput,
-  UpdatePrintVendorPriceInput,
-} from '../types';
 import {
   fetchPrintCatalogs,
   fetchPrintVendorPrices,
+  fetchPrintCostData,
   createPrintVendorPrice,
   updatePrintVendorPrice,
   softDeletePrintVendorPrice,
 } from '../apiService';
+import {
+  PrintVendorPrice,
+  PrintCostRow,
+  PrintCostSummary,
+} from '../types';
 
-type PriceFormState = {
+type CatalogOption = {
+  id: string;
+  name: string;
+};
+
+type VendorPriceForm = {
   vendorId: string;
   sizeId: string;
   materialId: string;
   printServiceId: string;
-  donGia: string;
+  donGia: number;
   ghiChu: string;
 };
 
-const EMPTY_FORM: PriceFormState = {
-  vendorId: '',
-  sizeId: '',
-  materialId: '',
-  printServiceId: '',
-  donGia: '',
-  ghiChu: '',
+const defaultSummary: PrintCostSummary = {
+  totalRows: 0,
+  totalOrders: 0,
+  totalQuantity: 0,
+  totalAmount: 0,
+  missingPriceRows: 0,
+  byVendor: [],
 };
 
-const formatCurrency = (value?: number | null) => {
-  const amount = Number(value || 0);
-  return `${amount.toLocaleString('vi-VN')} đ`;
-};
+export default function PrintCostManager() {
+  const [activeTab, setActiveTab] = useState<'pricing' | 'cost'>('pricing');
+  const [loading, setLoading] = useState(false);
 
-const toInputNumber = (value?: number | null) => {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) return '';
-  return String(Number(value));
-};
-
-const normalizeNullable = (value: string) => {
-  const trimmed = value.trim();
-  return trimmed ? trimmed : null;
-};
-
-const PrintCostManager: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'pricing' | 'costs'>('pricing');
-
-  const [vendors, setVendors] = useState<PrintCatalogOption[]>([]);
-  const [sizes, setSizes] = useState<PrintCatalogOption[]>([]);
-  const [materials, setMaterials] = useState<PrintCatalogOption[]>([]);
+  const [vendors, setVendors] = useState<CatalogOption[]>([]);
+  const [sizes, setSizes] = useState<CatalogOption[]>([]);
+  const [materials, setMaterials] = useState<CatalogOption[]>([]);
 
   const [prices, setPrices] = useState<PrintVendorPrice[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [costRows, setCostRows] = useState<PrintCostRow[]>([]);
+  const [summary, setSummary] = useState<PrintCostSummary>(defaultSummary);
 
-  const [filterVendorId, setFilterVendorId] = useState('');
-  const [filterSizeId, setFilterSizeId] = useState('');
-  const [filterMaterialId, setFilterMaterialId] = useState('');
-  const [searchText, setSearchText] = useState('');
+  const [search, setSearch] = useState('');
+  const [vendorFilter, setVendorFilter] = useState('');
+  const [sizeFilter, setSizeFilter] = useState('');
+  const [materialFilter, setMaterialFilter] = useState('');
 
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingPrice, setEditingPrice] = useState<PrintVendorPrice | null>(null);
-  const [form, setForm] = useState<PriceFormState>(EMPTY_FORM);
-  const [formError, setFormError] = useState('');
-  const [pageError, setPageError] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [costVendorFilter, setCostVendorFilter] = useState('');
 
-  const loadData = async () => {
+  const [showModal, setShowModal] = useState(false);
+  const [editingItem, setEditingItem] = useState<PrintVendorPrice | null>(null);
+
+  const [form, setForm] = useState<VendorPriceForm>({
+    vendorId: '',
+    sizeId: '',
+    materialId: '',
+    printServiceId: '',
+    donGia: 0,
+    ghiChu: '',
+  });
+
+  const loadPricingData = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      setPageError('');
+      const catalogs = await fetchPrintCatalogs();
+      setVendors(
+        (catalogs.vendors || []).map((x: any) => ({
+          id: x.id,
+          name: x.name || x.ten_xuong_in || '',
+        }))
+      );
+      setSizes(
+        (catalogs.sizes || []).map((x: any) => ({
+          id: x.id,
+          name: x.name || x.ten_kich_thuoc || '',
+        }))
+      );
+      setMaterials(
+        (catalogs.materials || []).map((x: any) => ({
+          id: x.id,
+          name: x.name || x.ten_chat_lieu || '',
+        }))
+      );
 
-      const [catalogs, priceRows] = await Promise.all([
-        fetchPrintCatalogs(),
-        fetchPrintVendorPrices({ isActive: true }),
-      ]);
+      const data = await fetchPrintVendorPrices({ isActive: true });
+      setPrices(data);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      setVendors(catalogs.vendors || []);
-      setSizes(catalogs.sizes || []);
-      setMaterials(catalogs.materials || []);
-      setPrices(priceRows || []);
-    } catch (error: any) {
-      console.error('PrintCostManager.loadData error:', error);
-      setPageError(error?.message || 'Không tải được dữ liệu báo giá in ấn.');
+  const loadCostData = async () => {
+    setLoading(true);
+    try {
+      const result = await fetchPrintCostData({
+        from: dateFrom || undefined,
+        to: dateTo || undefined,
+        vendorId: costVendorFilter || undefined,
+      });
+
+      setCostRows(result.rows || []);
+      setSummary(result.summary || defaultSummary);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadData();
+    loadPricingData();
+    loadCostData();
   }, []);
 
-  const resetForm = () => {
-    setEditingPrice(null);
-    setForm(EMPTY_FORM);
-    setFormError('');
-  };
+  const filteredPrices = useMemo(() => {
+    return prices.filter((item) => {
+      const matchSearch =
+        !search ||
+        item.vendorName?.toLowerCase().includes(search.toLowerCase()) ||
+        item.sizeName?.toLowerCase().includes(search.toLowerCase()) ||
+        item.materialName?.toLowerCase().includes(search.toLowerCase()) ||
+        item.ghiChu?.toLowerCase().includes(search.toLowerCase());
+
+      const matchVendor =
+        !vendorFilter || item.vendorId === vendorFilter;
+
+      const matchSize =
+        !sizeFilter || item.sizeId === sizeFilter;
+
+      const matchMaterial =
+        !materialFilter || item.materialId === materialFilter;
+
+      return (
+        matchSearch &&
+        matchVendor &&
+        matchSize &&
+        matchMaterial
+      );
+    });
+  }, [
+    prices,
+    search,
+    vendorFilter,
+    sizeFilter,
+    materialFilter,
+  ]);
 
   const openCreateModal = () => {
-    resetForm();
-    setModalOpen(true);
-  };
-
-  const openEditModal = (price: PrintVendorPrice) => {
-    setEditingPrice(price);
+    setEditingItem(null);
     setForm({
-      vendorId: price.vendorId || '',
-      sizeId: price.sizeId || '',
-      materialId: price.materialId || '',
-      printServiceId: price.printServiceId || '',
-      donGia: toInputNumber(price.donGia),
-      ghiChu: price.ghiChu || '',
+      vendorId: '',
+      sizeId: '',
+      materialId: '',
+      printServiceId: '',
+      donGia: 0,
+      ghiChu: '',
     });
-    setFormError('');
-    setModalOpen(true);
+    setShowModal(true);
   };
 
-  const closeModal = () => {
-    setModalOpen(false);
-    resetForm();
+  const openEditModal = (item: PrintVendorPrice) => {
+    setEditingItem(item);
+    setForm({
+      vendorId: item.vendorId,
+      sizeId: item.sizeId || '',
+      materialId: item.materialId || '',
+      printServiceId: item.printServiceId || '',
+      donGia: item.donGia,
+      ghiChu: item.ghiChu || '',
+    });
+    setShowModal(true);
   };
 
-  const validateForm = () => {
-    if (!form.vendorId) return 'Vui lòng chọn nhà cung cấp.';
-    if (!form.sizeId) return 'Vui lòng chọn kích thước.';
-    if (!form.materialId) return 'Vui lòng chọn chất liệu.';
-    if (!form.donGia.trim()) return 'Vui lòng nhập đơn giá.';
-
-    const amount = Number(form.donGia);
-    if (Number.isNaN(amount) || amount < 0) {
-      return 'Đơn giá phải là số hợp lệ và không âm.';
-    }
-
-    return '';
-  };
-
-  const handleSubmit = async () => {
-    const error = validateForm();
-    if (error) {
-      setFormError(error);
+  const handleSave = async () => {
+    if (!form.vendorId || !form.sizeId || !form.materialId) {
+      alert('Vui lòng nhập đủ thông tin');
       return;
     }
 
-    try {
-      setSubmitting(true);
-      setFormError('');
+    const payload = {
+      vendorId: form.vendorId,
+      sizeId: form.sizeId,
+      materialId: form.materialId,
+      printServiceId: form.printServiceId || null,
+      donGia: Number(form.donGia || 0),
+      ghiChu: form.ghiChu,
+      isActive: true,
+    };
 
-      const payload: CreatePrintVendorPriceInput | UpdatePrintVendorPriceInput = {
-        vendorId: form.vendorId,
-        sizeId: normalizeNullable(form.sizeId),
-        materialId: normalizeNullable(form.materialId),
-        printServiceId: normalizeNullable(form.printServiceId),
-        donGia: Number(form.donGia),
-        ghiChu: form.ghiChu.trim() || '',
-      };
-
-      if (editingPrice) {
-        await updatePrintVendorPrice(editingPrice.id, {
-          ...payload,
-          isActive: true,
-        });
-      } else {
-        await createPrintVendorPrice(payload as CreatePrintVendorPriceInput);
-      }
-
-      await loadData();
-      closeModal();
-    } catch (err: any) {
-      console.error('PrintCostManager.handleSubmit error:', err);
-      setFormError(err?.message || 'Không lưu được báo giá in ấn.');
-    } finally {
-      setSubmitting(false);
+    if (editingItem) {
+      await updatePrintVendorPrice(editingItem.id, payload);
+    } else {
+      await createPrintVendorPrice(payload);
     }
+
+    setShowModal(false);
+    await loadPricingData();
   };
 
-  const handleDelete = async (price: PrintVendorPrice) => {
-    const confirmed = window.confirm(
-      `Bạn có chắc muốn ẩn báo giá:\n${price.vendorName} - ${price.sizeName} - ${price.materialName}?`
-    );
-    if (!confirmed) return;
-
-    try {
-      setLoading(true);
-      await softDeletePrintVendorPrice(price.id);
-      await loadData();
-    } catch (error: any) {
-      console.error('PrintCostManager.handleDelete error:', error);
-      setPageError(error?.message || 'Không xóa được báo giá in ấn.');
-    } finally {
-      setLoading(false);
-    }
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Xác nhận xóa báo giá này?')) return;
+    await softDeletePrintVendorPrice(id);
+    await loadPricingData();
   };
-
-  const filteredPrices = useMemo(() => {
-    const keyword = searchText.trim().toLowerCase();
-
-    return prices.filter((row) => {
-      if (filterVendorId && row.vendorId !== filterVendorId) return false;
-      if (filterSizeId && row.sizeId !== filterSizeId) return false;
-      if (filterMaterialId && row.materialId !== filterMaterialId) return false;
-
-      if (!keyword) return true;
-
-      const haystack = [
-        row.vendorName,
-        row.sizeName,
-        row.materialName,
-        row.printServiceName || '',
-        row.ghiChu || '',
-        String(row.donGia || ''),
-      ]
-        .join(' ')
-        .toLowerCase();
-
-      return haystack.includes(keyword);
-    });
-  }, [prices, filterVendorId, filterSizeId, filterMaterialId, searchText]);
-
-  const totalActivePrices = filteredPrices.length;
-  const totalAmount = filteredPrices.reduce((sum, row) => sum + Number(row.donGia || 0), 0);
 
   return (
-    <div className="p-4 md:p-6 space-y-4">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-slate-800">Chi phí in ấn</h2>
-          <p className="text-sm text-slate-500">
-            Quản lý báo giá theo xưởng in và chuẩn bị dữ liệu cho tab chi phí in ấn.
+          <h1 className="text-2xl font-black">Chi phí in ấn</h1>
+          <p className="text-slate-500">
+            Quản lý báo giá và chi phí in theo dữ liệu thật.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex gap-2">
           <button
-            type="button"
-            onClick={loadData}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            onClick={() =>
+              activeTab === 'pricing'
+                ? loadPricingData()
+                : loadCostData()
+            }
+            className="px-4 py-2 border rounded-xl flex items-center gap-2"
           >
             <RefreshCw size={16} />
             Tải lại
           </button>
 
-          <button
-            type="button"
-            onClick={openCreateModal}
-            className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
-          >
-            <Plus size={16} />
-            Thêm mới sản phẩm in
-          </button>
+          {activeTab === 'pricing' && (
+            <button
+              onClick={openCreateModal}
+              className="px-4 py-2 bg-slate-900 text-white rounded-xl flex items-center gap-2"
+            >
+              <Plus size={16} />
+              Thêm mới sản phẩm in
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2 border-b border-slate-200">
+      <div className="flex gap-2 border-b">
         <button
-          type="button"
           onClick={() => setActiveTab('pricing')}
-          className={`inline-flex items-center gap-2 rounded-t-lg px-4 py-2 text-sm font-medium ${
+          className={`px-4 py-2 ${
             activeTab === 'pricing'
-              ? 'border border-b-white border-slate-200 bg-white text-slate-900'
-              : 'text-slate-500 hover:text-slate-700'
+              ? 'border-b-2 border-blue-600 font-bold'
+              : ''
           }`}
         >
-          <Package size={16} />
           Báo giá in ấn
         </button>
-
         <button
-          type="button"
-          onClick={() => setActiveTab('costs')}
-          className={`inline-flex items-center gap-2 rounded-t-lg px-4 py-2 text-sm font-medium ${
-            activeTab === 'costs'
-              ? 'border border-b-white border-slate-200 bg-white text-slate-900'
-              : 'text-slate-500 hover:text-slate-700'
+          onClick={() => setActiveTab('cost')}
+          className={`px-4 py-2 ${
+            activeTab === 'cost'
+              ? 'border-b-2 border-blue-600 font-bold'
+              : ''
           }`}
         >
-          <BarChart3 size={16} />
           Chi phí in ấn
         </button>
       </div>
 
-      {pageError ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {pageError}
-        </div>
-      ) : null}
-
       {activeTab === 'pricing' && (
         <>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
-            <div className="md:col-span-2">
-              <label className="mb-1 block text-xs font-medium text-slate-600">Tìm kiếm</label>
-              <div className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2">
-                <Search size={16} className="text-slate-400" />
-                <input
-                  value={searchText}
-                  onChange={(e) => setSearchText(e.target.value)}
-                  placeholder="Nhà cung cấp, kích thước, chất liệu, ghi chú..."
-                  className="w-full border-none bg-transparent text-sm outline-none"
-                />
-              </div>
-            </div>
+          <div className="grid grid-cols-4 gap-4">
+            <input
+              className="border rounded-xl px-3 py-2"
+              placeholder="Tìm kiếm..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
 
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600">Nhà cung cấp</label>
-              <select
-                value={filterVendorId}
-                onChange={(e) => setFilterVendorId(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-              >
-                <option value="">Tất cả</option>
-                {vendors.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <select
+              className="border rounded-xl px-3 py-2"
+              value={vendorFilter}
+              onChange={(e) => setVendorFilter(e.target.value)}
+            >
+              <option value="">Tất cả NCC</option>
+              {vendors.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+            </select>
 
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600">Kích thước</label>
-              <select
-                value={filterSizeId}
-                onChange={(e) => setFilterSizeId(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-              >
-                <option value="">Tất cả</option>
-                {sizes.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <select
+              className="border rounded-xl px-3 py-2"
+              value={sizeFilter}
+              onChange={(e) => setSizeFilter(e.target.value)}
+            >
+              <option value="">Tất cả size</option>
+              {sizes.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+            </select>
 
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600">Chất liệu</label>
-              <select
-                value={filterMaterialId}
-                onChange={(e) => setFilterMaterialId(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-              >
-                <option value="">Tất cả</option>
-                {materials.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <select
+              className="border rounded-xl px-3 py-2"
+              value={materialFilter}
+              onChange={(e) => setMaterialFilter(e.target.value)}
+            >
+              <option value="">Tất cả chất liệu</option>
+              {materials.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+            </select>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <div className="text-sm text-slate-500">Số báo giá đang hiển thị</div>
-              <div className="mt-1 text-2xl font-bold text-slate-900">{totalActivePrices}</div>
-            </div>
-
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <div className="text-sm text-slate-500">Tổng đơn giá cộng dồn</div>
-              <div className="mt-1 text-2xl font-bold text-slate-900">{formatCurrency(totalAmount)}</div>
-            </div>
-
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <div className="text-sm text-slate-500">Trạng thái dữ liệu</div>
-              <div className="mt-1 text-sm font-medium text-slate-700">
-                {loading ? 'Đang tải dữ liệu...' : 'Sẵn sàng dùng cho module in ấn'}
-              </div>
-            </div>
-          </div>
-
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-slate-50 text-left text-slate-600">
-                  <tr>
-                    <th className="px-4 py-3 font-medium">Nhà cung cấp</th>
-                    <th className="px-4 py-3 font-medium">Kích thước</th>
-                    <th className="px-4 py-3 font-medium">Chất liệu</th>
-                    <th className="px-4 py-3 font-medium">Dịch vụ in</th>
-                    <th className="px-4 py-3 font-medium text-right">Đơn giá</th>
-                    <th className="px-4 py-3 font-medium">Ghi chú</th>
-                    <th className="px-4 py-3 font-medium text-center">Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-10 text-center text-slate-500">
-                        <div className="inline-flex items-center gap-2">
-                          <Loader2 size={16} className="animate-spin" />
-                          Đang tải dữ liệu...
-                        </div>
-                      </td>
-                    </tr>
-                  ) : filteredPrices.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-10 text-center text-slate-500">
-                        Chưa có báo giá phù hợp với bộ lọc hiện tại.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredPrices.map((row) => (
-                      <tr key={row.id} className="border-t border-slate-100">
-                        <td className="px-4 py-3 font-medium text-slate-800">{row.vendorName}</td>
-                        <td className="px-4 py-3">{row.sizeName || '-'}</td>
-                        <td className="px-4 py-3">{row.materialName || '-'}</td>
-                        <td className="px-4 py-3">{row.printServiceName || '-'}</td>
-                        <td className="px-4 py-3 text-right font-semibold text-slate-900">
-                          {formatCurrency(row.donGia)}
-                        </td>
-                        <td className="px-4 py-3 text-slate-600">{row.ghiChu || '-'}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => openEditModal(row)}
-                              className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                            >
-                              <Pencil size={14} />
-                              Sửa
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(row)}
-                              className="inline-flex items-center gap-1 rounded-md border border-red-300 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
-                            >
-                              <Trash2 size={14} />
-                              Xóa
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <table className="w-full border rounded-xl overflow-hidden">
+            <thead className="bg-slate-100">
+              <tr>
+                <th className="p-3 text-left">Nhà cung cấp</th>
+                <th className="p-3 text-left">Kích thước</th>
+                <th className="p-3 text-left">Chất liệu</th>
+                <th className="p-3 text-left">Đơn giá</th>
+                <th className="p-3 text-left">Ghi chú</th>
+                <th className="p-3 text-left">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredPrices.map((item) => (
+                <tr key={item.id} className="border-t">
+                  <td className="p-3">{item.vendorName}</td>
+                  <td className="p-3">{item.sizeName}</td>
+                  <td className="p-3">{item.materialName}</td>
+                  <td className="p-3">
+                    {item.donGia.toLocaleString()} đ
+                  </td>
+                  <td className="p-3">{item.ghiChu}</td>
+                  <td className="p-3 flex gap-2">
+                    <button
+                      onClick={() => openEditModal(item)}
+                      className="border rounded-lg px-3 py-1"
+                    >
+                      Sửa
+                    </button>
+                    <button
+                      onClick={() => handleDelete(item.id)}
+                      className="border border-red-500 text-red-500 rounded-lg px-3 py-1"
+                    >
+                      Xóa
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </>
       )}
 
-      {activeTab === 'costs' && (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
-          <div className="text-lg font-semibold text-slate-800">Tab Chi phí in ấn</div>
-          <p className="mt-2 text-sm text-slate-500">
-            Bước này chưa triển khai UI. Ở bước tiếp theo sẽ nối bảng chi phí với RPC:
-            rpc_get_print_cost_rows và rpc_get_print_cost_summary_by_vendor.
-          </p>
-        </div>
+      {activeTab === 'cost' && (
+        <>
+          <div className="grid grid-cols-3 gap-4">
+            <input
+              type="date"
+              className="border rounded-xl px-3 py-2"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+            />
+            <input
+              type="date"
+              className="border rounded-xl px-3 py-2"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+            />
+            <select
+              className="border rounded-xl px-3 py-2"
+              value={costVendorFilter}
+              onChange={(e) =>
+                setCostVendorFilter(e.target.value)
+              }
+            >
+              <option value="">Tất cả NCC</option>
+              {vendors.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            onClick={loadCostData}
+            className="px-4 py-2 bg-slate-900 text-white rounded-xl"
+          >
+            Lọc dữ liệu
+          </button>
+
+          <div className="grid grid-cols-5 gap-4">
+            <SummaryCard
+              title="Tổng dòng"
+              value={summary.totalRows}
+            />
+            <SummaryCard
+              title="Tổng đơn"
+              value={summary.totalOrders}
+            />
+            <SummaryCard
+              title="Tổng SL"
+              value={summary.totalQuantity}
+            />
+            <SummaryCard
+              title="Tổng tiền"
+              value={`${summary.totalAmount.toLocaleString()} đ`}
+            />
+            <SummaryCard
+              title="Thiếu báo giá"
+              value={summary.missingPriceRows}
+            />
+          </div>
+
+          <table className="w-full border rounded-xl overflow-hidden">
+            <thead className="bg-slate-100">
+              <tr>
+                <th className="p-3 text-left">Khách hàng</th>
+                <th className="p-3 text-left">Loại</th>
+                <th className="p-3 text-left">Kích thước</th>
+                <th className="p-3 text-left">Chất liệu</th>
+                <th className="p-3 text-left">SL</th>
+                <th className="p-3 text-left">NCC</th>
+                <th className="p-3 text-left">Đơn giá</th>
+                <th className="p-3 text-left">Thành tiền</th>
+                <th className="p-3 text-left">Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody>
+              {costRows.map((row) => (
+                <tr key={row.rowId} className="border-t">
+                  <td className="p-3">{row.tenKhachHang}</td>
+                  <td className="p-3">{row.lineType}</td>
+                  <td className="p-3">{row.sizeName}</td>
+                  <td className="p-3">{row.materialName}</td>
+                  <td className="p-3">{row.quantity}</td>
+                  <td className="p-3">{row.vendorName}</td>
+                  <td className="p-3">
+                    {row.unitPrice
+                      ? `${row.unitPrice.toLocaleString()} đ`
+                      : '-'}
+                  </td>
+                  <td className="p-3">
+                    {row.amount
+                      ? `${row.amount.toLocaleString()} đ`
+                      : '-'}
+                  </td>
+                  <td className="p-3">
+                    {row.pricingStatus === 'missing_price' ? (
+                      <span className="text-red-500 font-bold">
+                        Thiếu giá
+                      </span>
+                    ) : (
+                      <span className="text-green-600 font-bold">
+                        Khớp giá
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
       )}
 
-      {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900">
-                  {editingPrice ? 'Cập nhật sản phẩm in' : 'Thêm mới sản phẩm in'}
-                </h3>
-                <p className="text-sm text-slate-500">
-                  Khai báo báo giá theo nhà cung cấp, kích thước và chất liệu.
-                </p>
-              </div>
+      {showModal && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center">
+          <div className="bg-white p-6 rounded-2xl w-[500px] space-y-4">
+            <h2 className="font-bold text-lg">
+              {editingItem
+                ? 'Sửa báo giá'
+                : 'Thêm mới sản phẩm in'}
+            </h2>
+
+            <select
+              className="w-full border rounded-xl px-3 py-2"
+              value={form.vendorId}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  vendorId: e.target.value,
+                })
+              }
+            >
+              <option value="">Chọn NCC</option>
+              {vendors.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+            </select>
+
+            <select
+              className="w-full border rounded-xl px-3 py-2"
+              value={form.sizeId}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  sizeId: e.target.value,
+                })
+              }
+            >
+              <option value="">Chọn size</option>
+              {sizes.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+            </select>
+
+            <select
+              className="w-full border rounded-xl px-3 py-2"
+              value={form.materialId}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  materialId: e.target.value,
+                })
+              }
+            >
+              <option value="">Chọn chất liệu</option>
+              {materials.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+            </select>
+
+            <input
+              type="number"
+              className="w-full border rounded-xl px-3 py-2"
+              placeholder="Đơn giá"
+              value={form.donGia}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  donGia: Number(e.target.value),
+                })
+              }
+            />
+
+            <textarea
+              className="w-full border rounded-xl px-3 py-2"
+              placeholder="Ghi chú"
+              value={form.ghiChu}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  ghiChu: e.target.value,
+                })
+              }
+            />
+
+            <div className="flex justify-end gap-2">
               <button
-                type="button"
-                onClick={closeModal}
-                className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 px-5 py-5 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Nhà cung cấp</label>
-                <select
-                  value={form.vendorId}
-                  onChange={(e) => setForm((prev) => ({ ...prev, vendorId: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-                >
-                  <option value="">Chọn nhà cung cấp</option>
-                  {vendors.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Kích thước</label>
-                <select
-                  value={form.sizeId}
-                  onChange={(e) => setForm((prev) => ({ ...prev, sizeId: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-                >
-                  <option value="">Chọn kích thước</option>
-                  {sizes.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Chất liệu</label>
-                <select
-                  value={form.materialId}
-                  onChange={(e) => setForm((prev) => ({ ...prev, materialId: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-                >
-                  <option value="">Chọn chất liệu</option>
-                  {materials.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Dịch vụ in</label>
-                <input
-                  value={form.printServiceId}
-                  onChange={(e) => setForm((prev) => ({ ...prev, printServiceId: e.target.value }))}
-                  placeholder="Tạm để trống nếu chưa dùng"
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Đơn giá</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={form.donGia}
-                  onChange={(e) => setForm((prev) => ({ ...prev, donGia: e.target.value }))}
-                  placeholder="Nhập đơn giá"
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="mb-1 block text-sm font-medium text-slate-700">Ghi chú</label>
-                <textarea
-                  value={form.ghiChu}
-                  onChange={(e) => setForm((prev) => ({ ...prev, ghiChu: e.target.value }))}
-                  rows={3}
-                  placeholder="Ghi chú thêm nếu cần"
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-                />
-              </div>
-
-              {formError ? (
-                <div className="md:col-span-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                  {formError}
-                </div>
-              ) : null}
-            </div>
-
-            <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-5 py-4">
-              <button
-                type="button"
-                onClick={closeModal}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                onClick={() => setShowModal(false)}
+                className="px-4 py-2 border rounded-xl"
               >
                 Hủy
               </button>
               <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={submitting}
-                className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+                onClick={handleSave}
+                className="px-4 py-2 bg-slate-900 text-white rounded-xl"
               >
-                {submitting ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                {editingPrice ? 'Lưu cập nhật' : 'Tạo mới'}
+                Lưu
               </button>
             </div>
           </div>
@@ -599,6 +590,19 @@ const PrintCostManager: React.FC = () => {
       )}
     </div>
   );
-};
+}
 
-export default PrintCostManager;
+function SummaryCard({
+  title,
+  value,
+}: {
+  title: string;
+  value: any;
+}) {
+  return (
+    <div className="border rounded-2xl p-4">
+      <div className="text-sm text-slate-500">{title}</div>
+      <div className="text-2xl font-black">{value}</div>
+    </div>
+  );
+}

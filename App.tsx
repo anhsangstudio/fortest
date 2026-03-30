@@ -16,6 +16,7 @@ import ConsultationManager from './components/ConsultationManager';
 import ConsultationSalesAnalytics from './components/ConsultationSalesAnalytics';
 import ConsultationServiceAnalytics from './components/ConsultationServiceAnalytics';
 import PrintProductionManager from './components/PrintProductionManager';
+import PrintCostManager from './components/PrintCostManager';
 import { 
   Contract, Customer, Staff, Service, Transaction, Schedule, 
   Task, StudioInfo, ExpenseCategoryItem, ServiceTypeItem, ServiceGroupItem 
@@ -62,6 +63,11 @@ export default function App() {
 
   const serviceTypesList = useMemo(() => serviceTypes.map(t => t.name), [serviceTypes]);
   const serviceGroupsList = useMemo(() => serviceGroups.map(g => g.groupName), [serviceGroups]);
+
+  const isAdmin = useMemo(() => {
+    if (!currentUser) return false;
+    return currentUser.username === 'admin';
+  }, [currentUser]);
 
   const isAdminOrDirector = useMemo(() => {
     if (!currentUser) return false;
@@ -319,6 +325,7 @@ export default function App() {
 				  {activeTab === 'consultation_sales_analytics' && 'Phân Tích Hiệu Suất Sale Nâng Cao'}
                   {activeTab === 'consultation_service_analytics' && 'Phân Tích Dịch Vụ'}
 				  {activeTab === 'print_production' && 'Quản lý In ấn'}
+                  {activeTab === 'print_costs' && 'Chi phí in ấn'}
                   {activeTab === 'finance' && 'Quản lý Tài chính'}
                   {activeTab === 'payroll' && 'Bảng lương nhân sự'}
                   {activeTab === 'staff' && 'Danh sách nhân viên'}
@@ -384,6 +391,9 @@ export default function App() {
 
 		    {activeTab === 'print_production' && canAccess('print_production') && (
               <PrintProductionManager />
+            )}
+            {activeTab === 'print_costs' && isAdmin && (
+              <PrintCostManager />
             )}
             {activeTab === 'payroll' && canAccess('staff') && (
               <PayrollManager 

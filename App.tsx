@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'; 
 import { 
   LayoutDashboard, FileText, Calendar, DollarSign, Users, 
-  Package, Settings, LogOut, Menu, CheckSquare, Sparkles, Loader2, Lock, Receipt, BarChart3
+  Package, Settings, LogOut, Menu, CheckSquare, Sparkles, Loader2, Lock, Receipt, BarChart3, Printer
 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import ContractManager from './components/ContractManager';

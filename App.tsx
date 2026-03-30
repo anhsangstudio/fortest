@@ -268,6 +268,10 @@ export default function App() {
                   icon={Printer}  label="In ấn" id="print_production" activeTab={activeTab} setActiveTab={setActiveTab}
                   visible={canAccess('print_production')}
                />
+               <SidebarItem 
+                  icon={DollarSign} label="Chi phí in ấn" id="print_costs" activeTab={activeTab} setActiveTab={setActiveTab}
+                  visible={isAdmin}
+               />
 				
                <SidebarItem 
                   icon={DollarSign} label="Thu & Chi" id="finance" activeTab={activeTab} setActiveTab={setActiveTab} 

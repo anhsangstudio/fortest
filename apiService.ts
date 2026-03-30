@@ -29,7 +29,9 @@ import { Service,
 		ConsultationService,
 		ConsultationLog,
 		ConsultationFilter,
-		ConsultationLogService,} from './types';
+		ConsultationLogService,
+		PrintOrder,
+		PrintCatalogOption,} from './types';
 
 const SUPABASE_URL = (import.meta as any).env?.VITE_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
@@ -1424,4 +1426,211 @@ export const fetchTransactionsByContractId = async (contractId: string): Promise
   }
 
   return (data || []).map(transactionFromDb);
+};
+
+
+// ================================
+// PRINT PRODUCTION MODULE
+// STEP 2.1 - Fetch from print_orders_view + inline CRUD
+// ================================
+
+const printOrderFromDb = (db: any): PrintOrder => ({
+  id: db.id,
+  contractId: db.contract_id ?? null,
+  contractCode: db.contract_code || '',
+  customerId: db.customer_id ?? null,
+  tenKhachHang: db.ten_khach_hang || '',
+  ngayGuiIn: asDateOnly(db.ngay_gui_in) || '',
+  linkTheTrello: db.link_the_trello || '',
+  linkFiles: db.link_files || '',
+  imageAttachments: Array.isArray(db.image_attachments) ? db.image_attachments : [],
+  soLuongAnhLon: Number(db.so_luong_anh_lon || 0),
+  kichThuocAnhLonId: db.kich_thuoc_anh_lon_id ?? null,
+  kichThuocAnhLon: db.kich_thuoc_anh_lon || '',
+  chatLieuAnhLonId: db.chat_lieu_anh_lon_id ?? null,
+  chatLieuAnhLon: db.chat_lieu_anh_lon || '',
+  soLuongAnhNho: Number(db.so_luong_anh_nho || 0),
+  kichThuocAnhNhoId: db.kich_thuoc_anh_nho_id ?? null,
+  kichThuocAnhNho: db.kich_thuoc_anh_nho || '',
+  chatLieuAnhNhoId: db.chat_lieu_anh_nho_id ?? null,
+  chatLieuAnhNho: db.chat_lieu_anh_nho || '',
+  printServiceId: db.print_service_id ?? null,
+  tenDichVuIn: db.ten_dich_vu_in || '',
+  vendorId: db.vendor_id ?? null,
+  tenXuongIn: db.ten_xuong_in || '',
+  statusId: db.status_id ?? null,
+  tenTrangThai: db.ten_trang_thai || '',
+  nguoiKiemTraNhanAnh: db.nguoi_kiem_tra_nhan_anh || '',
+  ghiChu: db.ghi_chu || '',
+  thongBaoDaCoAnh: !!db.thong_bao_da_co_anh,
+  thongBaoDaGiaoAnh: !!db.thong_bao_da_giao_anh,
+  thongBaoDangInAnh: !!db.thong_bao_dang_in_anh,
+  checkFlag: !!db.check_flag,
+  donGiaIn: Number(db.don_gia_in || 0),
+  thanhTien: Number(db.thanh_tien || 0),
+  createdAt: db.created_at || '',
+  updatedAt: db.updated_at || '',
+});
+
+const printCatalogOptionFromDb = (
+  db: any,
+  nameField: 'ten_kich_thuoc' | 'ten_chat_lieu' | 'ten_xuong_in' | 'ten_trang_thai'
+): PrintCatalogOption => ({
+  id: db.id,
+  name: db[nameField] || '',
+  sortOrder: Number(db.thu_tu_hien_thi || 0),
+  isActive: db.dang_su_dung !== false,
+});
+
+const getPrintOrderById = async (id: string): Promise<PrintOrder | null> => {
+  if (!supabase) return null;
+  const res = await supabase
+    .from('print_orders_view')
+    .select('*')
+    .eq('id', id)
+    .single();
+  throwIfError(res, 'getPrintOrderById');
+  return res.data ? printOrderFromDb(res.data) : null;
+};
+
+export const fetchPrintOrders = async (): Promise<PrintOrder[]> => {
+  if (!supabase) return [];
+  const res = await supabase
+    .from('print_orders_view')
+    .select('*')
+    .order('ngay_gui_in', { ascending: false })
+    .order('created_at', { ascending: false });
+
+  throwIfError(res, 'fetchPrintOrders');
+  return (res.data || []).map(printOrderFromDb);
+};
+
+export const fetchPrintCatalogs = async (): Promise<{
+  sizes: PrintCatalogOption[];
+  materials: PrintCatalogOption[];
+  vendors: PrintCatalogOption[];
+  statuses: PrintCatalogOption[];
+}> => {
+  if (!supabase) {
+    return { sizes: [], materials: [], vendors: [], statuses: [] };
+  }
+
+  const [sizesRes, materialsRes, vendorsRes, statusesRes] = await Promise.all([
+    supabase.from('print_sizes').select('id, ten_kich_thuoc, thu_tu_hien_thi, dang_su_dung').eq('dang_su_dung', true).order('thu_tu_hien_thi', { ascending: true }).order('ten_kich_thuoc', { ascending: true }),
+    supabase.from('print_materials').select('id, ten_chat_lieu, thu_tu_hien_thi, dang_su_dung').eq('dang_su_dung', true).order('thu_tu_hien_thi', { ascending: true }).order('ten_chat_lieu', { ascending: true }),
+    supabase.from('print_vendors').select('id, ten_xuong_in, thu_tu_hien_thi, dang_su_dung').eq('dang_su_dung', true).order('thu_tu_hien_thi', { ascending: true }).order('ten_xuong_in', { ascending: true }),
+    supabase.from('print_statuses').select('id, ten_trang_thai, thu_tu_hien_thi, dang_su_dung').eq('dang_su_dung', true).order('thu_tu_hien_thi', { ascending: true }).order('ten_trang_thai', { ascending: true }),
+  ]);
+
+  throwIfError(sizesRes, 'fetchPrintCatalogs.sizes');
+  throwIfError(materialsRes, 'fetchPrintCatalogs.materials');
+  throwIfError(vendorsRes, 'fetchPrintCatalogs.vendors');
+  throwIfError(statusesRes, 'fetchPrintCatalogs.statuses');
+
+  return {
+    sizes: (sizesRes.data || []).map((item: any) => printCatalogOptionFromDb(item, 'ten_kich_thuoc')),
+    materials: (materialsRes.data || []).map((item: any) => printCatalogOptionFromDb(item, 'ten_chat_lieu')),
+    vendors: (vendorsRes.data || []).map((item: any) => printCatalogOptionFromDb(item, 'ten_xuong_in')),
+    statuses: (statusesRes.data || []).map((item: any) => printCatalogOptionFromDb(item, 'ten_trang_thai')),
+  };
+};
+
+export const createPrintOrder = async (payload?: Partial<PrintOrder>): Promise<PrintOrder> => {
+  if (!supabase) {
+    throw new Error('Supabase chưa được cấu hình.');
+  }
+
+  const insertData = {
+    contract_id: payload?.contractId ?? null,
+    contract_code: payload?.contractCode || '',
+    customer_id: payload?.customerId ?? null,
+    ten_khach_hang: payload?.tenKhachHang || 'Khách mới',
+    ngay_gui_in: payload?.ngayGuiIn || new Date().toISOString().slice(0, 10),
+    so_luong_anh_lon: Number(payload?.soLuongAnhLon || 0),
+    kich_thuoc_anh_lon_id: payload?.kichThuocAnhLonId ?? null,
+    chat_lieu_anh_lon_id: payload?.chatLieuAnhLonId ?? null,
+    so_luong_anh_nho: Number(payload?.soLuongAnhNho || 0),
+    kich_thuoc_anh_nho_id: payload?.kichThuocAnhNhoId ?? null,
+    chat_lieu_anh_nho_id: payload?.chatLieuAnhNhoId ?? null,
+    vendor_id: payload?.vendorId ?? null,
+    status_id: payload?.statusId ?? null,
+    nguoi_kiem_tra_nhan_anh: payload?.nguoiKiemTraNhanAnh || '',
+    ghi_chu: payload?.ghiChu || '',
+    link_the_trello: payload?.linkTheTrello || '',
+    link_files: payload?.linkFiles || '',
+    thong_bao_da_co_anh: !!payload?.thongBaoDaCoAnh,
+    thong_bao_da_giao_anh: !!payload?.thongBaoDaGiaoAnh,
+    thong_bao_dang_in_anh: !!payload?.thongBaoDangInAnh,
+    check_flag: !!payload?.checkFlag,
+    don_gia_in: Number(payload?.donGiaIn || 0),
+  };
+
+  const insertRes = await supabase.from('print_orders').insert(insertData).select('id').single();
+  throwIfError(insertRes, 'createPrintOrder');
+
+  const created = await getPrintOrderById(insertRes.data.id);
+  if (!created) throw new Error('Không đọc được dòng in ấn vừa tạo.');
+  return created;
+};
+
+export const updatePrintOrder = async (
+  id: string,
+  patch: Record<string, any>
+): Promise<PrintOrder> => {
+  if (!supabase) {
+    throw new Error('Supabase chưa được cấu hình.');
+  }
+
+  const res = await supabase
+    .from('print_orders')
+    .update(patch)
+    .eq('id', id)
+    .select('id')
+    .single();
+
+  throwIfError(res, 'updatePrintOrder');
+
+  const updated = await getPrintOrderById(id);
+  if (!updated) throw new Error('Không đọc được dòng in ấn sau khi cập nhật.');
+  return updated;
+};
+
+export const duplicatePrintOrder = async (source: PrintOrder): Promise<PrintOrder> => {
+  return createPrintOrder({
+    contractId: source.contractId,
+    contractCode: source.contractCode,
+    customerId: source.customerId,
+    tenKhachHang: source.tenKhachHang ? `${source.tenKhachHang} (Bản sao)` : 'Khách mới (Bản sao)',
+    ngayGuiIn: source.ngayGuiIn,
+    linkTheTrello: source.linkTheTrello,
+    linkFiles: source.linkFiles,
+    soLuongAnhLon: source.soLuongAnhLon,
+    kichThuocAnhLonId: source.kichThuocAnhLonId,
+    chatLieuAnhLonId: source.chatLieuAnhLonId,
+    soLuongAnhNho: source.soLuongAnhNho,
+    kichThuocAnhNhoId: source.kichThuocAnhNhoId,
+    chatLieuAnhNhoId: source.chatLieuAnhNhoId,
+    vendorId: source.vendorId,
+    statusId: source.statusId,
+    nguoiKiemTraNhanAnh: source.nguoiKiemTraNhanAnh,
+    ghiChu: source.ghiChu,
+    thongBaoDaCoAnh: source.thongBaoDaCoAnh,
+    thongBaoDaGiaoAnh: source.thongBaoDaGiaoAnh,
+    thongBaoDangInAnh: source.thongBaoDangInAnh,
+    checkFlag: source.checkFlag,
+    donGiaIn: source.donGiaIn,
+  });
+};
+
+export const softDeletePrintOrder = async (id: string): Promise<void> => {
+  if (!supabase) {
+    throw new Error('Supabase chưa được cấu hình.');
+  }
+
+  const res = await supabase
+    .from('print_orders')
+    .update({ dang_su_dung: false })
+    .eq('id', id);
+
+  throwIfError(res, 'softDeletePrintOrder');
 };

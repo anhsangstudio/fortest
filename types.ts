@@ -495,3 +495,94 @@ export interface PrintOrder {
   createdAt: string;
   updatedAt: string;
 }
+
+
+export interface PrintVendorPrice {
+  id: string;
+  vendorId: string;
+  vendorName: string;
+  sizeId?: string | null;
+  sizeName: string;
+  materialId?: string | null;
+  materialName: string;
+  printServiceId?: string | null;
+  printServiceName?: string;
+  donGia: number;
+  ghiChu?: string;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreatePrintVendorPriceInput {
+  vendorId: string;
+  sizeId?: string | null;
+  materialId?: string | null;
+  printServiceId?: string | null;
+  donGia: number;
+  ghiChu?: string;
+}
+
+export interface UpdatePrintVendorPriceInput {
+  vendorId?: string;
+  sizeId?: string | null;
+  materialId?: string | null;
+  printServiceId?: string | null;
+  donGia?: number;
+  ghiChu?: string;
+  isActive?: boolean;
+}
+
+export interface PrintVendorPriceFilters {
+  vendorId?: string;
+  sizeId?: string;
+  materialId?: string;
+  isActive?: boolean;
+}
+
+export type PrintCostLineType = 'large' | 'small';
+export type PrintPricingStatus = 'matched' | 'missing_price' | 'skipped';
+
+export interface PrintCostRow {
+  rowId: string;
+  orderId: string;
+  lineType: PrintCostLineType;
+  ngayGuiIn: string;
+  tenKhachHang: string;
+  vendorId?: string | null;
+  vendorName: string;
+  sizeId?: string | null;
+  sizeName: string;
+  materialId?: string | null;
+  materialName: string;
+  quantity: number;
+  unitPrice?: number | null;
+  amount?: number | null;
+  pricingStatus: PrintPricingStatus;
+  contractId?: string | null;
+  contractCode?: string;
+}
+
+export interface PrintCostFilters {
+  from?: string;
+  to?: string;
+  vendorId?: string;
+}
+
+export interface PrintCostSummaryByVendor {
+  vendorId: string;
+  vendorName: string;
+  totalRows: number;
+  totalQuantity: number;
+  totalAmount: number;
+  missingPriceRows: number;
+}
+
+export interface PrintCostSummary {
+  totalRows: number;
+  totalOrders: number;
+  totalQuantity: number;
+  totalAmount: number;
+  missingPriceRows: number;
+  byVendor: PrintCostSummaryByVendor[];
+}

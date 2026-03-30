@@ -1,4 +1,3 @@
-
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ClipboardList,
@@ -20,11 +19,12 @@ import {
   duplicatePrintOrder,
   fetchPrintCatalogs,
   fetchPrintOrders,
+  fetchPrintVendorPrices,
   isConfigured,
   softDeletePrintOrder,
   updatePrintOrder,
 } from '../apiService';
-import { PrintCatalogOption, PrintOrder } from '../types';
+import { PrintCatalogOption, PrintOrder, PrintVendorPrice } from '../types';
 
 type SaveState = Record<string, boolean>;
 
@@ -33,6 +33,12 @@ type CatalogState = {
   materials: PrintCatalogOption[];
   vendors: PrintCatalogOption[];
   statuses: PrintCatalogOption[];
+};
+
+type PricingResult = {
+  donGiaIn: number;
+  thanhTien: number;
+  hasMissingPrice: boolean;
 };
 
 const emptyCatalogs: CatalogState = {
@@ -67,10 +73,107 @@ const updateRowInList = (rows: PrintOrder[], nextRow: PrintOrder) => {
   return rows.map((row) => (row.id === nextRow.id ? nextRow : row));
 };
 
+const findMatchingPrintVendorPrice = (
+  prices: PrintVendorPrice[],
+  vendorId?: string | null,
+  sizeId?: string | null,
+  materialId?: string | null
+): PrintVendorPrice | null => {
+  if (!vendorId || !sizeId || !materialId) return null;
+
+  return (
+    prices.find(
+      (price) =>
+        price.isActive &&
+        price.vendorId === vendorId &&
+        price.sizeId === sizeId &&
+        price.materialId === materialId
+    ) || null
+  );
+};
+
+const calculatePricingForRow = (
+  row: Pick<
+    PrintOrder,
+    | 'vendorId'
+    | 'soLuongAnhLon'
+    | 'kichThuocAnhLonId'
+    | 'chatLieuAnhLonId'
+    | 'soLuongAnhNho'
+    | 'kichThuocAnhNhoId'
+    | 'chatLieuAnhNhoId'
+  >,
+  prices: PrintVendorPrice[]
+): PricingResult => {
+  const largeQty = Number(row.soLuongAnhLon || 0);
+  const smallQty = Number(row.soLuongAnhNho || 0);
+
+  const largePrice =
+    largeQty > 0
+      ? findMatchingPrintVendorPrice(
+          prices,
+          row.vendorId,
+          row.kichThuocAnhLonId,
+          row.chatLieuAnhLonId
+        )
+      : null;
+
+  const smallPrice =
+    smallQty > 0
+      ? findMatchingPrintVendorPrice(
+          prices,
+          row.vendorId,
+          row.kichThuocAnhNhoId,
+          row.chatLieuAnhNhoId
+        )
+      : null;
+
+  const hasMissingLarge =
+    largeQty > 0 &&
+    !!row.vendorId &&
+    !!row.kichThuocAnhLonId &&
+    !!row.chatLieuAnhLonId &&
+    !largePrice;
+
+  const hasMissingSmall =
+    smallQty > 0 &&
+    !!row.vendorId &&
+    !!row.kichThuocAnhNhoId &&
+    !!row.chatLieuAnhNhoId &&
+    !smallPrice;
+
+  const amountLarge = largePrice ? largeQty * Number(largePrice.donGia || 0) : 0;
+  const amountSmall = smallPrice ? smallQty * Number(smallPrice.donGia || 0) : 0;
+  const totalQuantity = largeQty + smallQty;
+  const totalAmount = amountLarge + amountSmall;
+
+  const averageUnitPrice =
+    totalQuantity > 0 ? Math.round(totalAmount / totalQuantity) : 0;
+
+  return {
+    donGiaIn: averageUnitPrice,
+    thanhTien: totalAmount,
+    hasMissingPrice: hasMissingLarge || hasMissingSmall,
+  };
+};
+
+const applyAutoPricingToRow = (
+  row: PrintOrder,
+  prices: PrintVendorPrice[]
+): PrintOrder => {
+  const pricing = calculatePricingForRow(row, prices);
+  return {
+    ...row,
+    donGiaIn: pricing.donGiaIn,
+    thanhTien: pricing.thanhTien,
+  };
+};
+
 const PrintProductionManager: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'list' | 'report'>('list');
   const [rows, setRows] = useState<PrintOrder[]>([]);
   const [catalogs, setCatalogs] = useState<CatalogState>(emptyCatalogs);
+  const [vendorPrices, setVendorPrices] = useState<PrintVendorPrice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -90,6 +193,7 @@ const PrintProductionManager: React.FC = () => {
       setError('Chưa cấu hình Supabase. Vui lòng kiểm tra VITE_SUPABASE_URL và VITE_SUPABASE_ANON_KEY.');
       setRows([]);
       setCatalogs(emptyCatalogs);
+      setVendorPrices([]);
       setIsLoading(false);
       return;
     }
@@ -98,13 +202,15 @@ const PrintProductionManager: React.FC = () => {
     setError(null);
 
     try {
-      const [orders, catalogData] = await Promise.all([
+      const [orders, catalogData, priceData] = await Promise.all([
         fetchPrintOrders(),
         fetchPrintCatalogs(),
+        fetchPrintVendorPrices({ isActive: true }),
       ]);
 
-      setRows(orders);
+      setRows(orders.map((row) => applyAutoPricingToRow(row, priceData)));
       setCatalogs(catalogData);
+      setVendorPrices(priceData);
     } catch (e: any) {
       console.error('Load print production data error:', e);
       setError(e?.message || 'Không tải được dữ liệu in ấn.');
@@ -161,7 +267,7 @@ const PrintProductionManager: React.FC = () => {
 
     try {
       const updated = await updatePrintOrder(rowId, patch);
-      setRows((prev) => updateRowInList(prev, updated));
+      setRows((prev) => updateRowInList(prev, applyAutoPricingToRow(updated, vendorPrices)));
     } catch (e: any) {
       console.error('Update print order error:', e);
       setError(e?.message || 'Cập nhật dòng in ấn thất bại.');
@@ -215,20 +321,23 @@ const PrintProductionManager: React.FC = () => {
     const normalized = toNonNegativeNumber(value);
     if (row[field] === normalized) return;
 
+    const nextRow = applyAutoPricingToRow(
+      {
+        ...row,
+        [field]: normalized,
+      },
+      vendorPrices
+    );
+
     setRows((prev) =>
-      prev.map((item) =>
-        item.id === row.id
-          ? {
-              ...item,
-              [field]: normalized,
-            }
-          : item
-      )
+      prev.map((item) => (item.id === row.id ? nextRow : item))
     );
 
     const dbField = field === 'soLuongAnhLon' ? 'so_luong_anh_lon' : 'so_luong_anh_nho';
     await persistRowPatch(row.id, {
       [dbField]: normalized,
+      don_gia_in: nextRow.donGiaIn,
+      thanh_tien: nextRow.thanhTien,
     });
   };
 
@@ -266,70 +375,84 @@ const PrintProductionManager: React.FC = () => {
     optionId: string
   ) => {
     let patch: Record<string, any> = {};
-    let nextRows = rows;
+    let nextRow = row;
 
     if (type === 'kich_thuoc_anh_lon') {
       const option = catalogs.sizes.find((item) => item.id === optionId);
       patch = { kich_thuoc_anh_lon_id: optionId || null };
-      nextRows = rows.map((item) =>
-        item.id === row.id
-          ? { ...item, kichThuocAnhLonId: optionId || null, kichThuocAnhLon: option?.name || '' }
-          : item
-      );
+      nextRow = {
+        ...row,
+        kichThuocAnhLonId: optionId || null,
+        kichThuocAnhLon: option?.name || '',
+      };
     }
 
     if (type === 'chat_lieu_anh_lon') {
       const option = catalogs.materials.find((item) => item.id === optionId);
       patch = { chat_lieu_anh_lon_id: optionId || null };
-      nextRows = rows.map((item) =>
-        item.id === row.id
-          ? { ...item, chatLieuAnhLonId: optionId || null, chatLieuAnhLon: option?.name || '' }
-          : item
-      );
+      nextRow = {
+        ...row,
+        chatLieuAnhLonId: optionId || null,
+        chatLieuAnhLon: option?.name || '',
+      };
     }
 
     if (type === 'kich_thuoc_anh_nho') {
       const option = catalogs.sizes.find((item) => item.id === optionId);
       patch = { kich_thuoc_anh_nho_id: optionId || null };
-      nextRows = rows.map((item) =>
-        item.id === row.id
-          ? { ...item, kichThuocAnhNhoId: optionId || null, kichThuocAnhNho: option?.name || '' }
-          : item
-      );
+      nextRow = {
+        ...row,
+        kichThuocAnhNhoId: optionId || null,
+        kichThuocAnhNho: option?.name || '',
+      };
     }
 
     if (type === 'chat_lieu_anh_nho') {
       const option = catalogs.materials.find((item) => item.id === optionId);
       patch = { chat_lieu_anh_nho_id: optionId || null };
-      nextRows = rows.map((item) =>
-        item.id === row.id
-          ? { ...item, chatLieuAnhNhoId: optionId || null, chatLieuAnhNho: option?.name || '' }
-          : item
-      );
+      nextRow = {
+        ...row,
+        chatLieuAnhNhoId: optionId || null,
+        chatLieuAnhNho: option?.name || '',
+      };
     }
 
     if (type === 'vendor') {
       const option = catalogs.vendors.find((item) => item.id === optionId);
       patch = { vendor_id: optionId || null };
-      nextRows = rows.map((item) =>
-        item.id === row.id
-          ? { ...item, vendorId: optionId || null, tenXuongIn: option?.name || '' }
-          : item
-      );
+      nextRow = {
+        ...row,
+        vendorId: optionId || null,
+        tenXuongIn: option?.name || '',
+      };
     }
 
     if (type === 'status') {
       const option = catalogs.statuses.find((item) => item.id === optionId);
       patch = { status_id: optionId || null };
-      nextRows = rows.map((item) =>
-        item.id === row.id
-          ? { ...item, statusId: optionId || null, tenTrangThai: option?.name || '' }
-          : item
-      );
+      nextRow = {
+        ...row,
+        statusId: optionId || null,
+        tenTrangThai: option?.name || '',
+      };
     }
 
-    setRows(nextRows);
-    await persistRowPatch(row.id, patch);
+    const pricedRow =
+      type === 'status'
+        ? nextRow
+        : applyAutoPricingToRow(nextRow, vendorPrices);
+
+    setRows((prev) => prev.map((item) => (item.id === row.id ? pricedRow : item)));
+
+    await persistRowPatch(row.id, {
+      ...patch,
+      ...(type === 'status'
+        ? {}
+        : {
+            don_gia_in: pricedRow.donGiaIn,
+            thanh_tien: pricedRow.thanhTien,
+          }),
+    });
   };
 
   const addNewRow = async () => {
@@ -345,7 +468,7 @@ const PrintProductionManager: React.FC = () => {
         statusId: defaultStatusId,
       });
 
-      setRows((prev) => [created, ...prev]);
+      setRows((prev) => [applyAutoPricingToRow(created, vendorPrices), ...prev]);
       setSuccessMessage('Đã tạo dòng in ấn mới.');
     } catch (e: any) {
       console.error('Create print order error:', e);
@@ -361,7 +484,7 @@ const PrintProductionManager: React.FC = () => {
 
     try {
       const created = await duplicatePrintOrder(row);
-      setRows((prev) => [created, ...prev]);
+      setRows((prev) => [applyAutoPricingToRow(created, vendorPrices), ...prev]);
       setSuccessMessage('Đã nhân bản dòng in ấn.');
     } catch (e: any) {
       console.error('Duplicate print order error:', e);
@@ -412,6 +535,9 @@ const PrintProductionManager: React.FC = () => {
     </select>
   );
 
+  const rowHasMissingPrice = (row: PrintOrder) =>
+    calculatePricingForRow(row, vendorPrices).hasMissingPrice;
+
   return (
     <div className="space-y-6 p-6">
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
@@ -423,7 +549,7 @@ const PrintProductionManager: React.FC = () => {
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Module Báo Cáo In Ấn</h1>
               <p className="mt-1 text-sm text-gray-500">
-                Step 2.1 đã nối dữ liệu thật từ Supabase qua view print_orders_view và cho phép CRUD inline an toàn.
+                Đã liên kết bảng báo giá để tự tính đơn giá và thành tiền theo xưởng in + kích thước + chất liệu.
               </p>
             </div>
           </div>
@@ -548,6 +674,7 @@ const PrintProductionManager: React.FC = () => {
                 {!isLoading &&
                   rows.map((row) => {
                     const isSavingRow = !!savingMap[row.id];
+                    const hasMissingPrice = rowHasMissingPrice(row);
 
                     return (
                       <tr key={row.id} className="border-t border-gray-100 align-top">
@@ -727,7 +854,12 @@ const PrintProductionManager: React.FC = () => {
                         ))}
 
                         <td className="min-w-[120px] px-3 py-3 text-sm text-gray-700">
-                          {formatMoney(row.donGiaIn)}
+                          <div>{formatMoney(row.donGiaIn)}</div>
+                          {hasMissingPrice && (
+                            <div className="mt-1 text-xs font-medium text-red-600">
+                              Thiếu báo giá
+                            </div>
+                          )}
                         </td>
 
                         <td className="min-w-[140px] px-3 py-3 text-sm font-semibold text-gray-900">
@@ -872,7 +1004,7 @@ const PrintProductionManager: React.FC = () => {
           </div>
 
           <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-6 text-sm text-gray-500 shadow-sm">
-            Step 2.1 đang dùng dữ liệu thật. Ở bước tiếp theo, nên làm Step 2.2: fetch bảng giá xưởng in và tự tính don_gia_in theo vendor + size + material.
+            Đã liên kết bảng báo giá để tự tính đơn giá và thành tiền. Nếu còn dòng báo “Thiếu báo giá”, hãy cập nhật tab Báo giá in ấn trước khi vận hành.
           </div>
         </>
       )}

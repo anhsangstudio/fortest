@@ -1385,16 +1385,24 @@ export const generateContractCode = async (): Promise<string> => {
   const yy = year.toString().slice(-2);
   const mm = (date.getMonth() + 1).toString().padStart(2, '0');
   const prefix = `STT${yy}${mm}`;
+
   if (!supabase) return `${prefix}01`;
-  const { data, error } = await supabase.from('contracts').select('contract_code').ilike('contract_code', `${prefix}%`).order('contract_code', { ascending: false }).limit(1);
-  if (error || !data || data.length === 0) return `${prefix}01`;
-  const lastCode = data[0].contract_code;
-  const suffix = lastCode.replace(prefix, '');
-  const lastNum = parseInt(suffix, 10);
-  if (isNaN(lastNum)) return `${prefix}01`;
-  const nextNum = lastNum + 1;
-  return `${prefix}${String(nextNum).padStart(2, '0')}`;
+
+  // Gọi hàm tự động đếm số trên Supabase
+  const { data, error } = await supabase.rpc('get_next_contract_code', {
+    p_prefix: prefix
+  });
+
+  if (error || !data) {
+    console.error("Lỗi khi lấy mã hợp đồng từ Supabase:", error);
+    // Phương án dự phòng an toàn nếu mạng lỗi (tạo 3 số ngẫu nhiên) để không làm treo App
+    return `${prefix}${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
+  }
+
+  return data;
 };
+
+
 
 export const createScheduleLabel = async (label: string) => { if (!supabase) return; const { error } = await supabase.from('schedule_labels').insert({ label }); throwIfError({ error }, 'createScheduleLabel'); };
 export const updateScheduleLabel = async (oldLabel: string, newLabel: string) => { if (!supabase) return; const { error } = await supabase.from('schedule_labels').update({ label: newLabel }).eq('label', oldLabel); throwIfError({ error }, 'updateScheduleLabel'); };

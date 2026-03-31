@@ -216,7 +216,7 @@ const ContractManager: React.FC<Props> = ({
   useEffect(() => {
     if (isModalOpen && !editingContractId) {
       const initNewContract = async () => {
-        const nextCode = await generateContractCode();
+        const nextCode = await generateContractCode(true); // Truyền true để báo là chế độ Xem trước
         setForm(prev => ({ ...prev, contractCode: nextCode, staffInChargeId: currentUser?.id || '' }));
         setNewPayment(p => ({ ...p, amount: 0, date: new Date().toISOString().split('T')[0], staffId: currentUser?.id || '' }));
       };
@@ -324,7 +324,7 @@ const handleOpenEdit = async (contract: Contract) => {
       let finalContractCode = form.contractCode;
       
       if (!editingContractId) {
-         finalContractCode = await generateContractCode();
+         finalContractCode = await generateContractCode(false); // Truyền false để báo là chế độ Chốt lưu
          setForm(prev => ({ ...prev, contractCode: finalContractCode }));
       }
 

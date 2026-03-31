@@ -1379,7 +1379,7 @@ export const syncData = async (table: string, action: 'CREATE' | 'UPDATE' | 'DEL
   return { success: true, data };
 };
 
-export const generateContractCode = async (): Promise<string> => {
+export const generateContractCode = async (isPreview: boolean = false): Promise<string> => {
   const date = new Date();
   const year = date.getFullYear();
   const yy = year.toString().slice(-2);
@@ -1388,15 +1388,15 @@ export const generateContractCode = async (): Promise<string> => {
 
   if (!supabase) return `${prefix}01`;
 
-  // Gọi hàm tự động đếm số trên Supabase
+  // Truyền thêm biến isPreview xuống database
   const { data, error } = await supabase.rpc('get_next_contract_code', {
-    p_prefix: prefix
+    p_prefix: prefix,
+    p_is_preview: isPreview
   });
 
   if (error || !data) {
     console.error("Lỗi khi lấy mã hợp đồng từ Supabase:", error);
-    // Phương án dự phòng an toàn nếu mạng lỗi (tạo 3 số ngẫu nhiên) để không làm treo App
-    return `${prefix}${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
+    return `${prefix}01`; 
   }
 
   return data;

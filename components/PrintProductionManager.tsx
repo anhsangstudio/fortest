@@ -3,7 +3,6 @@ import {
   ClipboardList,
   BarChart3,
   Filter,
-  Plus,
   Copy,
   Trash2,
   Printer,
@@ -15,16 +14,13 @@ import {
   X,
 } from 'lucide-react';
 import {
-  createPrintOrder,
-  duplicatePrintOrder,
   fetchPrintCatalogs,
-  fetchPrintOrders,
+  fetchPrintOrderItems,
   isConfigured,
-  softDeletePrintOrder,
   supabase,
   updatePrintOrder,
 } from '../apiService';
-import { PrintCatalogOption, PrintOrder, Staff } from '../types';
+import { PrintCatalogOption, PrintOrderItemRow, Staff } from '../types';
 
 interface Props {
   currentUser: Staff | null;
@@ -40,6 +36,7 @@ type CatalogState = {
 type StaffOption = { id: string; name: string };
 type EditFormState = {
   id: string;
+  printOrderId: string;
   tenKhachHang: string;
   ngayGuiIn: string;
   soLuong: number;
@@ -48,7 +45,9 @@ type EditFormState = {
   statusId: string;
   vendorId: string;
   nguoiKiemTraNhanAnh: string;
-  ghiChu: string;
+  ghiChuItem: string;
+  ghiChuDon: string;
+  donGiaIn: number;
 };
 
 const emptyCatalogs: CatalogState = { sizes: [], materials: [], vendors: [], statuses: [] };
@@ -60,39 +59,33 @@ const toNonNegativeNumber = (value: string | number) => {
   return parsed;
 };
 
-const getDisplayQuantity = (row: PrintOrder) =>
-  Number(row.soLuongAnhLon || 0) > 0 ? Number(row.soLuongAnhLon || 0) : Number(row.soLuongAnhNho || 0);
-
-const getDisplaySizeId = (row: PrintOrder) => row.kichThuocAnhLonId || row.kichThuocAnhNhoId || '';
-const getDisplayMaterialId = (row: PrintOrder) => row.chatLieuAnhLonId || row.chatLieuAnhNhoId || '';
-const getDisplaySizeName = (row: PrintOrder) => row.kichThuocAnhLon || row.kichThuocAnhNho || '';
-const getDisplayMaterialName = (row: PrintOrder) => row.chatLieuAnhLon || row.chatLieuAnhNho || '';
-
-const createEditFormFromRow = (row: PrintOrder): EditFormState => ({
+const createEditFormFromRow = (row: PrintOrderItemRow): EditFormState => ({
   id: row.id,
+  printOrderId: row.printOrderId,
   tenKhachHang: row.tenKhachHang || '',
   ngayGuiIn: row.ngayGuiIn || '',
-  soLuong: getDisplayQuantity(row),
-  kichThuocId: getDisplaySizeId(row),
-  chatLieuId: getDisplayMaterialId(row),
+  soLuong: Number(row.soLuong || 0),
+  kichThuocId: row.sizeId || '',
+  chatLieuId: row.materialId || '',
   statusId: row.statusId || '',
   vendorId: row.vendorId || '',
   nguoiKiemTraNhanAnh: row.nguoiKiemTraNhanAnh || '',
-  ghiChu: row.ghiChu || '',
+  ghiChuItem: row.ghiChuItem || '',
+  ghiChuDon: row.ghiChuDon || '',
+  donGiaIn: Number(row.donGiaIn || 0),
 });
 
 const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
   const [activeTab, setActiveTab] = useState<'list' | 'report'>('list');
-  const [rows, setRows] = useState<PrintOrder[]>([]);
+  const [rows, setRows] = useState<PrintOrderItemRow[]>([]);
   const [catalogs, setCatalogs] = useState<CatalogState>(emptyCatalogs);
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isAdding, setIsAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [savingMap, setSavingMap] = useState<SaveState>({});
   const [dateRange, setDateRange] = useState({ from: '2026-03-01', to: '2026-03-31' });
-  const [editingRow, setEditingRow] = useState<PrintOrder | null>(null);
+  const [editingRow, setEditingRow] = useState<PrintOrderItemRow | null>(null);
   const [editForm, setEditForm] = useState<EditFormState | null>(null);
   const [isSavingModal, setIsSavingModal] = useState(false);
 
@@ -103,6 +96,7 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
 
   const canDeleteRow = isAdminOrDirector;
   const canEditProtectedFields = isAdminOrDirector;
+  const canDuplicateRow = isAdminOrDirector;
 
   const setRowSaving = (rowId: string, value: boolean) => {
     setSavingMap((prev) => ({ ...prev, [rowId]: value }));
@@ -139,13 +133,16 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
     setError(null);
 
     try {
-      const [orders, catalogData, staffData] = await Promise.all([
-        fetchPrintOrders(),
+      const [items, catalogData, staffData] = await Promise.all([
+        fetchPrintOrderItems({
+          dateFrom: dateRange.from || null,
+          dateTo: dateRange.to || null,
+        }),
         fetchPrintCatalogs(),
         loadStaffOptions(),
       ]);
 
-      setRows(orders);
+      setRows(items);
       setCatalogs(catalogData);
       setStaffOptions(staffData);
     } catch (e: any) {
@@ -163,15 +160,18 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
   useEffect(() => {
     if (!isConfigured || !supabase) return;
 
-    const channel = supabase
-      .channel('print-orders-realtime')
+    const channelOrders = supabase
+      .channel('print-orders-realtime-v2')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'print_orders' }, () => {
+        void loadData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'print_order_items' }, () => {
         void loadData();
       })
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(channelOrders);
     };
   }, []);
 
@@ -190,22 +190,39 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
   }, [rows, dateRange]);
 
   const totalQuantity = useMemo(
-    () => filteredRows.reduce((sum, row) => sum + getDisplayQuantity(row), 0),
+    () => filteredRows.reduce((sum, row) => sum + Number(row.soLuong || 0), 0),
     [filteredRows]
   );
 
-  const totalOrders = filteredRows.length;
+  const totalOrders = useMemo(
+    () => new Set(filteredRows.map((row) => row.printOrderId)).size,
+    [filteredRows]
+  );
+
+  const totalItems = filteredRows.length;
+
+  const totalAmount = useMemo(
+    () => filteredRows.reduce((sum, row) => sum + Number(row.thanhTien || 0), 0),
+    [filteredRows]
+  );
 
   const reportByVendor = useMemo(() => {
-    const map = new Map<string, number>();
+    const map = new Map<string, { totalQuantity: number; totalAmount: number }>();
     filteredRows.forEach((row) => {
       const key = row.tenXuongIn || 'Chưa chọn xưởng';
-      map.set(key, (map.get(key) || 0) + getDisplayQuantity(row));
+      const current = map.get(key) || { totalQuantity: 0, totalAmount: 0 };
+      current.totalQuantity += Number(row.soLuong || 0);
+      current.totalAmount += Number(row.thanhTien || 0);
+      map.set(key, current);
     });
-    return Array.from(map.entries()).map(([name, total]) => ({ name, total }));
+    return Array.from(map.entries()).map(([name, value]) => ({
+      name,
+      totalQuantity: value.totalQuantity,
+      totalAmount: value.totalAmount,
+    }));
   }, [filteredRows]);
 
-  const openEditModal = (row: PrintOrder) => {
+  const openEditModal = (row: PrintOrderItemRow) => {
     setEditingRow(row);
     setEditForm(createEditFormFromRow(row));
   };
@@ -216,89 +233,103 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
     setIsSavingModal(false);
   };
 
-  const addNewRow = async () => {
-    setIsAdding(true);
-    setError(null);
-    try {
-      const defaultStatusId = catalogs.statuses.find((item) => item.name === 'ĐANG IN ẤN')?.id || null;
-      await createPrintOrder({
-        tenKhachHang: 'Khách mới',
-        ngayGuiIn: new Date().toISOString().slice(0, 10),
-        statusId: defaultStatusId,
-      });
-      setSuccessMessage('Đã tạo dòng in ấn mới.');
-      await loadData();
-    } catch (e: any) {
-      console.error('Create print order error:', e);
-      setError(e?.message || 'Không tạo được dòng in ấn mới.');
-    } finally {
-      setIsAdding(false);
-    }
-  };
+  const handleDuplicateRow = async (row: PrintOrderItemRow) => {
+    if (!canDuplicateRow || !supabase) return;
 
-  const handleDuplicateRow = async (row: PrintOrder) => {
     setRowSaving(row.id, true);
     setError(null);
+
     try {
-      await duplicatePrintOrder(row);
-      setSuccessMessage('Đã nhân bản dòng in ấn.');
+      const { error: duplicateError } = await supabase.from('print_order_items').insert({
+        print_order_id: row.printOrderId,
+        so_luong: Number(row.soLuong || 0),
+        size_id: row.sizeId || null,
+        material_id: row.materialId || null,
+        vendor_id: row.vendorId || null,
+        don_gia_in: Number(row.donGiaIn || 0),
+        ghi_chu: row.ghiChuItem || null,
+        thu_tu_hien_thi: Number(row.thuTuHienThi || 0) + 1,
+        dang_su_dung: true,
+      });
+
+      if (duplicateError) throw duplicateError;
+
+      setSuccessMessage('Đã nhân bản dòng sản phẩm in.');
       await loadData();
     } catch (e: any) {
-      console.error('Duplicate print order error:', e);
-      setError(e?.message || 'Không nhân bản được dòng in ấn.');
+      console.error('Duplicate print item error:', e);
+      setError(e?.message || 'Không nhân bản được dòng sản phẩm in.');
     } finally {
       setRowSaving(row.id, false);
     }
   };
 
-  const handleDeleteRow = async (row: PrintOrder) => {
-    if (!canDeleteRow) return;
-    const confirmed = window.confirm(`Bạn có chắc muốn ẩn đơn in của "${row.tenKhachHang}"?`);
+  const handleDeleteRow = async (row: PrintOrderItemRow) => {
+    if (!canDeleteRow || !supabase) return;
+
+    const confirmed = window.confirm(`Bạn có chắc muốn ẩn dòng in của "${row.tenKhachHang}" không?`);
     if (!confirmed) return;
+
     setRowSaving(row.id, true);
     setError(null);
+
     try {
-      await softDeletePrintOrder(row.id);
-      setSuccessMessage('Đã xóa mềm dòng in ấn.');
+      const { error: deleteError } = await supabase
+        .from('print_order_items')
+        .update({ dang_su_dung: false })
+        .eq('id', row.id);
+
+      if (deleteError) throw deleteError;
+
+      setSuccessMessage('Đã xóa mềm dòng sản phẩm in.');
       await loadData();
     } catch (e: any) {
-      console.error('Delete print order error:', e);
-      setError(e?.message || 'Không xóa được dòng in ấn.');
+      console.error('Delete print item error:', e);
+      setError(e?.message || 'Không xóa được dòng sản phẩm in.');
     } finally {
       setRowSaving(row.id, false);
     }
   };
 
   const handleSaveModal = async () => {
-    if (!editingRow || !editForm) return;
+    if (!editingRow || !editForm || !supabase) return;
+
     setIsSavingModal(true);
     setError(null);
 
     try {
-      const payload: Record<string, any> = {
-        so_luong_anh_lon: toNonNegativeNumber(editForm.soLuong),
-        so_luong_anh_nho: 0,
-        kich_thuoc_anh_lon_id: editForm.kichThuocId || null,
-        chat_lieu_anh_lon_id: editForm.chatLieuId || null,
-        kich_thuoc_anh_nho_id: null,
-        chat_lieu_anh_nho_id: null,
+      const orderPayload: Record<string, any> = {
         status_id: editForm.statusId || null,
-        vendor_id: editForm.vendorId || null,
         nguoi_kiem_tra_nhan_anh: editForm.nguoiKiemTraNhanAnh || null,
-        ghi_chu: editForm.ghiChu || null,
+        ghi_chu: editForm.ghiChuDon || null,
       };
 
       if (canEditProtectedFields) {
-        payload.ten_khach_hang = editForm.tenKhachHang;
-        payload.ngay_gui_in = editForm.ngayGuiIn || null;
+        orderPayload.ten_khach_hang = editForm.tenKhachHang;
+        orderPayload.ngay_gui_in = editForm.ngayGuiIn || null;
       }
 
-      await updatePrintOrder(editingRow.id, payload);
+      await updatePrintOrder(editForm.printOrderId, orderPayload);
+
+      const { error: itemUpdateError } = await supabase
+        .from('print_order_items')
+        .update({
+          so_luong: toNonNegativeNumber(editForm.soLuong),
+          size_id: editForm.kichThuocId || null,
+          material_id: editForm.chatLieuId || null,
+          vendor_id: editForm.vendorId || null,
+          don_gia_in: toNonNegativeNumber(editForm.donGiaIn),
+          ghi_chu: editForm.ghiChuItem || null,
+        })
+        .eq('id', editForm.id);
+
+      if (itemUpdateError) throw itemUpdateError;
+
       setSuccessMessage('Đã cập nhật dòng in ấn.');
       closeEditModal();
       await loadData();
     } catch (e: any) {
-      console.error('Update print order error:', e);
+      console.error('Update print order item error:', e);
       setError(e?.message || 'Không cập nhật được dòng in ấn.');
     } finally {
       setIsSavingModal(false);
@@ -316,23 +347,42 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Module Báo Cáo In Ấn</h1>
               <p className="mt-1 text-sm text-gray-500">
-                Danh sách vận hành chỉ hiển thị các cột cần thiết. Chỉnh sửa dữ liệu bằng modal để tránh lỗi mất giá trị dropdown.
+                Danh sách vận hành đang đọc theo mô hình mới: 1 đơn in tổng + nhiều dòng sản phẩm in.
               </p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <button type="button" onClick={() => setActiveTab('list')} className={`rounded-xl px-4 py-2 text-sm font-medium ${activeTab === 'list' ? 'bg-blue-600 text-white' : 'border border-gray-300 bg-white text-gray-700'}`}>
+            <button
+              type="button"
+              onClick={() => setActiveTab('list')}
+              className={`rounded-xl px-4 py-2 text-sm font-medium ${activeTab === 'list' ? 'bg-blue-600 text-white' : 'border border-gray-300 bg-white text-gray-700'}`}
+            >
               Danh sách in ấn
             </button>
-            <button type="button" onClick={() => setActiveTab('report')} className={`rounded-xl px-4 py-2 text-sm font-medium ${activeTab === 'report' ? 'bg-blue-600 text-white' : 'border border-gray-300 bg-white text-gray-700'}`}>
+            <button
+              type="button"
+              onClick={() => setActiveTab('report')}
+              className={`rounded-xl px-4 py-2 text-sm font-medium ${activeTab === 'report' ? 'bg-blue-600 text-white' : 'border border-gray-300 bg-white text-gray-700'}`}
+            >
               Báo cáo in ấn
             </button>
           </div>
         </div>
       </div>
 
-      {error && <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"><AlertCircle size={18} className="mt-0.5 shrink-0" /><div>{error}</div></div>}
-      {successMessage && <div className="flex items-start gap-3 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-700"><CheckCircle2 size={18} className="mt-0.5 shrink-0" /><div>{successMessage}</div></div>}
+      {error && (
+        <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <AlertCircle size={18} className="mt-0.5 shrink-0" />
+          <div>{error}</div>
+        </div>
+      )}
+
+      {successMessage && (
+        <div className="flex items-start gap-3 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-700">
+          <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
+          <div>{successMessage}</div>
+        </div>
+      )}
 
       {activeTab === 'list' && (
         <>
@@ -340,14 +390,15 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-center gap-2">
                 <ClipboardList size={18} className="text-gray-500" />
-                <h2 className="text-base font-semibold text-gray-800">Danh sách vận hành in ấn</h2>
+                <h2 className="text-base font-semibold text-gray-800">Danh sách vận hành in ấn theo từng dòng sản phẩm</h2>
               </div>
               <div className="flex flex-wrap gap-3">
-                <button type="button" onClick={() => void addNewRow()} disabled={isAdding || isLoading || !isConfigured} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60">
-                  {isAdding ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-                  Thêm dòng mới
-                </button>
-                <button type="button" onClick={() => void loadData()} disabled={isLoading} className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 disabled:cursor-not-allowed disabled:opacity-60">
+                <button
+                  type="button"
+                  onClick={() => void loadData()}
+                  disabled={isLoading}
+                  className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
                   <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
                   Làm mới
                 </button>
@@ -356,10 +407,11 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
           </div>
 
           <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
-            <table className="min-w-[1250px] w-full">
+            <table className="min-w-[1450px] w-full">
               <thead className="bg-amber-200">
                 <tr className="text-sm font-semibold text-gray-900">
                   <th className="px-3 py-3 text-left">Tên Khách Hàng</th>
+                  <th className="px-3 py-3 text-left">Mã HĐ</th>
                   <th className="px-3 py-3 text-left">Ngày gửi in</th>
                   <th className="px-3 py-3 text-left">Số Lượng</th>
                   <th className="px-3 py-3 text-left">Kích Thước</th>
@@ -374,10 +426,10 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
               <tbody>
                 {isLoading && (
                   <tr>
-                    <td colSpan={10} className="px-6 py-14">
+                    <td colSpan={11} className="px-6 py-14">
                       <div className="flex items-center justify-center gap-3 text-sm text-gray-500">
                         <Loader2 size={18} className="animate-spin" />
-                        Đang tải dữ liệu từ Supabase...
+                        Đang tải dữ liệu item in ấn từ Supabase...
                       </div>
                     </td>
                   </tr>
@@ -385,26 +437,31 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
 
                 {!isLoading && filteredRows.map((row) => {
                   const isSavingRow = !!savingMap[row.id];
+                  const displayNote = row.ghiChuItem || row.ghiChuDon || '';
+
                   return (
                     <tr key={row.id} className="cursor-pointer border-t border-gray-100 hover:bg-gray-50" onClick={() => openEditModal(row)}>
                       <td className="min-w-[220px] px-3 py-3 text-sm text-gray-900">{row.tenKhachHang}</td>
+                      <td className="min-w-[120px] px-3 py-3 text-sm text-gray-700">{row.contractCode || ''}</td>
                       <td className="min-w-[150px] px-3 py-3 text-sm text-gray-700">{row.ngayGuiIn}</td>
-                      <td className="min-w-[110px] px-3 py-3 text-sm text-gray-700">{getDisplayQuantity(row)}</td>
-                      <td className="min-w-[140px] px-3 py-3 text-sm text-gray-700">{getDisplaySizeName(row)}</td>
-                      <td className="min-w-[140px] px-3 py-3 text-sm text-gray-700">{getDisplayMaterialName(row)}</td>
+                      <td className="min-w-[110px] px-3 py-3 text-sm text-gray-700">{row.soLuong}</td>
+                      <td className="min-w-[140px] px-3 py-3 text-sm text-gray-700">{row.tenKichThuoc || ''}</td>
+                      <td className="min-w-[140px] px-3 py-3 text-sm text-gray-700">{row.tenChatLieu || ''}</td>
                       <td className="min-w-[150px] px-3 py-3 text-sm text-gray-700">{row.tenTrangThai || ''}</td>
                       <td className="min-w-[150px] px-3 py-3 text-sm text-gray-700">{row.tenXuongIn || ''}</td>
-                      <td className="min-w-[180px] px-3 py-3 text-sm text-gray-700">{row.nguoiKiemTraNhanAnh || ''}</td>
-                      <td className="min-w-[220px] px-3 py-3 text-sm text-gray-700">{row.ghiChu || ''}</td>
+                      <td className="min-w-[180px] px-3 py-3 text-sm text-gray-700">{row.tenNguoiKiemTraNhanAnh || row.nguoiKiemTraNhanAnh || ''}</td>
+                      <td className="min-w-[220px] px-3 py-3 text-sm text-gray-700">{displayNote}</td>
                       <td className="min-w-[130px] px-3 py-3" onClick={(event) => event.stopPropagation()}>
                         <div className="flex items-center gap-2">
                           {isSavingRow && <Loader2 size={15} className="animate-spin text-blue-600" />}
                           <button type="button" onClick={() => openEditModal(row)} className="rounded-lg border border-gray-300 p-2 text-gray-700" title="Sửa" disabled={isSavingRow}>
                             <Pencil size={15} />
                           </button>
-                          <button type="button" onClick={() => void handleDuplicateRow(row)} className="rounded-lg border border-gray-300 p-2 text-gray-700" title="Nhân bản" disabled={isSavingRow}>
-                            <Copy size={15} />
-                          </button>
+                          {canDuplicateRow && (
+                            <button type="button" onClick={() => void handleDuplicateRow(row)} className="rounded-lg border border-gray-300 p-2 text-gray-700" title="Nhân bản" disabled={isSavingRow}>
+                              <Copy size={15} />
+                            </button>
+                          )}
                           {canDeleteRow && (
                             <button type="button" onClick={() => void handleDeleteRow(row)} className="rounded-lg border border-red-200 p-2 text-red-600" title="Xóa" disabled={isSavingRow}>
                               <Trash2 size={15} />
@@ -418,8 +475,8 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
 
                 {!isLoading && filteredRows.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="px-6 py-12 text-center text-sm text-gray-500">
-                      Chưa có dữ liệu in ấn trong Supabase.
+                    <td colSpan={11} className="px-6 py-12 text-center text-sm text-gray-500">
+                      Chưa có dữ liệu item in ấn trong Supabase.
                     </td>
                   </tr>
                 )}
@@ -439,14 +496,28 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <div>
                 <label className="mb-2 block text-sm font-medium text-gray-700">Từ ngày</label>
-                <input type="date" value={dateRange.from} onChange={(e) => setDateRange((prev) => ({ ...prev, from: e.target.value }))} className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm" />
+                <input
+                  type="date"
+                  value={dateRange.from}
+                  onChange={(e) => setDateRange((prev) => ({ ...prev, from: e.target.value }))}
+                  className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm"
+                />
               </div>
               <div>
                 <label className="mb-2 block text-sm font-medium text-gray-700">Đến ngày</label>
-                <input type="date" value={dateRange.to} onChange={(e) => setDateRange((prev) => ({ ...prev, to: e.target.value }))} className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm" />
+                <input
+                  type="date"
+                  value={dateRange.to}
+                  onChange={(e) => setDateRange((prev) => ({ ...prev, to: e.target.value }))}
+                  className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm"
+                />
               </div>
               <div className="flex items-end">
-                <button type="button" onClick={() => void loadData()} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white">
+                <button
+                  type="button"
+                  onClick={() => void loadData()}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white"
+                >
                   <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
                   Tải báo cáo
                 </button>
@@ -454,18 +525,22 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
             <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
               <div className="text-sm text-gray-500">Tổng đơn in</div>
               <div className="mt-2 text-3xl font-bold text-gray-900">{totalOrders}</div>
+            </div>
+            <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+              <div className="text-sm text-gray-500">Tổng dòng sản phẩm</div>
+              <div className="mt-2 text-3xl font-bold text-gray-900">{totalItems}</div>
             </div>
             <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
               <div className="text-sm text-gray-500">Tổng số lượng</div>
               <div className="mt-2 text-3xl font-bold text-gray-900">{formatNumber(totalQuantity)}</div>
             </div>
             <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <div className="text-sm text-gray-500">Tổng xưởng in</div>
-              <div className="mt-2 text-3xl font-bold text-gray-900">{reportByVendor.length}</div>
+              <div className="text-sm text-gray-500">Tổng chi phí in</div>
+              <div className="mt-2 text-3xl font-bold text-gray-900">{formatNumber(totalAmount)}</div>
             </div>
           </div>
 
@@ -478,8 +553,9 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
               {reportByVendor.map((item) => (
                 <div key={item.name} className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
                   <div className="text-sm font-semibold text-gray-800">{item.name}</div>
-                  <div className="mt-2 text-2xl font-bold text-gray-900">{formatNumber(item.total)}</div>
+                  <div className="mt-2 text-2xl font-bold text-gray-900">{formatNumber(item.totalQuantity)}</div>
                   <div className="mt-1 text-sm text-gray-500">tổng số lượng đang vận hành</div>
+                  <div className="mt-3 text-sm font-medium text-gray-700">Chi phí: {formatNumber(item.totalAmount)}</div>
                 </div>
               ))}
               {reportByVendor.length === 0 && (
@@ -494,11 +570,11 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
 
       {editingRow && editForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-xl">
+          <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white shadow-xl">
             <div className="sticky top-0 flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">Chỉnh sửa dòng in ấn</h3>
-                <p className="text-sm text-gray-500">Sửa dữ liệu trong modal để tránh lỗi mất giá trị dropdown.</p>
+                <p className="text-sm text-gray-500">Đang chỉnh theo mô hình item: header đơn in + dòng sản phẩm in.</p>
               </div>
               <button type="button" onClick={closeEditModal} className="rounded-lg border border-gray-300 p-2 text-gray-600">
                 <X size={16} />
@@ -529,12 +605,22 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-gray-700">Số Lượng</label>
-                <input type="number" min={0} value={editForm.soLuong} onChange={(e) => setEditForm((prev) => (prev ? { ...prev, soLuong: toNonNegativeNumber(e.target.value) } : prev))} className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm" />
+                <input
+                  type="number"
+                  min={0}
+                  value={editForm.soLuong}
+                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, soLuong: toNonNegativeNumber(e.target.value) } : prev))}
+                  className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm"
+                />
               </div>
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-gray-700">Kích Thước</label>
-                <select value={editForm.kichThuocId} onChange={(e) => setEditForm((prev) => (prev ? { ...prev, kichThuocId: e.target.value } : prev))} className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm">
+                <select
+                  value={editForm.kichThuocId}
+                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, kichThuocId: e.target.value } : prev))}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm"
+                >
                   <option value="">Chọn</option>
                   {catalogs.sizes.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
                 </select>
@@ -542,7 +628,11 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-gray-700">Chất Liệu</label>
-                <select value={editForm.chatLieuId} onChange={(e) => setEditForm((prev) => (prev ? { ...prev, chatLieuId: e.target.value } : prev))} className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm">
+                <select
+                  value={editForm.chatLieuId}
+                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, chatLieuId: e.target.value } : prev))}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm"
+                >
                   <option value="">Chọn</option>
                   {catalogs.materials.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
                 </select>
@@ -550,7 +640,11 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-gray-700">TÌNH TRẠNG</label>
-                <select value={editForm.statusId} onChange={(e) => setEditForm((prev) => (prev ? { ...prev, statusId: e.target.value } : prev))} className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm">
+                <select
+                  value={editForm.statusId}
+                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, statusId: e.target.value } : prev))}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm"
+                >
                   <option value="">Chọn</option>
                   {catalogs.statuses.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
                 </select>
@@ -558,7 +652,11 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-gray-700">XƯỞNG IN</label>
-                <select value={editForm.vendorId} onChange={(e) => setEditForm((prev) => (prev ? { ...prev, vendorId: e.target.value } : prev))} className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm">
+                <select
+                  value={editForm.vendorId}
+                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, vendorId: e.target.value } : prev))}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm"
+                >
                   <option value="">Chọn</option>
                   {catalogs.vendors.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
                 </select>
@@ -566,21 +664,53 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-gray-700">NGƯỜI KIỂM TRA NHẬN ẢNH</label>
-                <select value={editForm.nguoiKiemTraNhanAnh} onChange={(e) => setEditForm((prev) => (prev ? { ...prev, nguoiKiemTraNhanAnh: e.target.value } : prev))} className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm">
+                <select
+                  value={editForm.nguoiKiemTraNhanAnh}
+                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, nguoiKiemTraNhanAnh: e.target.value } : prev))}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm"
+                >
                   <option value="">Chọn</option>
                   {staffOptions.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
                 </select>
               </div>
 
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">Đơn giá in</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={editForm.donGiaIn}
+                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, donGiaIn: toNonNegativeNumber(e.target.value) } : prev))}
+                  className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm"
+                />
+              </div>
+
               <div className="md:col-span-2">
-                <label className="mb-2 block text-sm font-medium text-gray-700">GHI CHÚ</label>
-                <textarea value={editForm.ghiChu} onChange={(e) => setEditForm((prev) => (prev ? { ...prev, ghiChu: e.target.value } : prev))} rows={4} className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm" />
+                <label className="mb-2 block text-sm font-medium text-gray-700">GHI CHÚ DÒNG IN</label>
+                <textarea
+                  value={editForm.ghiChuItem}
+                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, ghiChuItem: e.target.value } : prev))}
+                  rows={3}
+                  className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="mb-2 block text-sm font-medium text-gray-700">GHI CHÚ ĐƠN IN</label>
+                <textarea
+                  value={editForm.ghiChuDon}
+                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, ghiChuDon: e.target.value } : prev))}
+                  rows={3}
+                  className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm"
+                />
               </div>
             </div>
 
             <div className="flex items-center justify-between border-t border-gray-200 px-6 py-4">
               <div className="text-xs text-gray-500">
-                {!canEditProtectedFields ? 'User thường chỉ được sửa các trường vận hành. Tên khách hàng và ngày gửi in chỉ Admin/Giám đốc được sửa.' : 'Admin/Giám đốc được sửa toàn bộ trường.'}
+                {!canEditProtectedFields
+                  ? 'User thường chỉ được sửa các trường vận hành. Tên khách hàng và ngày gửi in chỉ Admin/Giám đốc được sửa.'
+                  : 'Admin/Giám đốc được sửa toàn bộ trường.'}
               </div>
               <div className="flex items-center gap-3">
                 <button type="button" onClick={closeEditModal} className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700" disabled={isSavingModal}>

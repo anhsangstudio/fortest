@@ -7,8 +7,6 @@ import {
   Copy,
   Trash2,
   Printer,
-  Image as ImageIcon,
-  Link as LinkIcon,
   RefreshCw,
   Loader2,
   AlertCircle,
@@ -22,6 +20,7 @@ import {
   fetchPrintVendorPrices,
   isConfigured,
   softDeletePrintOrder,
+  supabase,
   updatePrintOrder,
 } from '../apiService';
 import { PrintCatalogOption, PrintOrder, PrintVendorPrice } from '../types';
@@ -48,13 +47,6 @@ const emptyCatalogs: CatalogState = {
   statuses: [],
 };
 
-const formatDate = (value?: string) => {
-  if (!value) return '--';
-  const parts = value.split('-');
-  if (parts.length !== 3) return value;
-  return `${parts[2]}-${parts[1]}-${parts[0]}`;
-};
-
 const formatNumber = (value: number) => {
   return value.toLocaleString('vi-VN');
 };
@@ -67,10 +59,6 @@ const toNonNegativeNumber = (value: string | number) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) return 0;
   return parsed;
-};
-
-const updateRowInList = (rows: PrintOrder[], nextRow: PrintOrder) => {
-  return rows.map((row) => (row.id === nextRow.id ? nextRow : row));
 };
 
 const findMatchingPrintVendorPrice = (
@@ -188,6 +176,19 @@ const PrintProductionManager: React.FC = () => {
     setSavingMap((prev) => ({ ...prev, [rowId]: value }));
   };
 
+  const updateLocalRow = (rowId: string, patch: Partial<PrintOrder>) => {
+    setRows((prev) =>
+      prev.map((item) =>
+        item.id === rowId
+          ? {
+              ...item,
+              ...patch,
+            }
+          : item
+      )
+    );
+  };
+
   const loadData = async () => {
     if (!isConfigured) {
       setError('Chưa cấu hình Supabase. Vui lòng kiểm tra VITE_SUPABASE_URL và VITE_SUPABASE_ANON_KEY.');
@@ -221,6 +222,25 @@ const PrintProductionManager: React.FC = () => {
 
   useEffect(() => {
     loadData();
+  }, []);
+
+  useEffect(() => {
+    if (!isConfigured || !supabase) return;
+
+    const channel = supabase
+      .channel('print-orders-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'print_orders' },
+        () => {
+          void loadData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   useEffect(() => {
@@ -266,8 +286,7 @@ const PrintProductionManager: React.FC = () => {
     setError(null);
 
     try {
-      const updated = await updatePrintOrder(rowId, patch);
-      setRows((prev) => updateRowInList(prev, applyAutoPricingToRow(updated, vendorPrices)));
+      await updatePrintOrder(rowId, patch);
     } catch (e: any) {
       console.error('Update print order error:', e);
       setError(e?.message || 'Cập nhật dòng in ấn thất bại.');
@@ -282,26 +301,10 @@ const PrintProductionManager: React.FC = () => {
     field: keyof PrintOrder,
     value: string
   ) => {
-    if (row[field] === value) return;
-
-    setRows((prev) =>
-      prev.map((item) =>
-        item.id === row.id
-          ? {
-              ...item,
-              [field]: value,
-            }
-          : item
-      )
-    );
-
     const dbFieldMap: Partial<Record<keyof PrintOrder, string>> = {
       tenKhachHang: 'ten_khach_hang',
-      contractCode: 'contract_code',
       ngayGuiIn: 'ngay_gui_in',
       ghiChu: 'ghi_chu',
-      linkTheTrello: 'link_the_trello',
-      linkFiles: 'link_files',
       nguoiKiemTraNhanAnh: 'nguoi_kiem_tra_nhan_anh',
     };
 
@@ -315,11 +318,10 @@ const PrintProductionManager: React.FC = () => {
 
   const handleNumberBlur = async (
     row: PrintOrder,
-    field: 'soLuongAnhLon' | 'soLuongAnhNho',
+    field: 'soLuongAnhLon',
     value: string
   ) => {
     const normalized = toNonNegativeNumber(value);
-    if (row[field] === normalized) return;
 
     const nextRow = applyAutoPricingToRow(
       {
@@ -329,49 +331,18 @@ const PrintProductionManager: React.FC = () => {
       vendorPrices
     );
 
-    setRows((prev) =>
-      prev.map((item) => (item.id === row.id ? nextRow : item))
-    );
+    updateLocalRow(row.id, nextRow);
 
-    const dbField = field === 'soLuongAnhLon' ? 'so_luong_anh_lon' : 'so_luong_anh_nho';
     await persistRowPatch(row.id, {
-      [dbField]: normalized,
+      so_luong_anh_lon: normalized,
       don_gia_in: nextRow.donGiaIn,
       thanh_tien: nextRow.thanhTien,
     });
   };
 
-  const handleCheckboxChange = async (
-    row: PrintOrder,
-    field: 'thongBaoDaCoAnh' | 'thongBaoDaGiaoAnh' | 'checkFlag' | 'thongBaoDangInAnh',
-    checked: boolean
-  ) => {
-    setRows((prev) =>
-      prev.map((item) =>
-        item.id === row.id
-          ? {
-              ...item,
-              [field]: checked,
-            }
-          : item
-      )
-    );
-
-    const dbFieldMap = {
-      thongBaoDaCoAnh: 'thong_bao_da_co_anh',
-      thongBaoDaGiaoAnh: 'thong_bao_da_giao_anh',
-      checkFlag: 'check_flag',
-      thongBaoDangInAnh: 'thong_bao_dang_in_anh',
-    };
-
-    await persistRowPatch(row.id, {
-      [dbFieldMap[field]]: checked,
-    });
-  };
-
   const handleSelectChange = async (
     row: PrintOrder,
-    type: 'kich_thuoc_anh_lon' | 'chat_lieu_anh_lon' | 'kich_thuoc_anh_nho' | 'chat_lieu_anh_nho' | 'vendor' | 'status',
+    type: 'kich_thuoc_anh_lon' | 'chat_lieu_anh_lon' | 'vendor' | 'status',
     optionId: string
   ) => {
     let patch: Record<string, any> = {};
@@ -394,26 +365,6 @@ const PrintProductionManager: React.FC = () => {
         ...row,
         chatLieuAnhLonId: optionId || null,
         chatLieuAnhLon: option?.name || '',
-      };
-    }
-
-    if (type === 'kich_thuoc_anh_nho') {
-      const option = catalogs.sizes.find((item) => item.id === optionId);
-      patch = { kich_thuoc_anh_nho_id: optionId || null };
-      nextRow = {
-        ...row,
-        kichThuocAnhNhoId: optionId || null,
-        kichThuocAnhNho: option?.name || '',
-      };
-    }
-
-    if (type === 'chat_lieu_anh_nho') {
-      const option = catalogs.materials.find((item) => item.id === optionId);
-      patch = { chat_lieu_anh_nho_id: optionId || null };
-      nextRow = {
-        ...row,
-        chatLieuAnhNhoId: optionId || null,
-        chatLieuAnhNho: option?.name || '',
       };
     }
 
@@ -442,7 +393,7 @@ const PrintProductionManager: React.FC = () => {
         ? nextRow
         : applyAutoPricingToRow(nextRow, vendorPrices);
 
-    setRows((prev) => prev.map((item) => (item.id === row.id ? pricedRow : item)));
+    updateLocalRow(row.id, pricedRow);
 
     await persistRowPatch(row.id, {
       ...patch,
@@ -549,7 +500,7 @@ const PrintProductionManager: React.FC = () => {
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Module Báo Cáo In Ấn</h1>
               <p className="mt-1 text-sm text-gray-500">
-                Đã liên kết bảng báo giá để tự tính đơn giá và thành tiền theo xưởng in + kích thước + chất liệu.
+                Tự động đồng bộ đơn từ Trello và chỉ hiển thị các cột vận hành cần thiết.
               </p>
             </div>
           </div>
@@ -628,33 +579,20 @@ const PrintProductionManager: React.FC = () => {
           </div>
 
           <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
-            <table className="min-w-[2050px] w-full">
+            <table className="min-w-[1350px] w-full">
               <thead className="bg-amber-200">
                 <tr className="text-sm font-semibold text-gray-900">
-                  <th className="px-3 py-3 text-left">Ảnh</th>
                   <th className="px-3 py-3 text-left">Tên khách hàng</th>
-                  <th className="px-3 py-3 text-left">Mã hợp đồng</th>
                   <th className="px-3 py-3 text-left">Ngày gửi in</th>
-                  <th className="px-3 py-3 text-left">Số lượng ảnh lớn</th>
-                  <th className="px-3 py-3 text-left">Kích thước</th>
-                  <th className="px-3 py-3 text-left">Chất liệu</th>
-                  <th className="px-3 py-3 text-left">Số lượng ảnh nhỏ</th>
+                  <th className="px-3 py-3 text-left">Số lượng</th>
                   <th className="px-3 py-3 text-left">Kích thước</th>
                   <th className="px-3 py-3 text-left">Chất liệu</th>
                   <th className="px-3 py-3 text-left">Tình trạng</th>
                   <th className="px-3 py-3 text-left">Xưởng in</th>
                   <th className="px-3 py-3 text-left">Người kiểm tra nhận ảnh</th>
                   <th className="px-3 py-3 text-left">Ghi chú</th>
-                  <th className="px-3 py-3 text-left">Link thẻ</th>
-                  <th className="px-3 py-3 text-left">Link file in</th>
-                  <th className="px-3 py-3 text-left">Đã có ảnh</th>
-                  <th className="px-3 py-3 text-left">Đã giao ảnh</th>
-                  <th className="px-3 py-3 text-left">Check</th>
-                  <th className="px-3 py-3 text-left">Đang in ảnh</th>
                   <th className="px-3 py-3 text-left">Đơn giá</th>
                   <th className="px-3 py-3 text-left">Thành tiền</th>
-                  <th className="px-3 py-3 text-left">Created</th>
-                  <th className="px-3 py-3 text-left">Updated</th>
                   <th className="px-3 py-3 text-left">Thao tác</th>
                 </tr>
               </thead>
@@ -662,7 +600,7 @@ const PrintProductionManager: React.FC = () => {
               <tbody>
                 {isLoading && (
                   <tr>
-                    <td colSpan={25} className="px-6 py-14">
+                    <td colSpan={12} className="px-6 py-14">
                       <div className="flex items-center justify-center gap-3 text-sm text-gray-500">
                         <Loader2 size={18} className="animate-spin" />
                         Đang tải dữ liệu từ Supabase...
@@ -678,25 +616,11 @@ const PrintProductionManager: React.FC = () => {
 
                     return (
                       <tr key={row.id} className="border-t border-gray-100 align-top">
-                        <td className="px-3 py-3">
-                          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-gray-100 text-gray-500">
-                            <ImageIcon size={18} />
-                          </div>
-                        </td>
-
                         <td className="min-w-[220px] px-3 py-3">
                           <input
-                            defaultValue={row.tenKhachHang}
+                            value={row.tenKhachHang}
+                            onChange={(e) => updateLocalRow(row.id, { tenKhachHang: e.target.value })}
                             onBlur={(e) => void handleTextBlur(row, 'tenKhachHang', e.target.value)}
-                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                            disabled={isSavingRow}
-                          />
-                        </td>
-
-                        <td className="min-w-[140px] px-3 py-3">
-                          <input
-                            defaultValue={row.contractCode}
-                            onBlur={(e) => void handleTextBlur(row, 'contractCode', e.target.value)}
                             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
                             disabled={isSavingRow}
                           />
@@ -705,7 +629,8 @@ const PrintProductionManager: React.FC = () => {
                         <td className="min-w-[150px] px-3 py-3">
                           <input
                             type="date"
-                            defaultValue={row.ngayGuiIn}
+                            value={row.ngayGuiIn}
+                            onChange={(e) => updateLocalRow(row.id, { ngayGuiIn: e.target.value })}
                             onBlur={(e) => void handleTextBlur(row, 'ngayGuiIn', e.target.value)}
                             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
                             disabled={isSavingRow}
@@ -716,7 +641,12 @@ const PrintProductionManager: React.FC = () => {
                           <input
                             type="number"
                             min={0}
-                            defaultValue={row.soLuongAnhLon}
+                            value={row.soLuongAnhLon}
+                            onChange={(e) =>
+                              updateLocalRow(row.id, {
+                                soLuongAnhLon: toNonNegativeNumber(e.target.value),
+                              })
+                            }
                             onBlur={(e) => void handleNumberBlur(row, 'soLuongAnhLon', e.target.value)}
                             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
                             disabled={isSavingRow}
@@ -741,35 +671,6 @@ const PrintProductionManager: React.FC = () => {
                           )}
                         </td>
 
-                        <td className="min-w-[130px] px-3 py-3">
-                          <input
-                            type="number"
-                            min={0}
-                            defaultValue={row.soLuongAnhNho}
-                            onBlur={(e) => void handleNumberBlur(row, 'soLuongAnhNho', e.target.value)}
-                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                            disabled={isSavingRow}
-                          />
-                        </td>
-
-                        <td className="min-w-[140px] px-3 py-3">
-                          {renderSelect(
-                            row,
-                            row.kichThuocAnhNhoId,
-                            catalogs.sizes,
-                            async (value) => handleSelectChange(row, 'kich_thuoc_anh_nho', value)
-                          )}
-                        </td>
-
-                        <td className="min-w-[140px] px-3 py-3">
-                          {renderSelect(
-                            row,
-                            row.chatLieuAnhNhoId,
-                            catalogs.materials,
-                            async (value) => handleSelectChange(row, 'chat_lieu_anh_nho', value)
-                          )}
-                        </td>
-
                         <td className="min-w-[150px] px-3 py-3">
                           {renderSelect(
                             row,
@@ -790,7 +691,12 @@ const PrintProductionManager: React.FC = () => {
 
                         <td className="min-w-[180px] px-3 py-3">
                           <input
-                            defaultValue={row.nguoiKiemTraNhanAnh}
+                            value={row.nguoiKiemTraNhanAnh}
+                            onChange={(e) =>
+                              updateLocalRow(row.id, {
+                                nguoiKiemTraNhanAnh: e.target.value,
+                              })
+                            }
                             onBlur={(e) => void handleTextBlur(row, 'nguoiKiemTraNhanAnh', e.target.value)}
                             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
                             disabled={isSavingRow}
@@ -800,58 +706,13 @@ const PrintProductionManager: React.FC = () => {
 
                         <td className="min-w-[220px] px-3 py-3">
                           <input
-                            defaultValue={row.ghiChu}
+                            value={row.ghiChu}
+                            onChange={(e) => updateLocalRow(row.id, { ghiChu: e.target.value })}
                             onBlur={(e) => void handleTextBlur(row, 'ghiChu', e.target.value)}
                             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
                             disabled={isSavingRow}
                           />
                         </td>
-
-                        <td className="min-w-[240px] px-3 py-3">
-                          <div className="flex items-center gap-2">
-                            <LinkIcon size={14} className="text-gray-400" />
-                            <input
-                              defaultValue={row.linkTheTrello}
-                              onBlur={(e) => void handleTextBlur(row, 'linkTheTrello', e.target.value)}
-                              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                              disabled={isSavingRow}
-                            />
-                          </div>
-                        </td>
-
-                        <td className="min-w-[240px] px-3 py-3">
-                          <input
-                            defaultValue={row.linkFiles}
-                            onBlur={(e) => void handleTextBlur(row, 'linkFiles', e.target.value)}
-                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                            disabled={isSavingRow}
-                          />
-                        </td>
-
-                        {([
-                          ['thongBaoDaCoAnh', row.thongBaoDaCoAnh],
-                          ['thongBaoDaGiaoAnh', row.thongBaoDaGiaoAnh],
-                          ['checkFlag', row.checkFlag],
-                          ['thongBaoDangInAnh', row.thongBaoDangInAnh],
-                        ] as const).map(([field, checked]) => (
-                          <td key={field} className="min-w-[110px] px-3 py-3">
-                            <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={(e) =>
-                                  void handleCheckboxChange(
-                                    row,
-                                    field,
-                                    e.target.checked
-                                  )
-                                }
-                                disabled={isSavingRow}
-                              />
-                              Có
-                            </label>
-                          </td>
-                        ))}
 
                         <td className="min-w-[120px] px-3 py-3 text-sm text-gray-700">
                           <div>{formatMoney(row.donGiaIn)}</div>
@@ -866,15 +727,7 @@ const PrintProductionManager: React.FC = () => {
                           {formatMoney(row.thanhTien)}
                         </td>
 
-                        <td className="min-w-[130px] px-3 py-3 text-sm text-gray-600">
-                          {formatDate(row.createdAt?.slice(0, 10))}
-                        </td>
-
-                        <td className="min-w-[130px] px-3 py-3 text-sm text-gray-600">
-                          {formatDate(row.updatedAt?.slice(0, 10))}
-                        </td>
-
-                        <td className="min-w-[180px] px-3 py-3">
+                        <td className="min-w-[120px] px-3 py-3">
                           <div className="flex items-center gap-2">
                             {isSavingRow && <Loader2 size={15} className="animate-spin text-blue-600" />}
                             <button
@@ -903,7 +756,7 @@ const PrintProductionManager: React.FC = () => {
 
                 {!isLoading && rows.length === 0 && (
                   <tr>
-                    <td colSpan={25} className="px-6 py-12 text-center text-sm text-gray-500">
+                    <td colSpan={12} className="px-6 py-12 text-center text-sm text-gray-500">
                       Chưa có dữ liệu in ấn trong Supabase.
                     </td>
                   </tr>
@@ -1004,7 +857,7 @@ const PrintProductionManager: React.FC = () => {
           </div>
 
           <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-6 text-sm text-gray-500 shadow-sm">
-            Đã liên kết bảng báo giá để tự tính đơn giá và thành tiền. Nếu còn dòng báo “Thiếu báo giá”, hãy cập nhật tab Báo giá in ấn trước khi vận hành.
+            Đã bật realtime auto refresh. Nếu n8n tạo đơn mới từ Trello, danh sách sẽ tự cập nhật mà không cần bấm làm mới.
           </div>
         </>
       )}

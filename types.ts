@@ -497,6 +497,55 @@ export interface PrintOrder {
 }
 
 
+export interface PrintOrderItemRow {
+  id: string;
+  printOrderId: string;
+
+  contractId?: string | null;
+  contractCode: string;
+  customerId?: string | null;
+  tenKhachHang: string;
+  ngayGuiIn: string;
+
+  linkTheTrello: string;
+  linkFiles: string;
+  trelloCardId?: string | null;
+  trelloBoardId?: string | null;
+  trelloListId?: string | null;
+
+  statusId?: string | null;
+  tenTrangThai: string;
+
+  nguoiKiemTraNhanAnh: string;
+  tenNguoiKiemTraNhanAnh?: string;
+
+  soLuong: number;
+  sizeId?: string | null;
+  tenKichThuoc: string;
+  materialId?: string | null;
+  tenChatLieu: string;
+  vendorId?: string | null;
+  tenXuongIn: string;
+
+  donGiaIn: number;
+  thanhTien: number;
+
+  ghiChuItem: string;
+  ghiChuDon: string;
+
+  thuTuHienThi: number;
+  dangSuDung: boolean;
+
+  thongBaoDaCoAnh: boolean;
+  thongBaoDaGiaoAnh: boolean;
+  thongBaoDangInAnh: boolean;
+  checkFlag: boolean;
+
+  createdAt: string;
+  updatedAt: string;
+}
+
+
 export interface PrintVendorPrice {
   id: string;
   vendorId: string;

@@ -394,7 +394,7 @@ export default function App() {
             )}
 
 		    {activeTab === 'print_production' && canAccess('print_production') && (
-              <PrintProductionManager />
+              <PrintProductionManager currentUser={currentUser} />
             )}
             {activeTab === 'print_costs' && isAdmin && (
               <PrintCostManager />

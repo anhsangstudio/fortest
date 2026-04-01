@@ -11,19 +11,20 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle2,
+  Pencil,
+  X,
 } from 'lucide-react';
 import {
   createPrintOrder,
   duplicatePrintOrder,
   fetchPrintCatalogs,
   fetchPrintOrders,
-  fetchPrintVendorPrices,
   isConfigured,
   softDeletePrintOrder,
   supabase,
   updatePrintOrder,
 } from '../apiService';
-import { PrintCatalogOption, PrintOrder, PrintVendorPrice } from '../types';
+import { PrintCatalogOption, PrintOrder } from '../types';
 
 type SaveState = Record<string, boolean>;
 
@@ -34,10 +35,22 @@ type CatalogState = {
   statuses: PrintCatalogOption[];
 };
 
-type PricingResult = {
-  donGiaIn: number;
-  thanhTien: number;
-  hasMissingPrice: boolean;
+type StaffOption = {
+  id: string;
+  name: string;
+};
+
+type EditFormState = {
+  id: string;
+  tenKhachHang: string;
+  ngayGuiIn: string;
+  soLuong: number;
+  kichThuocId: string;
+  chatLieuId: string;
+  statusId: string;
+  vendorId: string;
+  nguoiKiemTraNhanAnh: string;
+  ghiChu: string;
 };
 
 const emptyCatalogs: CatalogState = {
@@ -47,13 +60,7 @@ const emptyCatalogs: CatalogState = {
   statuses: [],
 };
 
-const formatNumber = (value: number) => {
-  return value.toLocaleString('vi-VN');
-};
-
-const formatMoney = (value: number) => {
-  return value.toLocaleString('vi-VN');
-};
+const formatNumber = (value: number) => value.toLocaleString('vi-VN');
 
 const toNonNegativeNumber = (value: string | number) => {
   const parsed = Number(value);
@@ -61,107 +68,41 @@ const toNonNegativeNumber = (value: string | number) => {
   return parsed;
 };
 
-const findMatchingPrintVendorPrice = (
-  prices: PrintVendorPrice[],
-  vendorId?: string | null,
-  sizeId?: string | null,
-  materialId?: string | null
-): PrintVendorPrice | null => {
-  if (!vendorId || !sizeId || !materialId) return null;
-
-  return (
-    prices.find(
-      (price) =>
-        price.isActive &&
-        price.vendorId === vendorId &&
-        price.sizeId === sizeId &&
-        price.materialId === materialId
-    ) || null
-  );
+const getDisplayQuantity = (row: PrintOrder) => {
+  if (Number(row.soLuongAnhLon || 0) > 0) return Number(row.soLuongAnhLon || 0);
+  return Number(row.soLuongAnhNho || 0);
 };
 
-const calculatePricingForRow = (
-  row: Pick<
-    PrintOrder,
-    | 'vendorId'
-    | 'soLuongAnhLon'
-    | 'kichThuocAnhLonId'
-    | 'chatLieuAnhLonId'
-    | 'soLuongAnhNho'
-    | 'kichThuocAnhNhoId'
-    | 'chatLieuAnhNhoId'
-  >,
-  prices: PrintVendorPrice[]
-): PricingResult => {
-  const largeQty = Number(row.soLuongAnhLon || 0);
-  const smallQty = Number(row.soLuongAnhNho || 0);
+const getDisplaySizeId = (row: PrintOrder) =>
+  row.kichThuocAnhLonId || row.kichThuocAnhNhoId || '';
 
-  const largePrice =
-    largeQty > 0
-      ? findMatchingPrintVendorPrice(
-          prices,
-          row.vendorId,
-          row.kichThuocAnhLonId,
-          row.chatLieuAnhLonId
-        )
-      : null;
+const getDisplayMaterialId = (row: PrintOrder) =>
+  row.chatLieuAnhLonId || row.chatLieuAnhNhoId || '';
 
-  const smallPrice =
-    smallQty > 0
-      ? findMatchingPrintVendorPrice(
-          prices,
-          row.vendorId,
-          row.kichThuocAnhNhoId,
-          row.chatLieuAnhNhoId
-        )
-      : null;
+const getDisplaySizeName = (row: PrintOrder) =>
+  row.kichThuocAnhLon || row.kichThuocAnhNho || '';
 
-  const hasMissingLarge =
-    largeQty > 0 &&
-    !!row.vendorId &&
-    !!row.kichThuocAnhLonId &&
-    !!row.chatLieuAnhLonId &&
-    !largePrice;
+const getDisplayMaterialName = (row: PrintOrder) =>
+  row.chatLieuAnhLon || row.chatLieuAnhNho || '';
 
-  const hasMissingSmall =
-    smallQty > 0 &&
-    !!row.vendorId &&
-    !!row.kichThuocAnhNhoId &&
-    !!row.chatLieuAnhNhoId &&
-    !smallPrice;
-
-  const amountLarge = largePrice ? largeQty * Number(largePrice.donGia || 0) : 0;
-  const amountSmall = smallPrice ? smallQty * Number(smallPrice.donGia || 0) : 0;
-  const totalQuantity = largeQty + smallQty;
-  const totalAmount = amountLarge + amountSmall;
-
-  const averageUnitPrice =
-    totalQuantity > 0 ? Math.round(totalAmount / totalQuantity) : 0;
-
-  return {
-    donGiaIn: averageUnitPrice,
-    thanhTien: totalAmount,
-    hasMissingPrice: hasMissingLarge || hasMissingSmall,
-  };
-};
-
-const applyAutoPricingToRow = (
-  row: PrintOrder,
-  prices: PrintVendorPrice[]
-): PrintOrder => {
-  const pricing = calculatePricingForRow(row, prices);
-  return {
-    ...row,
-    donGiaIn: pricing.donGiaIn,
-    thanhTien: pricing.thanhTien,
-  };
-};
+const createEditFormFromRow = (row: PrintOrder): EditFormState => ({
+  id: row.id,
+  tenKhachHang: row.tenKhachHang || '',
+  ngayGuiIn: row.ngayGuiIn || '',
+  soLuong: getDisplayQuantity(row),
+  kichThuocId: getDisplaySizeId(row),
+  chatLieuId: getDisplayMaterialId(row),
+  statusId: row.statusId || '',
+  vendorId: row.vendorId || '',
+  nguoiKiemTraNhanAnh: row.nguoiKiemTraNhanAnh || '',
+  ghiChu: row.ghiChu || '',
+});
 
 const PrintProductionManager: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'list' | 'report'>('list');
   const [rows, setRows] = useState<PrintOrder[]>([]);
   const [catalogs, setCatalogs] = useState<CatalogState>(emptyCatalogs);
-  const [vendorPrices, setVendorPrices] = useState<PrintVendorPrice[]>([]);
+  const [staffOptions, setStaffOptions] = useState<StaffOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -171,22 +112,33 @@ const PrintProductionManager: React.FC = () => {
     from: '2026-03-01',
     to: '2026-03-31',
   });
+  const [editingRow, setEditingRow] = useState<PrintOrder | null>(null);
+  const [editForm, setEditForm] = useState<EditFormState | null>(null);
+  const [isSavingModal, setIsSavingModal] = useState(false);
 
   const setRowSaving = (rowId: string, value: boolean) => {
     setSavingMap((prev) => ({ ...prev, [rowId]: value }));
   };
 
-  const updateLocalRow = (rowId: string, patch: Partial<PrintOrder>) => {
-    setRows((prev) =>
-      prev.map((item) =>
-        item.id === rowId
-          ? {
-              ...item,
-              ...patch,
-            }
-          : item
-      )
-    );
+  const loadStaffOptions = async () => {
+    if (!supabase) return [];
+
+    const { data, error: staffError } = await supabase
+      .from('staff')
+      .select('id, name, status')
+      .order('name', { ascending: true });
+
+    if (staffError) {
+      console.error('Load staff error:', staffError);
+      return [];
+    }
+
+    return (data || [])
+      .filter((item: any) => !item.status || item.status === 'Active')
+      .map((item: any) => ({
+        id: item.id,
+        name: item.name || item.id,
+      }));
   };
 
   const loadData = async () => {
@@ -194,7 +146,7 @@ const PrintProductionManager: React.FC = () => {
       setError('Chưa cấu hình Supabase. Vui lòng kiểm tra VITE_SUPABASE_URL và VITE_SUPABASE_ANON_KEY.');
       setRows([]);
       setCatalogs(emptyCatalogs);
-      setVendorPrices([]);
+      setStaffOptions([]);
       setIsLoading(false);
       return;
     }
@@ -203,15 +155,15 @@ const PrintProductionManager: React.FC = () => {
     setError(null);
 
     try {
-      const [orders, catalogData, priceData] = await Promise.all([
+      const [orders, catalogData, staffData] = await Promise.all([
         fetchPrintOrders(),
         fetchPrintCatalogs(),
-        fetchPrintVendorPrices({ isActive: true }),
+        loadStaffOptions(),
       ]);
 
-      setRows(orders.map((row) => applyAutoPricingToRow(row, priceData)));
+      setRows(orders);
       setCatalogs(catalogData);
-      setVendorPrices(priceData);
+      setStaffOptions(staffData);
     } catch (e: any) {
       console.error('Load print production data error:', e);
       setError(e?.message || 'Không tải được dữ liệu in ấn.');
@@ -221,7 +173,7 @@ const PrintProductionManager: React.FC = () => {
   };
 
   useEffect(() => {
-    loadData();
+    void loadData();
   }, []);
 
   useEffect(() => {
@@ -257,13 +209,8 @@ const PrintProductionManager: React.FC = () => {
     });
   }, [rows, dateRange]);
 
-  const totalLargePhotos = useMemo(
-    () => filteredRows.reduce((sum, row) => sum + Number(row.soLuongAnhLon || 0), 0),
-    [filteredRows]
-  );
-
-  const totalSmallPhotos = useMemo(
-    () => filteredRows.reduce((sum, row) => sum + Number(row.soLuongAnhNho || 0), 0),
+  const totalQuantity = useMemo(
+    () => filteredRows.reduce((sum, row) => sum + getDisplayQuantity(row), 0),
     [filteredRows]
   );
 
@@ -275,135 +222,21 @@ const PrintProductionManager: React.FC = () => {
     filteredRows.forEach((row) => {
       const key = row.tenXuongIn || 'Chưa chọn xưởng';
       const current = map.get(key) || 0;
-      map.set(key, current + row.soLuongAnhLon + row.soLuongAnhNho);
+      map.set(key, current + getDisplayQuantity(row));
     });
 
     return Array.from(map.entries()).map(([name, total]) => ({ name, total }));
   }, [filteredRows]);
 
-  const persistRowPatch = async (rowId: string, patch: Record<string, any>) => {
-    setRowSaving(rowId, true);
-    setError(null);
-
-    try {
-      await updatePrintOrder(rowId, patch);
-    } catch (e: any) {
-      console.error('Update print order error:', e);
-      setError(e?.message || 'Cập nhật dòng in ấn thất bại.');
-      await loadData();
-    } finally {
-      setRowSaving(rowId, false);
-    }
+  const openEditModal = (row: PrintOrder) => {
+    setEditingRow(row);
+    setEditForm(createEditFormFromRow(row));
   };
 
-  const handleTextBlur = async (
-    row: PrintOrder,
-    field: keyof PrintOrder,
-    value: string
-  ) => {
-    const dbFieldMap: Partial<Record<keyof PrintOrder, string>> = {
-      tenKhachHang: 'ten_khach_hang',
-      ngayGuiIn: 'ngay_gui_in',
-      ghiChu: 'ghi_chu',
-      nguoiKiemTraNhanAnh: 'nguoi_kiem_tra_nhan_anh',
-    };
-
-    const dbField = dbFieldMap[field];
-    if (!dbField) return;
-
-    await persistRowPatch(row.id, {
-      [dbField]: value,
-    });
-  };
-
-  const handleNumberBlur = async (
-    row: PrintOrder,
-    field: 'soLuongAnhLon',
-    value: string
-  ) => {
-    const normalized = toNonNegativeNumber(value);
-
-    const nextRow = applyAutoPricingToRow(
-      {
-        ...row,
-        [field]: normalized,
-      },
-      vendorPrices
-    );
-
-    updateLocalRow(row.id, nextRow);
-
-    await persistRowPatch(row.id, {
-      so_luong_anh_lon: normalized,
-      don_gia_in: nextRow.donGiaIn,
-      thanh_tien: nextRow.thanhTien,
-    });
-  };
-
-  const handleSelectChange = async (
-    row: PrintOrder,
-    type: 'kich_thuoc_anh_lon' | 'chat_lieu_anh_lon' | 'vendor' | 'status',
-    optionId: string
-  ) => {
-    let patch: Record<string, any> = {};
-    let nextRow = row;
-
-    if (type === 'kich_thuoc_anh_lon') {
-      const option = catalogs.sizes.find((item) => item.id === optionId);
-      patch = { kich_thuoc_anh_lon_id: optionId || null };
-      nextRow = {
-        ...row,
-        kichThuocAnhLonId: optionId || null,
-        kichThuocAnhLon: option?.name || '',
-      };
-    }
-
-    if (type === 'chat_lieu_anh_lon') {
-      const option = catalogs.materials.find((item) => item.id === optionId);
-      patch = { chat_lieu_anh_lon_id: optionId || null };
-      nextRow = {
-        ...row,
-        chatLieuAnhLonId: optionId || null,
-        chatLieuAnhLon: option?.name || '',
-      };
-    }
-
-    if (type === 'vendor') {
-      const option = catalogs.vendors.find((item) => item.id === optionId);
-      patch = { vendor_id: optionId || null };
-      nextRow = {
-        ...row,
-        vendorId: optionId || null,
-        tenXuongIn: option?.name || '',
-      };
-    }
-
-    if (type === 'status') {
-      const option = catalogs.statuses.find((item) => item.id === optionId);
-      patch = { status_id: optionId || null };
-      nextRow = {
-        ...row,
-        statusId: optionId || null,
-        tenTrangThai: option?.name || '',
-      };
-    }
-
-    const pricedRow =
-      type === 'status'
-        ? nextRow
-        : applyAutoPricingToRow(nextRow, vendorPrices);
-
-    updateLocalRow(row.id, pricedRow);
-
-    await persistRowPatch(row.id, {
-      ...patch,
-      ...(type === 'status'
-        ? {}
-        : {
-            don_gia_in: pricedRow.donGiaIn,
-            thanh_tien: pricedRow.thanhTien,
-          }),
-    });
+  const closeEditModal = () => {
+    setEditingRow(null);
+    setEditForm(null);
+    setIsSavingModal(false);
   };
 
   const addNewRow = async () => {
@@ -411,16 +244,17 @@ const PrintProductionManager: React.FC = () => {
     setError(null);
 
     try {
-      const defaultStatusId = catalogs.statuses.find((item) => item.name === 'ĐANG IN ẤN')?.id || null;
+      const defaultStatusId =
+        catalogs.statuses.find((item) => item.name === 'ĐANG IN ẤN')?.id || null;
 
-      const created = await createPrintOrder({
+      await createPrintOrder({
         tenKhachHang: 'Khách mới',
         ngayGuiIn: new Date().toISOString().slice(0, 10),
         statusId: defaultStatusId,
       });
 
-      setRows((prev) => [applyAutoPricingToRow(created, vendorPrices), ...prev]);
       setSuccessMessage('Đã tạo dòng in ấn mới.');
+      await loadData();
     } catch (e: any) {
       console.error('Create print order error:', e);
       setError(e?.message || 'Không tạo được dòng in ấn mới.');
@@ -434,9 +268,9 @@ const PrintProductionManager: React.FC = () => {
     setError(null);
 
     try {
-      const created = await duplicatePrintOrder(row);
-      setRows((prev) => [applyAutoPricingToRow(created, vendorPrices), ...prev]);
+      await duplicatePrintOrder(row);
       setSuccessMessage('Đã nhân bản dòng in ấn.');
+      await loadData();
     } catch (e: any) {
       console.error('Duplicate print order error:', e);
       setError(e?.message || 'Không nhân bản được dòng in ấn.');
@@ -454,8 +288,8 @@ const PrintProductionManager: React.FC = () => {
 
     try {
       await softDeletePrintOrder(row.id);
-      setRows((prev) => prev.filter((item) => item.id !== row.id));
       setSuccessMessage('Đã xóa mềm dòng in ấn.');
+      await loadData();
     } catch (e: any) {
       console.error('Delete print order error:', e);
       setError(e?.message || 'Không xóa được dòng in ấn.');
@@ -464,30 +298,38 @@ const PrintProductionManager: React.FC = () => {
     }
   };
 
-  const renderSelect = (
-    row: PrintOrder,
-    value: string | null | undefined,
-    options: PrintCatalogOption[],
-    onChange: (value: string) => Promise<void>,
-    className = 'w-full rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm'
-  ) => (
-    <select
-      value={value || ''}
-      onChange={(e) => void onChange(e.target.value)}
-      className={className}
-      disabled={!!savingMap[row.id]}
-    >
-      <option value="">Chọn</option>
-      {options.map((option) => (
-        <option key={option.id} value={option.id}>
-          {option.name}
-        </option>
-      ))}
-    </select>
-  );
+  const handleSaveModal = async () => {
+    if (!editingRow || !editForm) return;
 
-  const rowHasMissingPrice = (row: PrintOrder) =>
-    calculatePricingForRow(row, vendorPrices).hasMissingPrice;
+    setIsSavingModal(true);
+    setError(null);
+
+    try {
+      await updatePrintOrder(editingRow.id, {
+        ten_khach_hang: editForm.tenKhachHang,
+        ngay_gui_in: editForm.ngayGuiIn || null,
+        so_luong_anh_lon: toNonNegativeNumber(editForm.soLuong),
+        so_luong_anh_nho: 0,
+        kich_thuoc_anh_lon_id: editForm.kichThuocId || null,
+        chat_lieu_anh_lon_id: editForm.chatLieuId || null,
+        kich_thuoc_anh_nho_id: null,
+        chat_lieu_anh_nho_id: null,
+        status_id: editForm.statusId || null,
+        vendor_id: editForm.vendorId || null,
+        nguoi_kiem_tra_nhan_anh: editForm.nguoiKiemTraNhanAnh || null,
+        ghi_chu: editForm.ghiChu || null,
+      });
+
+      setSuccessMessage('Đã cập nhật dòng in ấn.');
+      closeEditModal();
+      await loadData();
+    } catch (e: any) {
+      console.error('Update print order error:', e);
+      setError(e?.message || 'Không cập nhật được dòng in ấn.');
+    } finally {
+      setIsSavingModal(false);
+    }
+  };
 
   return (
     <div className="space-y-6 p-6">
@@ -500,7 +342,7 @@ const PrintProductionManager: React.FC = () => {
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Module Báo Cáo In Ấn</h1>
               <p className="mt-1 text-sm text-gray-500">
-                Tự động đồng bộ đơn từ Trello và chỉ hiển thị các cột vận hành cần thiết.
+                Danh sách vận hành chỉ hiển thị các cột cần thiết. Chỉnh sửa dữ liệu bằng modal để tránh lỗi mất giá trị dropdown.
               </p>
             </div>
           </div>
@@ -579,20 +421,18 @@ const PrintProductionManager: React.FC = () => {
           </div>
 
           <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
-            <table className="min-w-[1350px] w-full">
+            <table className="min-w-[1250px] w-full">
               <thead className="bg-amber-200">
                 <tr className="text-sm font-semibold text-gray-900">
-                  <th className="px-3 py-3 text-left">Tên khách hàng</th>
+                  <th className="px-3 py-3 text-left">Tên Khách Hàng</th>
                   <th className="px-3 py-3 text-left">Ngày gửi in</th>
-                  <th className="px-3 py-3 text-left">Số lượng</th>
-                  <th className="px-3 py-3 text-left">Kích thước</th>
-                  <th className="px-3 py-3 text-left">Chất liệu</th>
-                  <th className="px-3 py-3 text-left">Tình trạng</th>
-                  <th className="px-3 py-3 text-left">Xưởng in</th>
-                  <th className="px-3 py-3 text-left">Người kiểm tra nhận ảnh</th>
-                  <th className="px-3 py-3 text-left">Ghi chú</th>
-                  <th className="px-3 py-3 text-left">Đơn giá</th>
-                  <th className="px-3 py-3 text-left">Thành tiền</th>
+                  <th className="px-3 py-3 text-left">Số Lượng</th>
+                  <th className="px-3 py-3 text-left">Kích Thước</th>
+                  <th className="px-3 py-3 text-left">Chất Liệu</th>
+                  <th className="px-3 py-3 text-left">TÌNH TRẠNG</th>
+                  <th className="px-3 py-3 text-left">XƯỞNG IN</th>
+                  <th className="px-3 py-3 text-left">NGƯỜI KIỂM TRA NHẬN ẢNH</th>
+                  <th className="px-3 py-3 text-left">GHI CHÚ</th>
                   <th className="px-3 py-3 text-left">Thao tác</th>
                 </tr>
               </thead>
@@ -600,7 +440,7 @@ const PrintProductionManager: React.FC = () => {
               <tbody>
                 {isLoading && (
                   <tr>
-                    <td colSpan={12} className="px-6 py-14">
+                    <td colSpan={10} className="px-6 py-14">
                       <div className="flex items-center justify-center gap-3 text-sm text-gray-500">
                         <Loader2 size={18} className="animate-spin" />
                         Đang tải dữ liệu từ Supabase...
@@ -610,126 +450,39 @@ const PrintProductionManager: React.FC = () => {
                 )}
 
                 {!isLoading &&
-                  rows.map((row) => {
+                  filteredRows.map((row) => {
                     const isSavingRow = !!savingMap[row.id];
-                    const hasMissingPrice = rowHasMissingPrice(row);
 
                     return (
-                      <tr key={row.id} className="border-t border-gray-100 align-top">
-                        <td className="min-w-[220px] px-3 py-3">
-                          <input
-                            value={row.tenKhachHang}
-                            onChange={(e) => updateLocalRow(row.id, { tenKhachHang: e.target.value })}
-                            onBlur={(e) => void handleTextBlur(row, 'tenKhachHang', e.target.value)}
-                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                            disabled={isSavingRow}
-                          />
-                        </td>
-
-                        <td className="min-w-[150px] px-3 py-3">
-                          <input
-                            type="date"
-                            value={row.ngayGuiIn}
-                            onChange={(e) => updateLocalRow(row.id, { ngayGuiIn: e.target.value })}
-                            onBlur={(e) => void handleTextBlur(row, 'ngayGuiIn', e.target.value)}
-                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                            disabled={isSavingRow}
-                          />
-                        </td>
-
-                        <td className="min-w-[130px] px-3 py-3">
-                          <input
-                            type="number"
-                            min={0}
-                            value={row.soLuongAnhLon}
-                            onChange={(e) =>
-                              updateLocalRow(row.id, {
-                                soLuongAnhLon: toNonNegativeNumber(e.target.value),
-                              })
-                            }
-                            onBlur={(e) => void handleNumberBlur(row, 'soLuongAnhLon', e.target.value)}
-                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                            disabled={isSavingRow}
-                          />
-                        </td>
-
-                        <td className="min-w-[140px] px-3 py-3">
-                          {renderSelect(
-                            row,
-                            row.kichThuocAnhLonId,
-                            catalogs.sizes,
-                            async (value) => handleSelectChange(row, 'kich_thuoc_anh_lon', value)
-                          )}
-                        </td>
-
-                        <td className="min-w-[140px] px-3 py-3">
-                          {renderSelect(
-                            row,
-                            row.chatLieuAnhLonId,
-                            catalogs.materials,
-                            async (value) => handleSelectChange(row, 'chat_lieu_anh_lon', value)
-                          )}
-                        </td>
-
-                        <td className="min-w-[150px] px-3 py-3">
-                          {renderSelect(
-                            row,
-                            row.statusId,
-                            catalogs.statuses,
-                            async (value) => handleSelectChange(row, 'status', value)
-                          )}
-                        </td>
-
-                        <td className="min-w-[150px] px-3 py-3">
-                          {renderSelect(
-                            row,
-                            row.vendorId,
-                            catalogs.vendors,
-                            async (value) => handleSelectChange(row, 'vendor', value)
-                          )}
-                        </td>
-
-                        <td className="min-w-[180px] px-3 py-3">
-                          <input
-                            value={row.nguoiKiemTraNhanAnh}
-                            onChange={(e) =>
-                              updateLocalRow(row.id, {
-                                nguoiKiemTraNhanAnh: e.target.value,
-                              })
-                            }
-                            onBlur={(e) => void handleTextBlur(row, 'nguoiKiemTraNhanAnh', e.target.value)}
-                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                            disabled={isSavingRow}
-                            placeholder="Nhập tên nhân sự"
-                          />
-                        </td>
-
-                        <td className="min-w-[220px] px-3 py-3">
-                          <input
-                            value={row.ghiChu}
-                            onChange={(e) => updateLocalRow(row.id, { ghiChu: e.target.value })}
-                            onBlur={(e) => void handleTextBlur(row, 'ghiChu', e.target.value)}
-                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                            disabled={isSavingRow}
-                          />
-                        </td>
-
-                        <td className="min-w-[120px] px-3 py-3 text-sm text-gray-700">
-                          <div>{formatMoney(row.donGiaIn)}</div>
-                          {hasMissingPrice && (
-                            <div className="mt-1 text-xs font-medium text-red-600">
-                              Thiếu báo giá
-                            </div>
-                          )}
-                        </td>
-
-                        <td className="min-w-[140px] px-3 py-3 text-sm font-semibold text-gray-900">
-                          {formatMoney(row.thanhTien)}
-                        </td>
-
-                        <td className="min-w-[120px] px-3 py-3">
+                      <tr
+                        key={row.id}
+                        className="cursor-pointer border-t border-gray-100 hover:bg-gray-50"
+                        onClick={() => openEditModal(row)}
+                      >
+                        <td className="min-w-[220px] px-3 py-3 text-sm text-gray-900">{row.tenKhachHang}</td>
+                        <td className="min-w-[150px] px-3 py-3 text-sm text-gray-700">{row.ngayGuiIn}</td>
+                        <td className="min-w-[110px] px-3 py-3 text-sm text-gray-700">{getDisplayQuantity(row)}</td>
+                        <td className="min-w-[140px] px-3 py-3 text-sm text-gray-700">{getDisplaySizeName(row)}</td>
+                        <td className="min-w-[140px] px-3 py-3 text-sm text-gray-700">{getDisplayMaterialName(row)}</td>
+                        <td className="min-w-[150px] px-3 py-3 text-sm text-gray-700">{row.tenTrangThai || ''}</td>
+                        <td className="min-w-[150px] px-3 py-3 text-sm text-gray-700">{row.tenXuongIn || ''}</td>
+                        <td className="min-w-[180px] px-3 py-3 text-sm text-gray-700">{row.nguoiKiemTraNhanAnh || ''}</td>
+                        <td className="min-w-[220px] px-3 py-3 text-sm text-gray-700">{row.ghiChu || ''}</td>
+                        <td
+                          className="min-w-[130px] px-3 py-3"
+                          onClick={(event) => event.stopPropagation()}
+                        >
                           <div className="flex items-center gap-2">
                             {isSavingRow && <Loader2 size={15} className="animate-spin text-blue-600" />}
+                            <button
+                              type="button"
+                              onClick={() => openEditModal(row)}
+                              className="rounded-lg border border-gray-300 p-2 text-gray-700"
+                              title="Sửa"
+                              disabled={isSavingRow}
+                            >
+                              <Pencil size={15} />
+                            </button>
                             <button
                               type="button"
                               onClick={() => void handleDuplicateRow(row)}
@@ -754,9 +507,9 @@ const PrintProductionManager: React.FC = () => {
                     );
                   })}
 
-                {!isLoading && rows.length === 0 && (
+                {!isLoading && filteredRows.length === 0 && (
                   <tr>
-                    <td colSpan={12} className="px-6 py-12 text-center text-sm text-gray-500">
+                    <td colSpan={10} className="px-6 py-12 text-center text-sm text-gray-500">
                       Chưa có dữ liệu in ấn trong Supabase.
                     </td>
                   </tr>
@@ -809,27 +562,20 @@ const PrintProductionManager: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
               <div className="text-sm text-gray-500">Tổng đơn in</div>
               <div className="mt-2 text-3xl font-bold text-gray-900">{totalOrders}</div>
             </div>
 
             <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <div className="text-sm text-gray-500">Tổng ảnh lớn</div>
-              <div className="mt-2 text-3xl font-bold text-gray-900">{formatNumber(totalLargePhotos)}</div>
+              <div className="text-sm text-gray-500">Tổng số lượng</div>
+              <div className="mt-2 text-3xl font-bold text-gray-900">{formatNumber(totalQuantity)}</div>
             </div>
 
             <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <div className="text-sm text-gray-500">Tổng ảnh nhỏ</div>
-              <div className="mt-2 text-3xl font-bold text-gray-900">{formatNumber(totalSmallPhotos)}</div>
-            </div>
-
-            <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <div className="text-sm text-gray-500">Tổng số ảnh</div>
-              <div className="mt-2 text-3xl font-bold text-gray-900">
-                {formatNumber(totalLargePhotos + totalSmallPhotos)}
-              </div>
+              <div className="text-sm text-gray-500">Tổng xưởng in</div>
+              <div className="mt-2 text-3xl font-bold text-gray-900">{reportByVendor.length}</div>
             </div>
           </div>
 
@@ -843,8 +589,8 @@ const PrintProductionManager: React.FC = () => {
               {reportByVendor.map((item) => (
                 <div key={item.name} className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
                   <div className="text-sm font-semibold text-gray-800">{item.name}</div>
-                  <div className="mt-2 text-2xl font-bold text-gray-900">{formatMoney(item.total)}</div>
-                  <div className="mt-1 text-sm text-gray-500">tổng số ảnh dự kiến in</div>
+                  <div className="mt-2 text-2xl font-bold text-gray-900">{formatNumber(item.total)}</div>
+                  <div className="mt-1 text-sm text-gray-500">tổng số lượng đang vận hành</div>
                 </div>
               ))}
 
@@ -855,11 +601,175 @@ const PrintProductionManager: React.FC = () => {
               )}
             </div>
           </div>
-
-          <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-6 text-sm text-gray-500 shadow-sm">
-            Đã bật realtime auto refresh. Nếu n8n tạo đơn mới từ Trello, danh sách sẽ tự cập nhật mà không cần bấm làm mới.
-          </div>
         </>
+      )}
+
+      {editingRow && editForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-xl">
+            <div className="sticky top-0 flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Chỉnh sửa dòng in ấn</h3>
+                <p className="text-sm text-gray-500">Sửa dữ liệu trong modal để tránh lỗi mất giá trị dropdown.</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeEditModal}
+                className="rounded-lg border border-gray-300 p-2 text-gray-600"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 px-6 py-6 md:grid-cols-2">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">Tên Khách Hàng</label>
+                <input
+                  value={editForm.tenKhachHang}
+                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, tenKhachHang: e.target.value } : prev))}
+                  className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">Ngày gửi in</label>
+                <input
+                  type="date"
+                  value={editForm.ngayGuiIn}
+                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, ngayGuiIn: e.target.value } : prev))}
+                  className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">Số Lượng</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={editForm.soLuong}
+                  onChange={(e) =>
+                    setEditForm((prev) =>
+                      prev ? { ...prev, soLuong: toNonNegativeNumber(e.target.value) } : prev
+                    )
+                  }
+                  className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">Kích Thước</label>
+                <select
+                  value={editForm.kichThuocId}
+                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, kichThuocId: e.target.value } : prev))}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm"
+                >
+                  <option value="">Chọn</option>
+                  {catalogs.sizes.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">Chất Liệu</label>
+                <select
+                  value={editForm.chatLieuId}
+                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, chatLieuId: e.target.value } : prev))}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm"
+                >
+                  <option value="">Chọn</option>
+                  {catalogs.materials.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">TÌNH TRẠNG</label>
+                <select
+                  value={editForm.statusId}
+                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, statusId: e.target.value } : prev))}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm"
+                >
+                  <option value="">Chọn</option>
+                  {catalogs.statuses.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">XƯỞNG IN</label>
+                <select
+                  value={editForm.vendorId}
+                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, vendorId: e.target.value } : prev))}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm"
+                >
+                  <option value="">Chọn</option>
+                  {catalogs.vendors.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">NGƯỜI KIỂM TRA NHẬN ẢNH</label>
+                <select
+                  value={editForm.nguoiKiemTraNhanAnh}
+                  onChange={(e) =>
+                    setEditForm((prev) => (prev ? { ...prev, nguoiKiemTraNhanAnh: e.target.value } : prev))
+                  }
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm"
+                >
+                  <option value="">Chọn</option>
+                  {staffOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="mb-2 block text-sm font-medium text-gray-700">GHI CHÚ</label>
+                <textarea
+                  value={editForm.ghiChu}
+                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, ghiChu: e.target.value } : prev))}
+                  rows={4}
+                  className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 border-t border-gray-200 px-6 py-4">
+              <button
+                type="button"
+                onClick={closeEditModal}
+                className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700"
+                disabled={isSavingModal}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSaveModal()}
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                disabled={isSavingModal}
+              >
+                {isSavingModal && <Loader2 size={16} className="animate-spin" />}
+                Lưu thay đổi
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

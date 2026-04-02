@@ -19,6 +19,9 @@ import type {
   UpdatePrintVendorPriceInput,
   PrintCostRow,
   PrintCostSummary,
+  PrintVendorOpeningDebt,
+  PrintVendorPayment,
+  PrintVendorDebtSummaryRow,
 } from '../types';
 import {
   fetchPrintCatalogs,
@@ -36,6 +39,13 @@ import {
   updatePrintMaterial,
   softDeletePrintMaterial,
   fetchPrintCostData,
+  fetchPrintVendorOpeningDebts,
+  createPrintVendorOpeningDebt,
+  softDeletePrintVendorOpeningDebt,
+  fetchPrintVendorPayments,
+  createPrintVendorPayment,
+  softDeletePrintVendorPayment,
+  fetchPrintVendorDebtSummary,
 } from '../apiService';
 
 type PriceFormState = {
@@ -90,7 +100,7 @@ const EMPTY_COST_SUMMARY: PrintCostSummary = {
 };
 
 const PrintCostManager: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'pricing' | 'costs'>('pricing');
+  const [activeTab, setActiveTab] = useState<'pricing' | 'costs' | 'debts'>('pricing');
 
   const [vendors, setVendors] = useState<PrintCatalogOption[]>([]);
   const [sizes, setSizes] = useState<PrintCatalogOption[]>([]);
@@ -111,6 +121,17 @@ const PrintCostManager: React.FC = () => {
   const [costFrom, setCostFrom] = useState('');
   const [costTo, setCostTo] = useState('');
   const [costVendorId, setCostVendorId] = useState('');
+  const [debtRows, setDebtRows] = useState<PrintVendorDebtSummaryRow[]>([]);
+  const [openingDebts, setOpeningDebts] = useState<PrintVendorOpeningDebt[]>([]);
+  const [payments, setPayments] = useState<PrintVendorPayment[]>([]);
+  const [debtLoading, setDebtLoading] = useState(false);
+  const [debtFrom, setDebtFrom] = useState('');
+  const [debtTo, setDebtTo] = useState('');
+  const [debtVendorId, setDebtVendorId] = useState('');
+  const [openingDebtModalOpen, setOpeningDebtModalOpen] = useState(false);
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [openingDebtForm, setOpeningDebtForm] = useState({ vendorId: '', soTien: '', ngayApDung: new Date().toISOString().slice(0, 10), ghiChu: '' });
+  const [paymentForm, setPaymentForm] = useState({ vendorId: '', soTien: '', ngayThanhToan: new Date().toISOString().slice(0, 10), ghiChu: '' });
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingPrice, setEditingPrice] = useState<PrintVendorPrice | null>(null);
@@ -167,9 +188,37 @@ const PrintCostManager: React.FC = () => {
     }
   };
 
+  const loadDebtData = async () => {
+    try {
+      setDebtLoading(true);
+      setPageError('');
+      const [summaryRows, openingRows, paymentRows] = await Promise.all([
+        fetchPrintVendorDebtSummary({
+          from: debtFrom || undefined,
+          to: debtTo || undefined,
+          vendorId: debtVendorId || undefined,
+        }),
+        fetchPrintVendorOpeningDebts(),
+        fetchPrintVendorPayments(),
+      ]);
+      setDebtRows(summaryRows || []);
+      setOpeningDebts(openingRows || []);
+      setPayments(paymentRows || []);
+    } catch (error: any) {
+      console.error('PrintCostManager.loadDebtData error:', error);
+      setPageError(error?.message || 'Không tải được dữ liệu công nợ in ấn.');
+      setDebtRows([]);
+      setOpeningDebts([]);
+      setPayments([]);
+    } finally {
+      setDebtLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadData();
     loadCostData();
+    loadDebtData();
   }, []);
 
   const resetForm = () => {
@@ -413,6 +462,11 @@ const PrintCostManager: React.FC = () => {
   const totalActivePrices = filteredPrices.length;
   const totalAmount = filteredPrices.reduce((sum, row) => sum + Number(row.donGia || 0), 0);
 
+  const totalDebtOpening = useMemo(() => debtRows.reduce((sum, row) => sum + Number(row.congNoDauKy || 0), 0), [debtRows]);
+  const totalDebtGenerated = useMemo(() => debtRows.reduce((sum, row) => sum + Number(row.phatSinhTrongKy || 0), 0), [debtRows]);
+  const totalDebtPaid = useMemo(() => debtRows.reduce((sum, row) => sum + Number(row.daThanhToanTrongKy || 0), 0), [debtRows]);
+  const totalDebtRemaining = useMemo(() => debtRows.reduce((sum, row) => sum + Number(row.conNoCuoiKy || 0), 0), [debtRows]);
+
   const productSummary = useMemo(() => {
     const map = new Map<string, { quantity: number; amount: number; orders: Set<string> }>();
     costRows.forEach((row) => {
@@ -428,6 +482,55 @@ const PrintCostManager: React.FC = () => {
       .sort((a, b) => b.quantity - a.quantity);
   }, [costRows]);
 
+
+  const handleCreateOpeningDebt = async () => {
+    try {
+      if (!openingDebtForm.vendorId || !openingDebtForm.soTien || !openingDebtForm.ngayApDung) {
+        alert('Vui lòng nhập đủ nhà cung cấp, số tiền và ngày áp dụng.');
+        return;
+      }
+      setSubmitting(true);
+      await createPrintVendorOpeningDebt({
+        vendorId: openingDebtForm.vendorId,
+        soTien: Number(openingDebtForm.soTien || 0),
+        ngayApDung: openingDebtForm.ngayApDung,
+        ghiChu: openingDebtForm.ghiChu || '',
+      });
+      setOpeningDebtModalOpen(false);
+      setOpeningDebtForm({ vendorId: '', soTien: '', ngayApDung: new Date().toISOString().slice(0, 10), ghiChu: '' });
+      await loadDebtData();
+    } catch (error: any) {
+      console.error('handleCreateOpeningDebt error:', error);
+      setPageError(error?.message || 'Không thêm được công nợ đầu kỳ.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCreatePayment = async () => {
+    try {
+      if (!paymentForm.vendorId || !paymentForm.soTien || !paymentForm.ngayThanhToan) {
+        alert('Vui lòng nhập đủ nhà cung cấp, số tiền và ngày thanh toán.');
+        return;
+      }
+      setSubmitting(true);
+      await createPrintVendorPayment({
+        vendorId: paymentForm.vendorId,
+        soTien: Number(paymentForm.soTien || 0),
+        ngayThanhToan: paymentForm.ngayThanhToan,
+        ghiChu: paymentForm.ghiChu || '',
+      });
+      setPaymentModalOpen(false);
+      setPaymentForm({ vendorId: '', soTien: '', ngayThanhToan: new Date().toISOString().slice(0, 10), ghiChu: '' });
+      await loadDebtData();
+    } catch (error: any) {
+      console.error('handleCreatePayment error:', error);
+      setPageError(error?.message || 'Không thêm được khoản thanh toán.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -441,7 +544,7 @@ const PrintCostManager: React.FC = () => {
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => { loadData(); loadCostData(); }}
+            onClick={() => { loadData(); loadCostData(); loadDebtData(); }}
             className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             <RefreshCw size={16} />
@@ -456,6 +559,28 @@ const PrintCostManager: React.FC = () => {
             <Plus size={16} />
             Thêm mới sản phẩm in
           </button>
+
+          {activeTab === 'debts' && (
+            <>
+              <button
+                type="button"
+                onClick={() => setOpeningDebtModalOpen(true)}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                <Plus size={16} />
+                Thêm công nợ đầu kỳ
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPaymentModalOpen(true)}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                <Plus size={16} />
+                Thêm thanh toán
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -484,6 +609,19 @@ const PrintCostManager: React.FC = () => {
         >
           <BarChart3 size={16} />
           Chi phí in ấn
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('debts')}
+          className={`inline-flex items-center gap-2 rounded-t-lg px-4 py-2 text-sm font-medium ${
+            activeTab === 'debts'
+              ? 'border border-b-white border-slate-200 bg-white text-slate-900'
+              : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          <BarChart3 size={16} />
+          Công nợ in ấn
         </button>
       </div>
 
@@ -956,6 +1094,244 @@ const PrintCostManager: React.FC = () => {
                   </table>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+
+      {activeTab === 'debts' && (
+        <>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Từ ngày</label>
+              <input value={debtFrom} onChange={(e) => setDebtFrom(e.target.value)} type="date" className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Đến ngày</label>
+              <input value={debtTo} onChange={(e) => setDebtTo(e.target.value)} type="date" className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Xưởng in</label>
+              <select value={debtVendorId} onChange={(e) => setDebtVendorId(e.target.value)} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+                <option value="">Tất cả</option>
+                {vendors.map((item) => (
+                  <option key={item.id} value={item.id}>{item.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="md:col-span-2 flex items-end gap-2">
+              <button type="button" onClick={() => loadDebtData()} className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800">
+                <RefreshCw size={16} />
+                Tải công nợ
+              </button>
+              <button type="button" onClick={() => { setDebtFrom(''); setDebtTo(''); setDebtVendorId(''); }} className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                Xóa lọc
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="text-sm text-slate-500">Công nợ đầu kỳ</div>
+              <div className="mt-1 text-2xl font-bold text-slate-900">{formatCurrency(totalDebtOpening)}</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="text-sm text-slate-500">Phát sinh trong kỳ</div>
+              <div className="mt-1 text-2xl font-bold text-slate-900">{formatCurrency(totalDebtGenerated)}</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="text-sm text-slate-500">Đã thanh toán</div>
+              <div className="mt-1 text-2xl font-bold text-emerald-700">{formatCurrency(totalDebtPaid)}</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="text-sm text-slate-500">Còn nợ</div>
+              <div className="mt-1 text-2xl font-bold text-amber-700">{formatCurrency(totalDebtRemaining)}</div>
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <div className="border-b border-slate-200 px-4 py-3">
+              <h3 className="font-semibold text-slate-800">Tổng hợp công nợ theo xưởng in</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50 text-left text-slate-600">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Xưởng in</th>
+                    <th className="px-4 py-3 font-medium text-right">Công nợ đầu kỳ</th>
+                    <th className="px-4 py-3 font-medium text-right">Phát sinh trong kỳ</th>
+                    <th className="px-4 py-3 font-medium text-right">Đã thanh toán</th>
+                    <th className="px-4 py-3 font-medium text-right">Còn nợ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {debtLoading ? (
+                    <tr><td colSpan={5} className="px-4 py-10 text-center text-slate-500"><div className="inline-flex items-center gap-2"><Loader2 size={16} className="animate-spin" />Đang tải công nợ...</div></td></tr>
+                  ) : debtRows.length === 0 ? (
+                    <tr><td colSpan={5} className="px-4 py-10 text-center text-slate-500">Chưa có dữ liệu công nợ theo bộ lọc hiện tại.</td></tr>
+                  ) : (
+                    debtRows.map((row) => (
+                      <tr key={row.vendorId} className="border-t border-slate-100">
+                        <td className="px-4 py-3 font-medium text-slate-800">{row.vendorName}</td>
+                        <td className="px-4 py-3 text-right">{formatCurrency(row.congNoDauKy)}</td>
+                        <td className="px-4 py-3 text-right">{formatCurrency(row.phatSinhTrongKy)}</td>
+                        <td className="px-4 py-3 text-right text-emerald-700 font-semibold">{formatCurrency(row.daThanhToanTrongKy)}</td>
+                        <td className="px-4 py-3 text-right text-amber-700 font-semibold">{formatCurrency(row.conNoCuoiKy)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <div className="border-b border-slate-200 px-4 py-3">
+                <h3 className="font-semibold text-slate-800">Công nợ đầu kỳ đã nhập</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50 text-left text-slate-600">
+                    <tr>
+                      <th className="px-4 py-3 font-medium">Xưởng in</th>
+                      <th className="px-4 py-3 font-medium">Ngày áp dụng</th>
+                      <th className="px-4 py-3 font-medium text-right">Số tiền</th>
+                      <th className="px-4 py-3 font-medium text-center">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {openingDebts.length === 0 ? (
+                      <tr><td colSpan={4} className="px-4 py-10 text-center text-slate-500">Chưa có công nợ đầu kỳ.</td></tr>
+                    ) : (
+                      openingDebts.map((row) => (
+                        <tr key={row.id} className="border-t border-slate-100">
+                          <td className="px-4 py-3">{row.vendorName}</td>
+                          <td className="px-4 py-3">{row.ngayApDung}</td>
+                          <td className="px-4 py-3 text-right font-semibold">{formatCurrency(row.soTien)}</td>
+                          <td className="px-4 py-3 text-center">
+                            <button type="button" onClick={() => softDeletePrintVendorOpeningDebt(row.id).then(loadDebtData)} className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50">
+                              <Trash2 size={14} />
+                              Xóa
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <div className="border-b border-slate-200 px-4 py-3">
+                <h3 className="font-semibold text-slate-800">Lịch sử thanh toán xưởng in</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50 text-left text-slate-600">
+                    <tr>
+                      <th className="px-4 py-3 font-medium">Xưởng in</th>
+                      <th className="px-4 py-3 font-medium">Ngày thanh toán</th>
+                      <th className="px-4 py-3 font-medium text-right">Số tiền</th>
+                      <th className="px-4 py-3 font-medium text-center">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payments.length === 0 ? (
+                      <tr><td colSpan={4} className="px-4 py-10 text-center text-slate-500">Chưa có khoản thanh toán nào.</td></tr>
+                    ) : (
+                      payments.map((row) => (
+                        <tr key={row.id} className="border-t border-slate-100">
+                          <td className="px-4 py-3">{row.vendorName}</td>
+                          <td className="px-4 py-3">{row.ngayThanhToan}</td>
+                          <td className="px-4 py-3 text-right font-semibold">{formatCurrency(row.soTien)}</td>
+                          <td className="px-4 py-3 text-center">
+                            <button type="button" onClick={() => softDeletePrintVendorPayment(row.id).then(loadDebtData)} className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50">
+                              <Trash2 size={14} />
+                              Xóa
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+
+      {openingDebtModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+              <h3 className="text-lg font-semibold text-slate-800">Thêm công nợ đầu kỳ</h3>
+              <button type="button" onClick={() => setOpeningDebtModalOpen(false)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><X size={18} /></button>
+            </div>
+            <div className="space-y-4 px-5 py-5">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">Xưởng in</label>
+                <select value={openingDebtForm.vendorId} onChange={(e) => setOpeningDebtForm((prev) => ({ ...prev, vendorId: e.target.value }))} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+                  <option value="">Chọn xưởng in</option>
+                  {vendors.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">Số tiền</label>
+                <input value={openingDebtForm.soTien} onChange={(e) => setOpeningDebtForm((prev) => ({ ...prev, soTien: e.target.value }))} type="number" min="0" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">Ngày áp dụng</label>
+                <input value={openingDebtForm.ngayApDung} onChange={(e) => setOpeningDebtForm((prev) => ({ ...prev, ngayApDung: e.target.value }))} type="date" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">Ghi chú</label>
+                <textarea value={openingDebtForm.ghiChu} onChange={(e) => setOpeningDebtForm((prev) => ({ ...prev, ghiChu: e.target.value }))} rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
+              <button type="button" onClick={() => setOpeningDebtModalOpen(false)} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700">Hủy</button>
+              <button type="button" onClick={handleCreateOpeningDebt} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white">Lưu công nợ đầu kỳ</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {paymentModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+              <h3 className="text-lg font-semibold text-slate-800">Thêm khoản thanh toán</h3>
+              <button type="button" onClick={() => setPaymentModalOpen(false)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><X size={18} /></button>
+            </div>
+            <div className="space-y-4 px-5 py-5">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">Xưởng in</label>
+                <select value={paymentForm.vendorId} onChange={(e) => setPaymentForm((prev) => ({ ...prev, vendorId: e.target.value }))} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+                  <option value="">Chọn xưởng in</option>
+                  {vendors.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">Số tiền đã thanh toán</label>
+                <input value={paymentForm.soTien} onChange={(e) => setPaymentForm((prev) => ({ ...prev, soTien: e.target.value }))} type="number" min="0" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">Ngày thanh toán</label>
+                <input value={paymentForm.ngayThanhToan} onChange={(e) => setPaymentForm((prev) => ({ ...prev, ngayThanhToan: e.target.value }))} type="date" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">Ghi chú</label>
+                <textarea value={paymentForm.ghiChu} onChange={(e) => setPaymentForm((prev) => ({ ...prev, ghiChu: e.target.value }))} rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
+              <button type="button" onClick={() => setPaymentModalOpen(false)} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700">Hủy</button>
+              <button type="button" onClick={handleCreatePayment} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white">Lưu thanh toán</button>
             </div>
           </div>
         </div>

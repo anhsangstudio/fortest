@@ -97,11 +97,13 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddingOrder, setIsAddingOrder] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [createForm, setCreateForm] = useState({ tenKhachHang: '', ngayGuiIn: new Date().toISOString().slice(0, 10), statusId: '' });
   const [isSavingModal, setIsSavingModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [savingMap, setSavingMap] = useState<SaveState>({});
-  const [dateRange, setDateRange] = useState({ from: '2026-03-01', to: '2026-03-31' });
+  const [dateRange, setDateRange] = useState({ from: '', to: '' });
 
   const [editingRow, setEditingRow] = useState<PrintOrder | null>(null);
   const [headerForm, setHeaderForm] = useState<HeaderFormState | null>(null);
@@ -323,19 +325,34 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
     setIsAddingItem(false);
   };
 
+  const openCreateModal = () => {
+    const defaultStatusId = catalogs.statuses.find((item) => item.name === 'ĐANG IN ẤN')?.id || '';
+    setCreateForm({
+      tenKhachHang: '',
+      ngayGuiIn: new Date().toISOString().slice(0, 10),
+      statusId: defaultStatusId,
+    });
+    setIsCreateModalOpen(true);
+  };
+
+  const closeCreateModal = () => {
+    setIsCreateModalOpen(false);
+    setIsAddingOrder(false);
+  };
+
   const handleAddOrder = async () => {
     setIsAddingOrder(true);
     setError(null);
 
     try {
-      const defaultStatusId = catalogs.statuses.find((item) => item.name === 'ĐANG IN ẤN')?.id || null;
       await createPrintOrder({
-        tenKhachHang: 'Khách mới',
-        ngayGuiIn: new Date().toISOString().slice(0, 10),
-        statusId: defaultStatusId,
+        tenKhachHang: createForm.tenKhachHang || 'Khách mới',
+        ngayGuiIn: createForm.ngayGuiIn || new Date().toISOString().slice(0, 10),
+        statusId: createForm.statusId || null,
       });
 
       setSuccessMessage('Đã tạo đơn in mới.');
+      closeCreateModal();
       await loadData();
     } catch (e: any) {
       console.error('Create print order error:', e);
@@ -614,12 +631,12 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
               <div className="flex flex-wrap gap-3">
                 <button
                   type="button"
-                  onClick={() => void handleAddOrder()}
+                  onClick={openCreateModal}
                   disabled={isAddingOrder || isLoading || !isConfigured}
                   className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isAddingOrder ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-                  Thêm đơn in
+                  Thêm mới đơn in
                 </button>
                 <button
                   type="button"
@@ -804,6 +821,66 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
             </div>
           </div>
         </>
+      )}
+
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-xl rounded-2xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Tạo đơn in mới</h3>
+                <p className="text-sm text-gray-500">Tạo đơn tổng trước, sau đó thêm các dòng sản phẩm in trong modal chi tiết.</p>
+              </div>
+              <button type="button" onClick={closeCreateModal} className="rounded-lg border border-gray-300 p-2 text-gray-600">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 px-6 py-6">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">Tên Khách Hàng</label>
+                <input
+                  value={createForm.tenKhachHang}
+                  onChange={(e) => setCreateForm((prev) => ({ ...prev, tenKhachHang: e.target.value }))}
+                  className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm"
+                  placeholder="Nhập tên khách hàng"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">Ngày gửi in</label>
+                <input
+                  type="date"
+                  value={createForm.ngayGuiIn}
+                  onChange={(e) => setCreateForm((prev) => ({ ...prev, ngayGuiIn: e.target.value }))}
+                  className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">TÌNH TRẠNG</label>
+                <select
+                  value={createForm.statusId}
+                  onChange={(e) => setCreateForm((prev) => ({ ...prev, statusId: e.target.value }))}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm"
+                >
+                  <option value="">Chọn</option>
+                  {catalogs.statuses.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 border-t border-gray-200 px-6 py-4">
+              <button type="button" onClick={closeCreateModal} className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700" disabled={isAddingOrder}>
+                Hủy
+              </button>
+              <button type="button" onClick={() => void handleAddOrder()} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60" disabled={isAddingOrder}>
+                {isAddingOrder && <Loader2 size={16} className="animate-spin" />}
+                Tạo đơn in
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {editingRow && headerForm && (

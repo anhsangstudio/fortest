@@ -17,6 +17,8 @@ import type {
   PrintVendorPrice,
   CreatePrintVendorPriceInput,
   UpdatePrintVendorPriceInput,
+  PrintCostRow,
+  PrintCostSummary,
 } from '../types';
 import {
   fetchPrintCatalogs,
@@ -33,6 +35,7 @@ import {
   createPrintMaterial,
   updatePrintMaterial,
   softDeletePrintMaterial,
+  fetchPrintCostData,
 } from '../apiService';
 
 type PriceFormState = {
@@ -77,6 +80,15 @@ const normalizeNullable = (value: string) => {
   return trimmed ? trimmed : null;
 };
 
+const EMPTY_COST_SUMMARY: PrintCostSummary = {
+  totalRows: 0,
+  totalOrders: 0,
+  totalQuantity: 0,
+  totalAmount: 0,
+  missingPriceRows: 0,
+  byVendor: [],
+};
+
 const PrintCostManager: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'pricing' | 'costs'>('pricing');
 
@@ -92,6 +104,13 @@ const PrintCostManager: React.FC = () => {
   const [filterSizeId, setFilterSizeId] = useState('');
   const [filterMaterialId, setFilterMaterialId] = useState('');
   const [searchText, setSearchText] = useState('');
+
+  const [costRows, setCostRows] = useState<PrintCostRow[]>([]);
+  const [costSummary, setCostSummary] = useState<PrintCostSummary>(EMPTY_COST_SUMMARY);
+  const [costLoading, setCostLoading] = useState(false);
+  const [costFrom, setCostFrom] = useState('');
+  const [costTo, setCostTo] = useState('');
+  const [costVendorId, setCostVendorId] = useState('');
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingPrice, setEditingPrice] = useState<PrintVendorPrice | null>(null);
@@ -127,8 +146,30 @@ const PrintCostManager: React.FC = () => {
     }
   };
 
+  const loadCostData = async () => {
+    try {
+      setCostLoading(true);
+      setPageError('');
+      const result = await fetchPrintCostData({
+        from: costFrom || undefined,
+        to: costTo || undefined,
+        vendorId: costVendorId || undefined,
+      });
+      setCostRows(result.rows || []);
+      setCostSummary(result.summary || EMPTY_COST_SUMMARY);
+    } catch (error: any) {
+      console.error('PrintCostManager.loadCostData error:', error);
+      setPageError(error?.message || 'Không tải được dữ liệu chi phí in ấn.');
+      setCostRows([]);
+      setCostSummary(EMPTY_COST_SUMMARY);
+    } finally {
+      setCostLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadData();
+    loadCostData();
   }, []);
 
   const resetForm = () => {
@@ -372,6 +413,21 @@ const PrintCostManager: React.FC = () => {
   const totalActivePrices = filteredPrices.length;
   const totalAmount = filteredPrices.reduce((sum, row) => sum + Number(row.donGia || 0), 0);
 
+  const productSummary = useMemo(() => {
+    const map = new Map<string, { quantity: number; amount: number; orders: Set<string> }>();
+    costRows.forEach((row) => {
+      const key = [row.sizeName || 'Chưa chọn kích thước', row.materialName || 'Chưa chọn chất liệu'].join(' - ');
+      const current = map.get(key) || { quantity: 0, amount: 0, orders: new Set<string>() };
+      current.quantity += Number(row.quantity || 0);
+      current.amount += Number(row.amount || 0);
+      current.orders.add(row.orderId);
+      map.set(key, current);
+    });
+    return Array.from(map.entries())
+      .map(([name, value]) => ({ name, quantity: value.quantity, amount: value.amount, orderCount: value.orders.size }))
+      .sort((a, b) => b.quantity - a.quantity);
+  }, [costRows]);
+
   return (
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -385,7 +441,7 @@ const PrintCostManager: React.FC = () => {
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={loadData}
+            onClick={() => { loadData(); loadCostData(); }}
             className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             <RefreshCw size={16} />
@@ -593,12 +649,217 @@ const PrintCostManager: React.FC = () => {
       )}
 
       {activeTab === 'costs' && (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
-          <div className="text-lg font-semibold text-slate-800">Tab Chi phí in ấn</div>
-          <p className="mt-2 text-sm text-slate-500">
-            Bước này chưa triển khai UI. Ở bước tiếp theo sẽ nối bảng chi phí với RPC:
-            rpc_get_print_cost_rows và rpc_get_print_cost_summary_by_vendor.
-          </p>
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Từ ngày</label>
+              <input
+                type="date"
+                value={costFrom}
+                onChange={(e) => setCostFrom(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Đến ngày</label>
+              <input
+                type="date"
+                value={costTo}
+                onChange={(e) => setCostTo(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Xưởng in</label>
+              <select
+                value={costVendorId}
+                onChange={(e) => setCostVendorId(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              >
+                <option value="">Tất cả</option>
+                {vendors.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-end gap-2">
+              <button
+                type="button"
+                onClick={loadCostData}
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+              >
+                <RefreshCw size={16} />
+                Tải dữ liệu
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCostFrom('');
+                  setCostTo('');
+                  setCostVendorId('');
+                }}
+                className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Xóa lọc
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="text-sm text-slate-500">Tổng dòng chi phí</div>
+              <div className="mt-1 text-2xl font-bold text-slate-900">{costSummary.totalRows}</div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="text-sm text-slate-500">Tổng đơn in</div>
+              <div className="mt-1 text-2xl font-bold text-slate-900">{costSummary.totalOrders}</div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="text-sm text-slate-500">Tổng số lượng</div>
+              <div className="mt-1 text-2xl font-bold text-slate-900">{costSummary.totalQuantity.toLocaleString('vi-VN')}</div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="text-sm text-slate-500">Tổng thành tiền</div>
+              <div className="mt-1 text-2xl font-bold text-slate-900">{formatCurrency(costSummary.totalAmount)}</div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="text-sm text-slate-500">Dòng thiếu báo giá</div>
+              <div className="mt-1 text-2xl font-bold text-amber-600">{costSummary.missingPriceRows}</div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="mb-3 text-base font-semibold text-slate-800">Tổng hợp theo xưởng in</div>
+              <div className="space-y-3">
+                {costSummary.byVendor.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+                    Chưa có dữ liệu theo bộ lọc hiện tại.
+                  </div>
+                ) : (
+                  costSummary.byVendor.map((row) => (
+                    <div key={`${row.vendorId}-${row.vendorName}`} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <div className="font-semibold text-slate-900">{row.vendorName || 'Chưa chọn xưởng'}</div>
+                          <div className="mt-1 text-xs text-slate-500">
+                            {row.totalRows} dòng • {row.totalQuantity.toLocaleString('vi-VN')} sản phẩm
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-semibold text-slate-900">{formatCurrency(row.totalAmount)}</div>
+                          <div className="mt-1 text-xs text-amber-600">Thiếu báo giá: {row.missingPriceRows}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="mb-3 text-base font-semibold text-slate-800">Tổng hợp theo sản phẩm in</div>
+              <div className="space-y-3">
+                {productSummary.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+                    Chưa có dữ liệu sản phẩm theo bộ lọc hiện tại.
+                  </div>
+                ) : (
+                  productSummary.map((row) => (
+                    <div key={row.name} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <div className="font-semibold text-slate-900">{row.name}</div>
+                          <div className="mt-1 text-xs text-slate-500">{row.orderCount} đơn</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-semibold text-slate-900">{row.quantity.toLocaleString('vi-VN')}</div>
+                          <div className="mt-1 text-xs text-slate-500">{formatCurrency(row.amount)}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <div className="border-b border-slate-200 px-4 py-3">
+              <div className="text-base font-semibold text-slate-800">Danh sách dòng chi phí in ấn</div>
+              <div className="mt-1 text-sm text-slate-500">
+                Dữ liệu lấy từ các dòng sản phẩm in đã lưu trong đơn in.
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50 text-left text-slate-600">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Ngày gửi in</th>
+                    <th className="px-4 py-3 font-medium">Khách hàng</th>
+                    <th className="px-4 py-3 font-medium">Mã HĐ</th>
+                    <th className="px-4 py-3 font-medium">Xưởng in</th>
+                    <th className="px-4 py-3 font-medium">Kích thước</th>
+                    <th className="px-4 py-3 font-medium">Chất liệu</th>
+                    <th className="px-4 py-3 font-medium text-right">Số lượng</th>
+                    <th className="px-4 py-3 font-medium text-right">Đơn giá</th>
+                    <th className="px-4 py-3 font-medium text-right">Thành tiền</th>
+                    <th className="px-4 py-3 font-medium text-center">Trạng thái giá</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {costLoading ? (
+                    <tr>
+                      <td colSpan={10} className="px-4 py-10 text-center text-slate-500">
+                        <div className="inline-flex items-center gap-2">
+                          <Loader2 size={16} className="animate-spin" />
+                          Đang tải dữ liệu chi phí in ấn...
+                        </div>
+                      </td>
+                    </tr>
+                  ) : costRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} className="px-4 py-10 text-center text-slate-500">
+                        Chưa có dòng chi phí in ấn theo bộ lọc hiện tại.
+                      </td>
+                    </tr>
+                  ) : (
+                    costRows.map((row) => (
+                      <tr key={row.rowId} className="border-t border-slate-100">
+                        <td className="px-4 py-3">{row.ngayGuiIn || '-'}</td>
+                        <td className="px-4 py-3 font-medium text-slate-800">{row.tenKhachHang || '-'}</td>
+                        <td className="px-4 py-3">{row.contractCode || '-'}</td>
+                        <td className="px-4 py-3">{row.vendorName || 'Chưa chọn xưởng'}</td>
+                        <td className="px-4 py-3">{row.sizeName || '-'}</td>
+                        <td className="px-4 py-3">{row.materialName || '-'}</td>
+                        <td className="px-4 py-3 text-right">{Number(row.quantity || 0).toLocaleString('vi-VN')}</td>
+                        <td className="px-4 py-3 text-right">{formatCurrency(row.unitPrice)}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-slate-900">{formatCurrency(row.amount)}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+                            row.pricingStatus === 'matched'
+                              ? 'bg-emerald-50 text-emerald-700'
+                              : 'bg-amber-50 text-amber-700'
+                          }`}>
+                            {row.pricingStatus === 'matched' ? 'Đã khớp giá' : 'Thiếu báo giá'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
 

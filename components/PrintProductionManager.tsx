@@ -3,6 +3,7 @@ import {
   ClipboardList,
   BarChart3,
   Filter,
+  Plus,
   Copy,
   Trash2,
   Printer,
@@ -12,15 +13,19 @@ import {
   CheckCircle2,
   Pencil,
   X,
+  Package2,
 } from 'lucide-react';
 import {
+  createPrintOrder,
+  duplicatePrintOrder,
   fetchPrintCatalogs,
-  fetchPrintOrderItems,
+  fetchPrintOrders,
   isConfigured,
+  softDeletePrintOrder,
   supabase,
   updatePrintOrder,
 } from '../apiService';
-import { PrintCatalogOption, PrintOrderItemRow, Staff } from '../types';
+import { PrintCatalogOption, PrintOrder, PrintOrderItemRow, Staff } from '../types';
 
 interface Props {
   currentUser: Staff | null;
@@ -34,23 +39,29 @@ type CatalogState = {
   statuses: PrintCatalogOption[];
 };
 type StaffOption = { id: string; name: string };
-type EditFormState = {
+
+type HeaderFormState = {
   id: string;
-  printOrderId: string;
   tenKhachHang: string;
   ngayGuiIn: string;
-  soLuong: number;
-  kichThuocId: string;
-  chatLieuId: string;
   statusId: string;
-  vendorId: string;
   nguoiKiemTraNhanAnh: string;
+  ghiChu: string;
+  linkFiles: string;
+};
+
+type ItemEditState = {
+  id: string;
+  soLuong: number;
+  sizeId: string;
+  materialId: string;
+  vendorId: string;
   ghiChuItem: string;
-  ghiChuDon: string;
   donGiaIn: number;
 };
 
 const emptyCatalogs: CatalogState = { sizes: [], materials: [], vendors: [], statuses: [] };
+
 const formatNumber = (value: number) => value.toLocaleString('vi-VN');
 
 const toNonNegativeNumber = (value: string | number) => {
@@ -59,47 +70,63 @@ const toNonNegativeNumber = (value: string | number) => {
   return parsed;
 };
 
-const createEditFormFromRow = (row: PrintOrderItemRow): EditFormState => ({
+const createHeaderFormFromRow = (row: PrintOrder): HeaderFormState => ({
   id: row.id,
-  printOrderId: row.printOrderId,
   tenKhachHang: row.tenKhachHang || '',
   ngayGuiIn: row.ngayGuiIn || '',
-  soLuong: Number(row.soLuong || 0),
-  kichThuocId: row.sizeId || '',
-  chatLieuId: row.materialId || '',
   statusId: row.statusId || '',
-  vendorId: row.vendorId || '',
   nguoiKiemTraNhanAnh: row.nguoiKiemTraNhanAnh || '',
+  ghiChu: row.ghiChu || '',
+  linkFiles: row.linkFiles || '',
+});
+
+const createItemEditState = (row: PrintOrderItemRow): ItemEditState => ({
+  id: row.id,
+  soLuong: Number(row.soLuong || 0),
+  sizeId: row.sizeId || '',
+  materialId: row.materialId || '',
+  vendorId: row.vendorId || '',
   ghiChuItem: row.ghiChuItem || '',
-  ghiChuDon: row.ghiChuDon || '',
   donGiaIn: Number(row.donGiaIn || 0),
 });
 
 const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
   const [activeTab, setActiveTab] = useState<'list' | 'report'>('list');
-  const [rows, setRows] = useState<PrintOrderItemRow[]>([]);
+  const [rows, setRows] = useState<PrintOrder[]>([]);
   const [catalogs, setCatalogs] = useState<CatalogState>(emptyCatalogs);
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAddingOrder, setIsAddingOrder] = useState(false);
+  const [isSavingModal, setIsSavingModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [savingMap, setSavingMap] = useState<SaveState>({});
   const [dateRange, setDateRange] = useState({ from: '2026-03-01', to: '2026-03-31' });
-  const [editingRow, setEditingRow] = useState<PrintOrderItemRow | null>(null);
-  const [editForm, setEditForm] = useState<EditFormState | null>(null);
-  const [isSavingModal, setIsSavingModal] = useState(false);
+
+  const [editingRow, setEditingRow] = useState<PrintOrder | null>(null);
+  const [headerForm, setHeaderForm] = useState<HeaderFormState | null>(null);
+
+  const [orderItems, setOrderItems] = useState<PrintOrderItemRow[]>([]);
+  const [loadingItems, setLoadingItems] = useState(false);
+  const [itemForms, setItemForms] = useState<Record<string, ItemEditState>>({});
+  const [itemSavingMap, setItemSavingMap] = useState<SaveState>({});
+  const [isAddingItem, setIsAddingItem] = useState(false);
 
   const isAdminOrDirector = useMemo(() => {
     if (!currentUser) return false;
     return currentUser.username === 'admin' || currentUser.role === 'Giám đốc';
   }, [currentUser]);
 
-  const canDeleteRow = isAdminOrDirector;
+  const canDeleteOrder = isAdminOrDirector;
   const canEditProtectedFields = isAdminOrDirector;
-  const canDuplicateRow = isAdminOrDirector;
+  const canDuplicateOrder = isAdminOrDirector;
 
   const setRowSaving = (rowId: string, value: boolean) => {
     setSavingMap((prev) => ({ ...prev, [rowId]: value }));
+  };
+
+  const setItemSaving = (itemId: string, value: boolean) => {
+    setItemSavingMap((prev) => ({ ...prev, [itemId]: value }));
   };
 
   const loadStaffOptions = async () => {
@@ -119,6 +146,44 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
       .map((item: any) => ({ id: item.id, name: item.name || item.id }));
   };
 
+  const mapItemRow = (db: any): PrintOrderItemRow => ({
+    id: db.id,
+    printOrderId: db.print_order_id,
+    contractId: db.contract_id ?? null,
+    contractCode: db.contract_code || '',
+    customerId: db.customer_id ?? null,
+    tenKhachHang: db.ten_khach_hang || '',
+    ngayGuiIn: db.ngay_gui_in || '',
+    linkTheTrello: db.link_the_trello || '',
+    linkFiles: db.link_files || '',
+    trelloCardId: db.trello_card_id ?? null,
+    trelloBoardId: db.trello_board_id ?? null,
+    trelloListId: db.trello_list_id ?? null,
+    statusId: db.status_id ?? null,
+    tenTrangThai: db.ten_trang_thai || '',
+    nguoiKiemTraNhanAnh: db.nguoi_kiem_tra_nhan_anh || '',
+    tenNguoiKiemTraNhanAnh: db.ten_nguoi_kiem_tra_nhan_anh || '',
+    soLuong: Number(db.so_luong || 0),
+    sizeId: db.size_id ?? null,
+    tenKichThuoc: db.ten_kich_thuoc || '',
+    materialId: db.material_id ?? null,
+    tenChatLieu: db.ten_chat_lieu || '',
+    vendorId: db.vendor_id ?? null,
+    tenXuongIn: db.ten_xuong_in || '',
+    donGiaIn: Number(db.don_gia_in || 0),
+    thanhTien: Number(db.thanh_tien || 0),
+    ghiChuItem: db.ghi_chu_item || '',
+    ghiChuDon: db.ghi_chu_don || '',
+    thuTuHienThi: Number(db.thu_tu_hien_thi || 0),
+    dangSuDung: db.dang_su_dung !== false,
+    thongBaoDaCoAnh: !!db.thong_bao_da_co_anh,
+    thongBaoDaGiaoAnh: !!db.thong_bao_da_giao_anh,
+    thongBaoDangInAnh: !!db.thong_bao_dang_in_anh,
+    checkFlag: !!db.check_flag,
+    createdAt: db.created_at || '',
+    updatedAt: db.updated_at || '',
+  });
+
   const loadData = async () => {
     if (!isConfigured) {
       setError('Chưa cấu hình Supabase. Vui lòng kiểm tra VITE_SUPABASE_URL và VITE_SUPABASE_ANON_KEY.');
@@ -133,16 +198,13 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
     setError(null);
 
     try {
-      const [items, catalogData, staffData] = await Promise.all([
-        fetchPrintOrderItems({
-          dateFrom: dateRange.from || null,
-          dateTo: dateRange.to || null,
-        }),
+      const [orders, catalogData, staffData] = await Promise.all([
+        fetchPrintOrders(),
         fetchPrintCatalogs(),
         loadStaffOptions(),
       ]);
 
-      setRows(items);
+      setRows(orders);
       setCatalogs(catalogData);
       setStaffOptions(staffData);
     } catch (e: any) {
@@ -153,6 +215,39 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
     }
   };
 
+  const loadOrderItems = async (printOrderId: string) => {
+    if (!supabase) return;
+
+    setLoadingItems(true);
+
+    try {
+      const { data, error: loadItemsError } = await supabase
+        .from('print_order_items_view')
+        .select('*')
+        .eq('print_order_id', printOrderId)
+        .order('thu_tu_hien_thi', { ascending: true })
+        .order('created_at', { ascending: true });
+
+      if (loadItemsError) throw loadItemsError;
+
+      const mapped = (data || []).map(mapItemRow);
+      setOrderItems(mapped);
+
+      const forms: Record<string, ItemEditState> = {};
+      mapped.forEach((item) => {
+        forms[item.id] = createItemEditState(item);
+      });
+      setItemForms(forms);
+    } catch (e: any) {
+      console.error('Load print order items error:', e);
+      setError(e?.message || 'Không tải được dòng sản phẩm in.');
+      setOrderItems([]);
+      setItemForms({});
+    } finally {
+      setLoadingItems(false);
+    }
+  };
+
   useEffect(() => {
     void loadData();
   }, []);
@@ -160,20 +255,22 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
   useEffect(() => {
     if (!isConfigured || !supabase) return;
 
-    const channelOrders = supabase
-      .channel('print-orders-realtime-v2')
+    const channel = supabase
+      .channel('print-orders-realtime-header-items')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'print_orders' }, () => {
         void loadData();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'print_order_items' }, () => {
-        void loadData();
+        if (editingRow) {
+          void loadOrderItems(editingRow.id);
+        }
       })
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channelOrders);
+      supabase.removeChannel(channel);
     };
-  }, []);
+  }, [editingRow]);
 
   useEffect(() => {
     if (!successMessage) return;
@@ -183,156 +280,278 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
-      if (dateRange.from && row.ngayGuiIn < dateRange.from) return false;
-      if (dateRange.to && row.ngayGuiIn > dateRange.to) return false;
+      if (dateRange.from && row.ngayGuiIn && row.ngayGuiIn < dateRange.from) return false;
+      if (dateRange.to && row.ngayGuiIn && row.ngayGuiIn > dateRange.to) return false;
       return true;
     });
   }, [rows, dateRange]);
 
-  const totalQuantity = useMemo(
-    () => filteredRows.reduce((sum, row) => sum + Number(row.soLuong || 0), 0),
-    [filteredRows]
-  );
+  const totalOrders = filteredRows.length;
 
-  const totalOrders = useMemo(
-    () => new Set(filteredRows.map((row) => row.printOrderId)).size,
-    [filteredRows]
-  );
-
-  const totalItems = filteredRows.length;
-
-  const totalAmount = useMemo(
-    () => filteredRows.reduce((sum, row) => sum + Number(row.thanhTien || 0), 0),
-    [filteredRows]
-  );
-
-  const reportByVendor = useMemo(() => {
-    const map = new Map<string, { totalQuantity: number; totalAmount: number }>();
+  const reportByStatus = useMemo(() => {
+    const map = new Map<string, number>();
     filteredRows.forEach((row) => {
-      const key = row.tenXuongIn || 'Chưa chọn xưởng';
-      const current = map.get(key) || { totalQuantity: 0, totalAmount: 0 };
-      current.totalQuantity += Number(row.soLuong || 0);
-      current.totalAmount += Number(row.thanhTien || 0);
-      map.set(key, current);
+      const key = row.tenTrangThai || 'Chưa chọn trạng thái';
+      map.set(key, (map.get(key) || 0) + 1);
     });
-    return Array.from(map.entries()).map(([name, value]) => ({
-      name,
-      totalQuantity: value.totalQuantity,
-      totalAmount: value.totalAmount,
-    }));
+    return Array.from(map.entries()).map(([name, total]) => ({ name, total }));
   }, [filteredRows]);
 
-  const openEditModal = (row: PrintOrderItemRow) => {
+  const reportByVendor = useMemo(() => {
+    const map = new Map<string, number>();
+    filteredRows.forEach((row) => {
+      const key = row.tenXuongIn || 'Chưa chọn xưởng';
+      map.set(key, (map.get(key) || 0) + 1);
+    });
+    return Array.from(map.entries()).map(([name, total]) => ({ name, total }));
+  }, [filteredRows]);
+
+  const openEditModal = async (row: PrintOrder) => {
     setEditingRow(row);
-    setEditForm(createEditFormFromRow(row));
+    setHeaderForm(createHeaderFormFromRow(row));
+    setOrderItems([]);
+    setItemForms({});
+    await loadOrderItems(row.id);
   };
 
   const closeEditModal = () => {
     setEditingRow(null);
-    setEditForm(null);
+    setHeaderForm(null);
+    setOrderItems([]);
+    setItemForms({});
     setIsSavingModal(false);
+    setIsAddingItem(false);
   };
 
-  const handleDuplicateRow = async (row: PrintOrderItemRow) => {
-    if (!canDuplicateRow || !supabase) return;
+  const handleAddOrder = async () => {
+    setIsAddingOrder(true);
+    setError(null);
+
+    try {
+      const defaultStatusId = catalogs.statuses.find((item) => item.name === 'ĐANG IN ẤN')?.id || null;
+      await createPrintOrder({
+        tenKhachHang: 'Khách mới',
+        ngayGuiIn: new Date().toISOString().slice(0, 10),
+        statusId: defaultStatusId,
+      });
+
+      setSuccessMessage('Đã tạo đơn in mới.');
+      await loadData();
+    } catch (e: any) {
+      console.error('Create print order error:', e);
+      setError(e?.message || 'Không tạo được đơn in mới.');
+    } finally {
+      setIsAddingOrder(false);
+    }
+  };
+
+  const handleDuplicateOrder = async (row: PrintOrder) => {
+    if (!canDuplicateOrder) return;
 
     setRowSaving(row.id, true);
     setError(null);
 
     try {
-      const { error: duplicateError } = await supabase.from('print_order_items').insert({
-        print_order_id: row.printOrderId,
-        so_luong: Number(row.soLuong || 0),
-        size_id: row.sizeId || null,
-        material_id: row.materialId || null,
-        vendor_id: row.vendorId || null,
-        don_gia_in: Number(row.donGiaIn || 0),
-        ghi_chu: row.ghiChuItem || null,
-        thu_tu_hien_thi: Number(row.thuTuHienThi || 0) + 1,
-        dang_su_dung: true,
-      });
-
-      if (duplicateError) throw duplicateError;
-
-      setSuccessMessage('Đã nhân bản dòng sản phẩm in.');
+      await duplicatePrintOrder(row);
+      setSuccessMessage('Đã nhân bản đơn in.');
       await loadData();
     } catch (e: any) {
-      console.error('Duplicate print item error:', e);
-      setError(e?.message || 'Không nhân bản được dòng sản phẩm in.');
+      console.error('Duplicate print order error:', e);
+      setError(e?.message || 'Không nhân bản được đơn in.');
     } finally {
       setRowSaving(row.id, false);
     }
   };
 
-  const handleDeleteRow = async (row: PrintOrderItemRow) => {
-    if (!canDeleteRow || !supabase) return;
+  const handleDeleteOrder = async (row: PrintOrder) => {
+    if (!canDeleteOrder) return;
 
-    const confirmed = window.confirm(`Bạn có chắc muốn ẩn dòng in của "${row.tenKhachHang}" không?`);
+    const confirmed = window.confirm(`Bạn có chắc muốn ẩn đơn in của "${row.tenKhachHang}"?`);
     if (!confirmed) return;
 
     setRowSaving(row.id, true);
     setError(null);
 
     try {
-      const { error: deleteError } = await supabase
-        .from('print_order_items')
-        .update({ dang_su_dung: false })
-        .eq('id', row.id);
-
-      if (deleteError) throw deleteError;
-
-      setSuccessMessage('Đã xóa mềm dòng sản phẩm in.');
+      await softDeletePrintOrder(row.id);
+      setSuccessMessage('Đã xóa mềm đơn in.');
       await loadData();
     } catch (e: any) {
-      console.error('Delete print item error:', e);
-      setError(e?.message || 'Không xóa được dòng sản phẩm in.');
+      console.error('Delete print order error:', e);
+      setError(e?.message || 'Không xóa được đơn in.');
     } finally {
       setRowSaving(row.id, false);
     }
   };
 
-  const handleSaveModal = async () => {
-    if (!editingRow || !editForm || !supabase) return;
+  const handleSaveHeader = async () => {
+    if (!headerForm) return;
 
     setIsSavingModal(true);
     setError(null);
 
     try {
-      const orderPayload: Record<string, any> = {
-        status_id: editForm.statusId || null,
-        nguoi_kiem_tra_nhan_anh: editForm.nguoiKiemTraNhanAnh || null,
-        ghi_chu: editForm.ghiChuDon || null,
+      const patch: Record<string, any> = {
+        status_id: headerForm.statusId || null,
+        nguoi_kiem_tra_nhan_anh: headerForm.nguoiKiemTraNhanAnh || null,
+        ghi_chu: headerForm.ghiChu || '',
+        link_files: headerForm.linkFiles || '',
       };
 
       if (canEditProtectedFields) {
-        orderPayload.ten_khach_hang = editForm.tenKhachHang;
-        orderPayload.ngay_gui_in = editForm.ngayGuiIn || null;
+        patch.ten_khach_hang = headerForm.tenKhachHang || '';
+        patch.ngay_gui_in = headerForm.ngayGuiIn || null;
       }
 
-      await updatePrintOrder(editForm.printOrderId, orderPayload);
+      await updatePrintOrder(headerForm.id, patch);
 
-      const { error: itemUpdateError } = await supabase
-        .from('print_order_items')
-        .update({
-          so_luong: toNonNegativeNumber(editForm.soLuong),
-          size_id: editForm.kichThuocId || null,
-          material_id: editForm.chatLieuId || null,
-          vendor_id: editForm.vendorId || null,
-          don_gia_in: toNonNegativeNumber(editForm.donGiaIn),
-          ghi_chu: editForm.ghiChuItem || null,
-        })
-        .eq('id', editForm.id);
-
-      if (itemUpdateError) throw itemUpdateError;
-
-      setSuccessMessage('Đã cập nhật dòng in ấn.');
-      closeEditModal();
+      setSuccessMessage('Đã cập nhật thông tin đơn in.');
       await loadData();
+
+      const updatedHeader = rows.find((item) => item.id === headerForm.id);
+      if (updatedHeader) {
+        setEditingRow(updatedHeader);
+      }
     } catch (e: any) {
-      console.error('Update print order item error:', e);
-      setError(e?.message || 'Không cập nhật được dòng in ấn.');
+      console.error('Update print order header error:', e);
+      setError(e?.message || 'Không cập nhật được đơn in.');
     } finally {
       setIsSavingModal(false);
+    }
+  };
+
+  const handleAddItem = async () => {
+    if (!editingRow || !supabase) return;
+
+    setIsAddingItem(true);
+    setError(null);
+
+    try {
+      const nextSort = orderItems.length > 0
+        ? Math.max(...orderItems.map((item) => Number(item.thuTuHienThi || 0))) + 1
+        : 1;
+
+      const { error: insertError } = await supabase
+        .from('print_order_items')
+        .insert({
+          print_order_id: editingRow.id,
+          so_luong: 0,
+          size_id: null,
+          material_id: null,
+          vendor_id: editingRow.vendorId || null,
+          don_gia_in: 0,
+          ghi_chu: '',
+          thu_tu_hien_thi: nextSort,
+          dang_su_dung: true,
+        });
+
+      if (insertError) throw insertError;
+
+      setSuccessMessage('Đã thêm dòng sản phẩm in.');
+      await loadOrderItems(editingRow.id);
+    } catch (e: any) {
+      console.error('Add print order item error:', e);
+      setError(e?.message || 'Không thêm được dòng sản phẩm in.');
+    } finally {
+      setIsAddingItem(false);
+    }
+  };
+
+  const handleDuplicateItem = async (item: PrintOrderItemRow) => {
+    if (!supabase) return;
+
+    setItemSaving(item.id, true);
+    setError(null);
+
+    try {
+      const nextSort = orderItems.length > 0
+        ? Math.max(...orderItems.map((row) => Number(row.thuTuHienThi || 0))) + 1
+        : Number(item.thuTuHienThi || 0) + 1;
+
+      const { error: duplicateError } = await supabase
+        .from('print_order_items')
+        .insert({
+          print_order_id: item.printOrderId,
+          so_luong: Number(item.soLuong || 0),
+          size_id: item.sizeId || null,
+          material_id: item.materialId || null,
+          vendor_id: item.vendorId || null,
+          don_gia_in: Number(item.donGiaIn || 0),
+          ghi_chu: item.ghiChuItem || '',
+          thu_tu_hien_thi: nextSort,
+          dang_su_dung: true,
+        });
+
+      if (duplicateError) throw duplicateError;
+
+      setSuccessMessage('Đã nhân bản dòng sản phẩm in.');
+      await loadOrderItems(item.printOrderId);
+    } catch (e: any) {
+      console.error('Duplicate print order item error:', e);
+      setError(e?.message || 'Không nhân bản được dòng sản phẩm in.');
+    } finally {
+      setItemSaving(item.id, false);
+    }
+  };
+
+  const handleDeleteItem = async (item: PrintOrderItemRow) => {
+    if (!canDeleteOrder || !supabase) return;
+
+    const confirmed = window.confirm('Bạn có chắc muốn ẩn dòng sản phẩm in này?');
+    if (!confirmed) return;
+
+    setItemSaving(item.id, true);
+    setError(null);
+
+    try {
+      const { error: deleteError } = await supabase
+        .from('print_order_items')
+        .update({ dang_su_dung: false })
+        .eq('id', item.id);
+
+      if (deleteError) throw deleteError;
+
+      setSuccessMessage('Đã xóa mềm dòng sản phẩm in.');
+      await loadOrderItems(item.printOrderId);
+    } catch (e: any) {
+      console.error('Delete print order item error:', e);
+      setError(e?.message || 'Không xóa được dòng sản phẩm in.');
+    } finally {
+      setItemSaving(item.id, false);
+    }
+  };
+
+  const handleSaveItem = async (itemId: string) => {
+    if (!supabase || !editingRow) return;
+
+    const form = itemForms[itemId];
+    if (!form) return;
+
+    setItemSaving(itemId, true);
+    setError(null);
+
+    try {
+      const { error: updateError } = await supabase
+        .from('print_order_items')
+        .update({
+          so_luong: toNonNegativeNumber(form.soLuong),
+          size_id: form.sizeId || null,
+          material_id: form.materialId || null,
+          vendor_id: form.vendorId || null,
+          don_gia_in: toNonNegativeNumber(form.donGiaIn),
+          ghi_chu: form.ghiChuItem || '',
+        })
+        .eq('id', itemId);
+
+      if (updateError) throw updateError;
+
+      setSuccessMessage('Đã lưu dòng sản phẩm in.');
+      await loadOrderItems(editingRow.id);
+    } catch (e: any) {
+      console.error('Update print order item error:', e);
+      setError(e?.message || 'Không cập nhật được dòng sản phẩm in.');
+    } finally {
+      setItemSaving(itemId, false);
     }
   };
 
@@ -347,7 +566,7 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Module Báo Cáo In Ấn</h1>
               <p className="mt-1 text-sm text-gray-500">
-                Danh sách vận hành đang đọc theo mô hình mới: 1 đơn in tổng + nhiều dòng sản phẩm in.
+                Danh sách chính hiển thị theo đơn in tổng. Bên trong modal quản lý nhiều dòng sản phẩm in.
               </p>
             </div>
           </div>
@@ -390,9 +609,18 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-center gap-2">
                 <ClipboardList size={18} className="text-gray-500" />
-                <h2 className="text-base font-semibold text-gray-800">Danh sách vận hành in ấn theo từng dòng sản phẩm</h2>
+                <h2 className="text-base font-semibold text-gray-800">Danh sách đơn in tổng</h2>
               </div>
               <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => void handleAddOrder()}
+                  disabled={isAddingOrder || isLoading || !isConfigured}
+                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isAddingOrder ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                  Thêm đơn in
+                </button>
                 <button
                   type="button"
                   onClick={() => void loadData()}
@@ -407,18 +635,16 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
           </div>
 
           <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
-            <table className="min-w-[1450px] w-full">
+            <table className="min-w-[1350px] w-full">
               <thead className="bg-amber-200">
                 <tr className="text-sm font-semibold text-gray-900">
+                  <th className="px-3 py-3 text-left">Ngày gửi in</th>
                   <th className="px-3 py-3 text-left">Tên Khách Hàng</th>
                   <th className="px-3 py-3 text-left">Mã HĐ</th>
-                  <th className="px-3 py-3 text-left">Ngày gửi in</th>
-                  <th className="px-3 py-3 text-left">Số Lượng</th>
-                  <th className="px-3 py-3 text-left">Kích Thước</th>
-                  <th className="px-3 py-3 text-left">Chất Liệu</th>
                   <th className="px-3 py-3 text-left">TÌNH TRẠNG</th>
                   <th className="px-3 py-3 text-left">XƯỞNG IN</th>
                   <th className="px-3 py-3 text-left">NGƯỜI KIỂM TRA NHẬN ẢNH</th>
+                  <th className="px-3 py-3 text-left">Link file</th>
                   <th className="px-3 py-3 text-left">GHI CHÚ</th>
                   <th className="px-3 py-3 text-left">Thao tác</th>
                 </tr>
@@ -426,10 +652,10 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
               <tbody>
                 {isLoading && (
                   <tr>
-                    <td colSpan={11} className="px-6 py-14">
+                    <td colSpan={9} className="px-6 py-14">
                       <div className="flex items-center justify-center gap-3 text-sm text-gray-500">
                         <Loader2 size={18} className="animate-spin" />
-                        Đang tải dữ liệu item in ấn từ Supabase...
+                        Đang tải dữ liệu đơn in từ Supabase...
                       </div>
                     </td>
                   </tr>
@@ -437,33 +663,29 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
 
                 {!isLoading && filteredRows.map((row) => {
                   const isSavingRow = !!savingMap[row.id];
-                  const displayNote = row.ghiChuItem || row.ghiChuDon || '';
-
                   return (
-                    <tr key={row.id} className="cursor-pointer border-t border-gray-100 hover:bg-gray-50" onClick={() => openEditModal(row)}>
+                    <tr key={row.id} className="cursor-pointer border-t border-gray-100 hover:bg-gray-50" onClick={() => void openEditModal(row)}>
+                      <td className="min-w-[140px] px-3 py-3 text-sm text-gray-700">{row.ngayGuiIn || ''}</td>
                       <td className="min-w-[220px] px-3 py-3 text-sm text-gray-900">{row.tenKhachHang}</td>
                       <td className="min-w-[120px] px-3 py-3 text-sm text-gray-700">{row.contractCode || ''}</td>
-                      <td className="min-w-[150px] px-3 py-3 text-sm text-gray-700">{row.ngayGuiIn}</td>
-                      <td className="min-w-[110px] px-3 py-3 text-sm text-gray-700">{row.soLuong}</td>
-                      <td className="min-w-[140px] px-3 py-3 text-sm text-gray-700">{row.tenKichThuoc || ''}</td>
-                      <td className="min-w-[140px] px-3 py-3 text-sm text-gray-700">{row.tenChatLieu || ''}</td>
                       <td className="min-w-[150px] px-3 py-3 text-sm text-gray-700">{row.tenTrangThai || ''}</td>
                       <td className="min-w-[150px] px-3 py-3 text-sm text-gray-700">{row.tenXuongIn || ''}</td>
-                      <td className="min-w-[180px] px-3 py-3 text-sm text-gray-700">{row.tenNguoiKiemTraNhanAnh || row.nguoiKiemTraNhanAnh || ''}</td>
-                      <td className="min-w-[220px] px-3 py-3 text-sm text-gray-700">{displayNote}</td>
+                      <td className="min-w-[180px] px-3 py-3 text-sm text-gray-700">{row.nguoiKiemTraNhanAnh || ''}</td>
+                      <td className="min-w-[220px] px-3 py-3 text-sm text-gray-700 truncate">{row.linkFiles || ''}</td>
+                      <td className="min-w-[220px] px-3 py-3 text-sm text-gray-700">{row.ghiChu || ''}</td>
                       <td className="min-w-[130px] px-3 py-3" onClick={(event) => event.stopPropagation()}>
                         <div className="flex items-center gap-2">
                           {isSavingRow && <Loader2 size={15} className="animate-spin text-blue-600" />}
-                          <button type="button" onClick={() => openEditModal(row)} className="rounded-lg border border-gray-300 p-2 text-gray-700" title="Sửa" disabled={isSavingRow}>
+                          <button type="button" onClick={() => void openEditModal(row)} className="rounded-lg border border-gray-300 p-2 text-gray-700" title="Sửa" disabled={isSavingRow}>
                             <Pencil size={15} />
                           </button>
-                          {canDuplicateRow && (
-                            <button type="button" onClick={() => void handleDuplicateRow(row)} className="rounded-lg border border-gray-300 p-2 text-gray-700" title="Nhân bản" disabled={isSavingRow}>
+                          {canDuplicateOrder && (
+                            <button type="button" onClick={() => void handleDuplicateOrder(row)} className="rounded-lg border border-gray-300 p-2 text-gray-700" title="Nhân bản đơn" disabled={isSavingRow}>
                               <Copy size={15} />
                             </button>
                           )}
-                          {canDeleteRow && (
-                            <button type="button" onClick={() => void handleDeleteRow(row)} className="rounded-lg border border-red-200 p-2 text-red-600" title="Xóa" disabled={isSavingRow}>
+                          {canDeleteOrder && (
+                            <button type="button" onClick={() => void handleDeleteOrder(row)} className="rounded-lg border border-red-200 p-2 text-red-600" title="Xóa đơn" disabled={isSavingRow}>
                               <Trash2 size={15} />
                             </button>
                           )}
@@ -475,8 +697,8 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
 
                 {!isLoading && filteredRows.length === 0 && (
                   <tr>
-                    <td colSpan={11} className="px-6 py-12 text-center text-sm text-gray-500">
-                      Chưa có dữ liệu item in ấn trong Supabase.
+                    <td colSpan={9} className="px-6 py-12 text-center text-sm text-gray-500">
+                      Chưa có dữ liệu đơn in trong Supabase.
                     </td>
                   </tr>
                 )}
@@ -525,56 +747,72 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
               <div className="text-sm text-gray-500">Tổng đơn in</div>
               <div className="mt-2 text-3xl font-bold text-gray-900">{totalOrders}</div>
             </div>
             <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <div className="text-sm text-gray-500">Tổng dòng sản phẩm</div>
-              <div className="mt-2 text-3xl font-bold text-gray-900">{totalItems}</div>
+              <div className="text-sm text-gray-500">Có link file</div>
+              <div className="mt-2 text-3xl font-bold text-gray-900">{filteredRows.filter((row) => !!row.linkFiles).length}</div>
             </div>
             <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <div className="text-sm text-gray-500">Tổng số lượng</div>
-              <div className="mt-2 text-3xl font-bold text-gray-900">{formatNumber(totalQuantity)}</div>
-            </div>
-            <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <div className="text-sm text-gray-500">Tổng chi phí in</div>
-              <div className="mt-2 text-3xl font-bold text-gray-900">{formatNumber(totalAmount)}</div>
+              <div className="text-sm text-gray-500">Có xưởng in</div>
+              <div className="mt-2 text-3xl font-bold text-gray-900">{filteredRows.filter((row) => !!row.vendorId).length}</div>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex items-center gap-2">
-              <BarChart3 size={18} className="text-gray-500" />
-              <h2 className="text-base font-semibold text-gray-800">Tổng hợp theo xưởng in</h2>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+              <div className="mb-4 flex items-center gap-2">
+                <BarChart3 size={18} className="text-gray-500" />
+                <h2 className="text-base font-semibold text-gray-800">Tổng hợp theo trạng thái</h2>
+              </div>
+              <div className="space-y-3">
+                {reportByStatus.map((item) => (
+                  <div key={item.name} className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                    <div className="text-sm font-medium text-gray-800">{item.name}</div>
+                    <div className="text-lg font-bold text-gray-900">{formatNumber(item.total)}</div>
+                  </div>
+                ))}
+                {reportByStatus.length === 0 && (
+                  <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-500">
+                    Chưa có dữ liệu theo khoảng ngày đã chọn.
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-              {reportByVendor.map((item) => (
-                <div key={item.name} className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-                  <div className="text-sm font-semibold text-gray-800">{item.name}</div>
-                  <div className="mt-2 text-2xl font-bold text-gray-900">{formatNumber(item.totalQuantity)}</div>
-                  <div className="mt-1 text-sm text-gray-500">tổng số lượng đang vận hành</div>
-                  <div className="mt-3 text-sm font-medium text-gray-700">Chi phí: {formatNumber(item.totalAmount)}</div>
-                </div>
-              ))}
-              {reportByVendor.length === 0 && (
-                <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-500">
-                  Chưa có dữ liệu theo khoảng ngày đã chọn.
-                </div>
-              )}
+
+            <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+              <div className="mb-4 flex items-center gap-2">
+                <BarChart3 size={18} className="text-gray-500" />
+                <h2 className="text-base font-semibold text-gray-800">Tổng hợp theo xưởng in</h2>
+              </div>
+              <div className="space-y-3">
+                {reportByVendor.map((item) => (
+                  <div key={item.name} className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                    <div className="text-sm font-medium text-gray-800">{item.name}</div>
+                    <div className="text-lg font-bold text-gray-900">{formatNumber(item.total)}</div>
+                  </div>
+                ))}
+                {reportByVendor.length === 0 && (
+                  <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-500">
+                    Chưa có dữ liệu theo khoảng ngày đã chọn.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </>
       )}
 
-      {editingRow && editForm && (
+      {editingRow && headerForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white shadow-xl">
+          <div className="max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-2xl bg-white shadow-xl">
             <div className="sticky top-0 flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Chỉnh sửa dòng in ấn</h3>
-                <p className="text-sm text-gray-500">Đang chỉnh theo mô hình item: header đơn in + dòng sản phẩm in.</p>
+                <h3 className="text-lg font-semibold text-gray-900">Chỉnh sửa đơn in</h3>
+                <p className="text-sm text-gray-500">Đơn tổng ở phía trên, các dòng sản phẩm in ở phía dưới.</p>
               </div>
               <button type="button" onClick={closeEditModal} className="rounded-lg border border-gray-300 p-2 text-gray-600">
                 <X size={16} />
@@ -585,8 +823,8 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
               <div>
                 <label className="mb-2 block text-sm font-medium text-gray-700">Tên Khách Hàng</label>
                 <input
-                  value={editForm.tenKhachHang}
-                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, tenKhachHang: e.target.value } : prev))}
+                  value={headerForm.tenKhachHang}
+                  onChange={(e) => setHeaderForm((prev) => (prev ? { ...prev, tenKhachHang: e.target.value } : prev))}
                   className={`w-full rounded-xl border px-4 py-2.5 text-sm ${canEditProtectedFields ? 'border-gray-300' : 'border-gray-200 bg-gray-100 text-gray-500'}`}
                   disabled={!canEditProtectedFields}
                 />
@@ -596,53 +834,18 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
                 <label className="mb-2 block text-sm font-medium text-gray-700">Ngày gửi in</label>
                 <input
                   type="date"
-                  value={editForm.ngayGuiIn}
-                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, ngayGuiIn: e.target.value } : prev))}
+                  value={headerForm.ngayGuiIn}
+                  onChange={(e) => setHeaderForm((prev) => (prev ? { ...prev, ngayGuiIn: e.target.value } : prev))}
                   className={`w-full rounded-xl border px-4 py-2.5 text-sm ${canEditProtectedFields ? 'border-gray-300' : 'border-gray-200 bg-gray-100 text-gray-500'}`}
                   disabled={!canEditProtectedFields}
                 />
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-gray-700">Số Lượng</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={editForm.soLuong}
-                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, soLuong: toNonNegativeNumber(e.target.value) } : prev))}
-                  className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-medium text-gray-700">Kích Thước</label>
-                <select
-                  value={editForm.kichThuocId}
-                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, kichThuocId: e.target.value } : prev))}
-                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm"
-                >
-                  <option value="">Chọn</option>
-                  {catalogs.sizes.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-medium text-gray-700">Chất Liệu</label>
-                <select
-                  value={editForm.chatLieuId}
-                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, chatLieuId: e.target.value } : prev))}
-                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm"
-                >
-                  <option value="">Chọn</option>
-                  {catalogs.materials.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
-                </select>
-              </div>
-
-              <div>
                 <label className="mb-2 block text-sm font-medium text-gray-700">TÌNH TRẠNG</label>
                 <select
-                  value={editForm.statusId}
-                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, statusId: e.target.value } : prev))}
+                  value={headerForm.statusId}
+                  onChange={(e) => setHeaderForm((prev) => (prev ? { ...prev, statusId: e.target.value } : prev))}
                   className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm"
                 >
                   <option value="">Chọn</option>
@@ -651,22 +854,10 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-gray-700">XƯỞNG IN</label>
-                <select
-                  value={editForm.vendorId}
-                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, vendorId: e.target.value } : prev))}
-                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm"
-                >
-                  <option value="">Chọn</option>
-                  {catalogs.vendors.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
-                </select>
-              </div>
-
-              <div>
                 <label className="mb-2 block text-sm font-medium text-gray-700">NGƯỜI KIỂM TRA NHẬN ẢNH</label>
                 <select
-                  value={editForm.nguoiKiemTraNhanAnh}
-                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, nguoiKiemTraNhanAnh: e.target.value } : prev))}
+                  value={headerForm.nguoiKiemTraNhanAnh}
+                  onChange={(e) => setHeaderForm((prev) => (prev ? { ...prev, nguoiKiemTraNhanAnh: e.target.value } : prev))}
                   className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm"
                 >
                   <option value="">Chọn</option>
@@ -674,23 +865,11 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
                 </select>
               </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-gray-700">Đơn giá in</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={editForm.donGiaIn}
-                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, donGiaIn: toNonNegativeNumber(e.target.value) } : prev))}
-                  className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm"
-                />
-              </div>
-
               <div className="md:col-span-2">
-                <label className="mb-2 block text-sm font-medium text-gray-700">GHI CHÚ DÒNG IN</label>
-                <textarea
-                  value={editForm.ghiChuItem}
-                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, ghiChuItem: e.target.value } : prev))}
-                  rows={3}
+                <label className="mb-2 block text-sm font-medium text-gray-700">Link File In</label>
+                <input
+                  value={headerForm.linkFiles}
+                  onChange={(e) => setHeaderForm((prev) => (prev ? { ...prev, linkFiles: e.target.value } : prev))}
                   className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm"
                 />
               </div>
@@ -698,12 +877,160 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
               <div className="md:col-span-2">
                 <label className="mb-2 block text-sm font-medium text-gray-700">GHI CHÚ ĐƠN IN</label>
                 <textarea
-                  value={editForm.ghiChuDon}
-                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, ghiChuDon: e.target.value } : prev))}
+                  value={headerForm.ghiChu}
+                  onChange={(e) => setHeaderForm((prev) => (prev ? { ...prev, ghiChu: e.target.value } : prev))}
                   rows={3}
                   className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm"
                 />
               </div>
+            </div>
+
+            <div className="border-t border-gray-200 px-6 py-4">
+              <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="flex items-center gap-2">
+                  <Package2 size={18} className="text-gray-500" />
+                  <h4 className="text-base font-semibold text-gray-800">Danh sách dòng sản phẩm in</h4>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleAddItem()}
+                  disabled={isAddingItem}
+                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                >
+                  {isAddingItem ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                  Thêm dòng sản phẩm
+                </button>
+              </div>
+
+              {loadingItems ? (
+                <div className="rounded-2xl border border-gray-200 bg-gray-50 p-6 text-sm text-gray-500">
+                  Đang tải danh sách dòng sản phẩm in...
+                </div>
+              ) : orderItems.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-6 text-sm text-gray-500">
+                  Đơn này chưa có dòng sản phẩm in. Hãy bấm “Thêm dòng sản phẩm”.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {orderItems.map((item, index) => {
+                    const form = itemForms[item.id];
+                    const isSavingItem = !!itemSavingMap[item.id];
+                    if (!form) return null;
+
+                    return (
+                      <div key={item.id} className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                        <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                          <div className="text-sm font-semibold text-gray-800">Dòng sản phẩm #{index + 1}</div>
+                          <div className="flex items-center gap-2">
+                            {isSavingItem && <Loader2 size={15} className="animate-spin text-blue-600" />}
+                            <button
+                              type="button"
+                              onClick={() => void handleDuplicateItem(item)}
+                              className="rounded-lg border border-gray-300 bg-white p-2 text-gray-700"
+                              title="Nhân bản dòng"
+                              disabled={isSavingItem}
+                            >
+                              <Copy size={15} />
+                            </button>
+                            {canDeleteOrder && (
+                              <button
+                                type="button"
+                                onClick={() => void handleDeleteItem(item)}
+                                className="rounded-lg border border-red-200 bg-white p-2 text-red-600"
+                                title="Xóa dòng"
+                                disabled={isSavingItem}
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                          <div>
+                            <label className="mb-2 block text-sm font-medium text-gray-700">Số Lượng</label>
+                            <input
+                              type="number"
+                              min={0}
+                              value={form.soLuong}
+                              onChange={(e) => setItemForms((prev) => ({ ...prev, [item.id]: { ...prev[item.id], soLuong: toNonNegativeNumber(e.target.value) } }))}
+                              className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-2 block text-sm font-medium text-gray-700">Kích Thước</label>
+                            <select
+                              value={form.sizeId}
+                              onChange={(e) => setItemForms((prev) => ({ ...prev, [item.id]: { ...prev[item.id], sizeId: e.target.value } }))}
+                              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm"
+                            >
+                              <option value="">Chọn</option>
+                              {catalogs.sizes.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="mb-2 block text-sm font-medium text-gray-700">Chất Liệu</label>
+                            <select
+                              value={form.materialId}
+                              onChange={(e) => setItemForms((prev) => ({ ...prev, [item.id]: { ...prev[item.id], materialId: e.target.value } }))}
+                              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm"
+                            >
+                              <option value="">Chọn</option>
+                              {catalogs.materials.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="mb-2 block text-sm font-medium text-gray-700">XƯỞNG IN</label>
+                            <select
+                              value={form.vendorId}
+                              onChange={(e) => setItemForms((prev) => ({ ...prev, [item.id]: { ...prev[item.id], vendorId: e.target.value } }))}
+                              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm"
+                            >
+                              <option value="">Chọn</option>
+                              {catalogs.vendors.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="mb-2 block text-sm font-medium text-gray-700">Đơn Giá In</label>
+                            <input
+                              type="number"
+                              min={0}
+                              value={form.donGiaIn}
+                              onChange={(e) => setItemForms((prev) => ({ ...prev, [item.id]: { ...prev[item.id], donGiaIn: toNonNegativeNumber(e.target.value) } }))}
+                              className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm"
+                            />
+                          </div>
+
+                          <div className="xl:col-span-2">
+                            <label className="mb-2 block text-sm font-medium text-gray-700">GHI CHÚ DÒNG</label>
+                            <input
+                              value={form.ghiChuItem}
+                              onChange={(e) => setItemForms((prev) => ({ ...prev, [item.id]: { ...prev[item.id], ghiChuItem: e.target.value } }))}
+                              className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="mt-4 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => void handleSaveItem(item.id)}
+                            disabled={isSavingItem}
+                            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                          >
+                            {isSavingItem && <Loader2 size={16} className="animate-spin" />}
+                            Lưu dòng sản phẩm
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-between border-t border-gray-200 px-6 py-4">
@@ -716,9 +1043,9 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
                 <button type="button" onClick={closeEditModal} className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700" disabled={isSavingModal}>
                   Hủy
                 </button>
-                <button type="button" onClick={() => void handleSaveModal()} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60" disabled={isSavingModal}>
+                <button type="button" onClick={() => void handleSaveHeader()} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60" disabled={isSavingModal}>
                   {isSavingModal && <Loader2 size={16} className="animate-spin" />}
-                  Lưu thay đổi
+                  Lưu thông tin đơn in
                 </button>
               </div>
             </div>

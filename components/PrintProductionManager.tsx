@@ -9,13 +9,13 @@ type CatalogState = { sizes: PrintCatalogOption[]; materials: PrintCatalogOption
 type StaffOption = { id: string; name: string };
 type HeaderFormState = { id: string; tenKhachHang: string; ngayGuiIn: string; statusId: string; nguoiKiemTraNhanAnh: string; ghiChu: string; linkFiles: string; };
 type ModalItemRow = PrintOrderItemRow & { itemStatusId?: string | null; tenTrangThaiItem?: string; };
-type ItemEditState = { id: string; soLuong: number; sizeId: string; materialId: string; vendorId: string; itemStatusId: string; ghiChuItem: string; donGiaIn: number; };
+type ItemEditState = { id: string; soLuong: number; sizeId: string; materialId: string; vendorId: string; itemStatusId: string; };
 
 const emptyCatalogs: CatalogState = { sizes: [], materials: [], vendors: [], statuses: [] };
 const formatNumber = (value: number) => value.toLocaleString('vi-VN');
 const toNonNegativeNumber = (value: string | number) => { const parsed = Number(value); return !Number.isFinite(parsed) || parsed < 0 ? 0 : parsed; };
 const createHeaderFormFromRow = (row: PrintOrder): HeaderFormState => ({ id: row.id, tenKhachHang: row.tenKhachHang || '', ngayGuiIn: row.ngayGuiIn || '', statusId: row.statusId || '', nguoiKiemTraNhanAnh: row.nguoiKiemTraNhanAnh || '', ghiChu: row.ghiChu || '', linkFiles: row.linkFiles || '' });
-const createItemEditState = (row: ModalItemRow): ItemEditState => ({ id: row.id, soLuong: Number(row.soLuong || 0), sizeId: row.sizeId || '', materialId: row.materialId || '', vendorId: row.vendorId || '', itemStatusId: row.itemStatusId || row.statusId || '', ghiChuItem: row.ghiChuItem || '', donGiaIn: Number(row.donGiaIn || 0) });
+const createItemEditState = (row: ModalItemRow): ItemEditState => ({ id: row.id, soLuong: Number(row.soLuong || 0), sizeId: row.sizeId || '', materialId: row.materialId || '', vendorId: row.vendorId || '', itemStatusId: row.itemStatusId || row.statusId || '' });
 
 const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
   const [activeTab, setActiveTab] = useState<'list' | 'report'>('list');
@@ -207,7 +207,7 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
     const form = itemForms[itemId]; if (!form) return;
     setItemSaving(itemId, true); setError(null);
     try {
-      const { error: updateError } = await supabase.from('print_order_items').update({ so_luong: toNonNegativeNumber(form.soLuong), size_id: form.sizeId || null, material_id: form.materialId || null, vendor_id: form.vendorId || null, status_id: form.itemStatusId || null, don_gia_in: toNonNegativeNumber(form.donGiaIn), ghi_chu: form.ghiChuItem || '' }).eq('id', itemId);
+      const { error: updateError } = await supabase.from('print_order_items').update({ so_luong: toNonNegativeNumber(form.soLuong), size_id: form.sizeId || null, material_id: form.materialId || null, vendor_id: form.vendorId || null, status_id: form.itemStatusId || null }).eq('id', itemId);
       if (updateError) throw updateError;
       const nextForms = { ...itemForms, [itemId]: form };
       const autoHeaderStatus = computeHeaderStatusFromItems(nextForms);
@@ -215,9 +215,9 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
         await updatePrintOrder(editingRow.id, { status_id: autoHeaderStatus });
         setHeaderForm((prev) => (prev ? { ...prev, statusId: autoHeaderStatus } : prev));
       }
-      setSuccessMessage('Đã lưu dòng sản phẩm in.'); await loadOrderItems(editingRow.id); await loadData();
+      setSuccessMessage('Đã lưu sản phẩm in.'); await loadOrderItems(editingRow.id); await loadData();
     } catch (e: any) {
-      console.error('Update print order item error:', e); setError(e?.message || 'Không cập nhật được dòng sản phẩm in.');
+      console.error('Update print order item error:', e); setError(e?.message || 'Không cập nhật được sản phẩm in.');
     } finally { setItemSaving(itemId, false); }
   };
 
@@ -316,23 +316,30 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
                   <div><label className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Tình Trạng</label><select value={form.itemStatusId} onChange={(e) => setItemForms((prev) => ({ ...prev, [item.id]: { ...prev[item.id], itemStatusId: e.target.value } }))} className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium"><option value="">Chọn</option>{catalogs.statuses.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></div>
                 </div>
 
-                <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[1fr_220px_180px]">
-                  <div><label className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Ghi Chú Dòng</label><input value={form.ghiChuItem} onChange={(e) => setItemForms((prev) => ({ ...prev, [item.id]: { ...prev[item.id], ghiChuItem: e.target.value } }))} className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium" /></div>
-                  <div><label className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Đơn Giá In</label><input type="number" min={0} value={form.donGiaIn} onChange={(e) => setItemForms((prev) => ({ ...prev, [item.id]: { ...prev[item.id], donGiaIn: toNonNegativeNumber(e.target.value) } }))} className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium" /></div>
-                  <div className="flex items-end"><button type="button" onClick={() => void handleSaveItem(item.id)} disabled={isSavingItem} className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-60">{isSavingItem && <Loader2 size={16} className="animate-spin" />}Lưu sản phẩm</button></div>
-                </div>
+                <div className="mt-4 flex justify-end"><button type="button" onClick={() => void handleSaveItem(item.id)} disabled={isSavingItem} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white disabled:opacity-60">{isSavingItem && <Loader2 size={16} className="animate-spin" />}Lưu sản phẩm</button></div>
               </div>;
             })}
           </div>}</div>
         </section>
 
         <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-2 text-[12px] font-black uppercase tracking-[0.16em] text-cyan-600"><LinkIcon size={16} /><span>3. Link File In</span></div>
+          <div className="flex items-center gap-2 text-[12px] font-black uppercase tracking-[0.16em] text-amber-600"><UserRound size={16} /><span>3. Người Kiểm Tra Ảnh</span></div>
+          <div className="mt-5">
+            <label className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Người Kiểm Tra Ảnh</label>
+            <select value={headerForm.nguoiKiemTraNhanAnh} onChange={(e) => setHeaderForm((prev) => (prev ? { ...prev, nguoiKiemTraNhanAnh: e.target.value } : prev))} className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium">
+              <option value="">Chọn</option>
+              {staffOptions.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+            </select>
+          </div>
+        </section>
+
+        <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center gap-2 text-[12px] font-black uppercase tracking-[0.16em] text-cyan-600"><LinkIcon size={16} /><span>4. Link File In</span></div>
           <div className="mt-5"><label className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Link File In</label><input value={headerForm.linkFiles} onChange={(e) => setHeaderForm((prev) => (prev ? { ...prev, linkFiles: e.target.value } : prev))} className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium" /></div>
         </section>
 
         <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-2 text-[12px] font-black uppercase tracking-[0.16em] text-violet-600"><FileText size={16} /><span>4. Ghi Chú</span></div>
+          <div className="flex items-center gap-2 text-[12px] font-black uppercase tracking-[0.16em] text-violet-600"><FileText size={16} /><span>5. Ghi Chú</span></div>
           <div className="mt-5"><label className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Ghi Chú Đơn In</label><textarea value={headerForm.ghiChu} onChange={(e) => setHeaderForm((prev) => (prev ? { ...prev, ghiChu: e.target.value } : prev))} rows={4} className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium" /></div>
         </section>
       </div>

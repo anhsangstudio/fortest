@@ -9,6 +9,7 @@ type CatalogState = { sizes: PrintCatalogOption[]; materials: PrintCatalogOption
 type StaffOption = { id: string; name: string };
 type HeaderFormState = { id: string; tenKhachHang: string; ngayGuiIn: string; statusId: string; nguoiKiemTraNhanAnh: string; ghiChu: string; linkFiles: string; };
 type ModalItemRow = PrintOrderItemRow & { itemStatusId?: string | null; tenTrangThaiItem?: string; };
+type ReportItemRow = ModalItemRow;
 type ItemEditState = { id: string; soLuong: number; sizeId: string; materialId: string; vendorId: string; itemStatusId: string; };
 
 const emptyCatalogs: CatalogState = { sizes: [], materials: [], vendors: [], statuses: [] };
@@ -31,9 +32,13 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [savingMap, setSavingMap] = useState<SaveState>({});
   const [dateRange, setDateRange] = useState({ from: '', to: '' });
+  const [listDateRange, setListDateRange] = useState({ from: '', to: '' });
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
   const [editingRow, setEditingRow] = useState<PrintOrder | null>(null);
   const [headerForm, setHeaderForm] = useState<HeaderFormState | null>(null);
   const [orderItems, setOrderItems] = useState<ModalItemRow[]>([]);
+  const [reportItems, setReportItems] = useState<ReportItemRow[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
   const [itemForms, setItemForms] = useState<Record<string, ItemEditState>>({});
   const [itemSavingMap, setItemSavingMap] = useState<SaveState>({});
@@ -91,6 +96,22 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
     } finally { setLoadingItems(false); }
   };
 
+  const loadReportItems = async () => {
+    if (!supabase) return;
+    try {
+      let query = supabase.from('print_order_items_view').select('*').order('ngay_gui_in', { ascending: false }).order('print_order_id', { ascending: true }).order('thu_tu_hien_thi', { ascending: true });
+      if (dateRange.from) query = query.gte('ngay_gui_in', dateRange.from);
+      if (dateRange.to) query = query.lte('ngay_gui_in', dateRange.to);
+      const { data, error: loadReportError } = await query;
+      if (loadReportError) throw loadReportError;
+      setReportItems((data || []).map(mapItemRow));
+    } catch (e: any) {
+      console.error('Load report items error:', e);
+      setError(e?.message || 'Không tải được dữ liệu báo cáo sản phẩm in.');
+      setReportItems([]);
+    }
+  };
+
   useEffect(() => { void loadData(); }, []);
   useEffect(() => {
     if (!isConfigured || !supabase) return;
@@ -101,11 +122,85 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
     return () => { supabase.removeChannel(channel); };
   }, [editingRow]);
   useEffect(() => { if (!successMessage) return; const timer = window.setTimeout(() => setSuccessMessage(null), 2500); return () => window.clearTimeout(timer); }, [successMessage]);
+  useEffect(() => { void loadReportItems(); }, [dateRange.from, dateRange.to]);
+  useEffect(() => { setCurrentPage(1); }, [listDateRange.from, listDateRange.to, rows.length]);
 
-  const filteredRows = useMemo(() => rows.filter((row) => { if (dateRange.from && row.ngayGuiIn && row.ngayGuiIn < dateRange.from) return false; if (dateRange.to && row.ngayGuiIn && row.ngayGuiIn > dateRange.to) return false; return true; }), [rows, dateRange]);
+  const filteredRows = useMemo(() => {
+    const filtered = rows.filter((row) => {
+      if (listDateRange.from && row.ngayGuiIn && row.ngayGuiIn < listDateRange.from) return false;
+      if (listDateRange.to && row.ngayGuiIn && row.ngayGuiIn > listDateRange.to) return false;
+      return true;
+    });
+
+    return [...filtered].sort((a, b) => {
+      const dateA = a.createdAt || a.ngayGuiIn || '';
+      const dateB = b.createdAt || b.ngayGuiIn || '';
+      if (dateA !== dateB) return String(dateB).localeCompare(String(dateA));
+      return String(b.id).localeCompare(String(a.id));
+    });
+  }, [rows, listDateRange]);
+
   const totalOrders = filteredRows.length;
-  const reportByStatus = useMemo(() => { const map = new Map<string, number>(); filteredRows.forEach((row) => { const key = row.tenTrangThai || 'Chưa chọn trạng thái'; map.set(key, (map.get(key) || 0) + 1); }); return Array.from(map.entries()).map(([name, total]) => ({ name, total })); }, [filteredRows]);
-  const reportByVendor = useMemo(() => { const map = new Map<string, number>(); filteredRows.forEach((row) => { const key = row.tenXuongIn || 'Chưa chọn xưởng'; map.set(key, (map.get(key) || 0) + 1); }); return Array.from(map.entries()).map(([name, total]) => ({ name, total })); }, [filteredRows]);
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const paginatedRows = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredRows.slice(start, start + pageSize);
+  }, [filteredRows, currentPage]);
+  const totalProductQuantity = useMemo(() => reportItems.reduce((sum, item) => sum + Number(item.soLuong || 0), 0), [reportItems]);
+
+  const productSummaryInPeriod = useMemo(() => {
+    const map = new Map<string, { quantity: number; orders: Set<string> }>();
+    reportItems.forEach((item) => {
+      const productName = [item.tenKichThuoc || 'Chưa chọn kích thước', item.tenChatLieu || 'Chưa chọn chất liệu'].join(' - ');
+      const entry = map.get(productName) || { quantity: 0, orders: new Set<string>() };
+      entry.quantity += Number(item.soLuong || 0);
+      entry.orders.add(item.printOrderId);
+      map.set(productName, entry);
+    });
+    return Array.from(map.entries())
+      .map(([name, value]) => ({ name, quantity: value.quantity, orderCount: value.orders.size }))
+      .sort((a, b) => b.quantity - a.quantity);
+  }, [reportItems]);
+
+  const reportByStatus = useMemo(() => {
+    const map = new Map<string, { orders: Set<string>; products: Map<string, number> }>();
+    reportItems.forEach((item) => {
+      const key = item.tenTrangThai || 'Chưa chọn trạng thái';
+      const productName = [item.tenKichThuoc || 'Chưa chọn kích thước', item.tenChatLieu || 'Chưa chọn chất liệu'].join(' - ');
+      const entry = map.get(key) || { orders: new Set<string>(), products: new Map<string, number>() };
+      entry.orders.add(item.printOrderId);
+      entry.products.set(productName, (entry.products.get(productName) || 0) + Number(item.soLuong || 0));
+      map.set(key, entry);
+    });
+    return Array.from(map.entries()).map(([name, value]) => ({
+      name,
+      totalOrders: value.orders.size,
+      products: Array.from(value.products.entries())
+        .map(([product, quantity]) => ({ product, quantity }))
+        .sort((a, b) => b.quantity - a.quantity),
+      totalQuantity: Array.from(value.products.values()).reduce((sum, qty) => sum + qty, 0),
+    }));
+  }, [reportItems]);
+
+  const reportByVendor = useMemo(() => {
+    const map = new Map<string, { orders: Set<string>; products: Map<string, number> }>();
+    reportItems.forEach((item) => {
+      const key = item.tenXuongIn || 'Chưa chọn xưởng';
+      const productName = [item.tenKichThuoc || 'Chưa chọn kích thước', item.tenChatLieu || 'Chưa chọn chất liệu'].join(' - ');
+      const entry = map.get(key) || { orders: new Set<string>(), products: new Map<string, number>() };
+      entry.orders.add(item.printOrderId);
+      entry.products.set(productName, (entry.products.get(productName) || 0) + Number(item.soLuong || 0));
+      map.set(key, entry);
+    });
+    return Array.from(map.entries()).map(([name, value]) => ({
+      name,
+      totalOrders: value.orders.size,
+      products: Array.from(value.products.entries())
+        .map(([product, quantity]) => ({ product, quantity }))
+        .sort((a, b) => b.quantity - a.quantity),
+      totalQuantity: Array.from(value.products.values()).reduce((sum, qty) => sum + qty, 0),
+    }));
+  }, [reportItems]);
 
   const computeHeaderStatusFromItems = (forms: Record<string, ItemEditState>) => {
     const items = Object.values(forms);
@@ -246,12 +341,28 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
             <button type="button" onClick={() => void loadData()} disabled={isLoading} className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 disabled:cursor-not-allowed disabled:opacity-60"><RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />Làm mới</button>
           </div>
         </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div>
+            <label className="mb-2 block text-sm font-medium text-gray-700">Từ ngày</label>
+            <input type="date" value={listDateRange.from} onChange={(e) => setListDateRange((prev) => ({ ...prev, from: e.target.value }))} className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm" />
+          </div>
+          <div>
+            <label className="mb-2 block text-sm font-medium text-gray-700">Đến ngày</label>
+            <input type="date" value={listDateRange.to} onChange={(e) => setListDateRange((prev) => ({ ...prev, to: e.target.value }))} className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm" />
+          </div>
+          <div className="flex items-end">
+            <button type="button" onClick={() => setListDateRange({ from: '', to: '' })} className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700">
+              Xóa lọc ngày
+            </button>
+          </div>
+        </div>
       </div>
       <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
         <table className="min-w-[1350px] w-full"><thead className="bg-amber-200"><tr className="text-sm font-semibold text-gray-900"><th className="px-3 py-3 text-left">Ngày gửi in</th><th className="px-3 py-3 text-left">Tên Khách Hàng</th><th className="px-3 py-3 text-left">Mã HĐ</th><th className="px-3 py-3 text-left">TÌNH TRẠNG</th><th className="px-3 py-3 text-left">XƯỞNG IN</th><th className="px-3 py-3 text-left">NGƯỜI KIỂM TRA NHẬN ẢNH</th><th className="px-3 py-3 text-left">Link file</th><th className="px-3 py-3 text-left">GHI CHÚ</th><th className="px-3 py-3 text-left">Thao tác</th></tr></thead>
           <tbody>
             {isLoading && <tr><td colSpan={9} className="px-6 py-14"><div className="flex items-center justify-center gap-3 text-sm text-gray-500"><Loader2 size={18} className="animate-spin" />Đang tải dữ liệu đơn in từ Supabase...</div></td></tr>}
-            {!isLoading && filteredRows.map((row) => {
+            {!isLoading && paginatedRows.map((row) => {
               const isSavingRow = !!savingMap[row.id];
               return <tr key={row.id} className="cursor-pointer border-t border-gray-100 hover:bg-gray-50" onClick={() => void openEditModal(row)}>
                 <td className="min-w-[140px] px-3 py-3 text-sm text-gray-700">{row.ngayGuiIn || ''}</td><td className="min-w-[220px] px-3 py-3 text-sm text-gray-900">{row.tenKhachHang}</td><td className="min-w-[120px] px-3 py-3 text-sm text-gray-700">{row.contractCode || ''}</td><td className="min-w-[150px] px-3 py-3 text-sm text-gray-700">{row.tenTrangThai || ''}</td><td className="min-w-[150px] px-3 py-3 text-sm text-gray-700">{row.tenXuongIn || ''}</td><td className="min-w-[180px] px-3 py-3 text-sm text-gray-700">{row.nguoiKiemTraNhanAnh || ''}</td><td className="min-w-[220px] px-3 py-3 text-sm text-gray-700 truncate">{row.linkFiles || ''}</td><td className="min-w-[220px] px-3 py-3 text-sm text-gray-700">{row.ghiChu || ''}</td>
@@ -262,6 +373,14 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
           </tbody>
         </table>
       </div>
+      <div className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white px-5 py-4 shadow-sm md:flex-row md:items-center md:justify-between">
+        <div className="text-sm text-gray-600">Hiển thị {(filteredRows.length === 0) ? 0 : ((currentPage - 1) * pageSize + 1)} - {Math.min(currentPage * pageSize, filteredRows.length)} trên {filteredRows.length} đơn in</div>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1} className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 disabled:opacity-50">Trang trước</button>
+          <div className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">Trang {currentPage}/{totalPages}</div>
+          <button type="button" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 disabled:opacity-50">Trang sau</button>
+        </div>
+      </div>
     </>}
 
     {activeTab === 'report' && <>
@@ -270,17 +389,38 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <div><label className="mb-2 block text-sm font-medium text-gray-700">Từ ngày</label><input type="date" value={dateRange.from} onChange={(e) => setDateRange((prev) => ({ ...prev, from: e.target.value }))} className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm" /></div>
           <div><label className="mb-2 block text-sm font-medium text-gray-700">Đến ngày</label><input type="date" value={dateRange.to} onChange={(e) => setDateRange((prev) => ({ ...prev, to: e.target.value }))} className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm" /></div>
-          <div className="flex items-end"><button type="button" onClick={() => void loadData()} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white"><RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />Tải báo cáo</button></div>
+          <div className="flex items-end"><button type="button" onClick={() => { void loadData(); void loadReportItems(); }} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white"><RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />Tải báo cáo</button></div>
         </div>
       </div>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"><div className="text-sm text-gray-500">Tổng đơn in</div><div className="mt-2 text-3xl font-bold text-gray-900">{totalOrders}</div></div>
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"><div className="text-sm text-gray-500">Có link file</div><div className="mt-2 text-3xl font-bold text-gray-900">{filteredRows.filter((row) => !!row.linkFiles).length}</div></div>
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"><div className="text-sm text-gray-500">Có xưởng in</div><div className="mt-2 text-3xl font-bold text-gray-900">{filteredRows.filter((row) => !!row.vendorId).length}</div></div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"><div className="text-sm text-gray-500">Tổng đơn in trong kỳ</div><div className="mt-2 text-3xl font-bold text-gray-900">{totalOrders}</div></div>
+        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"><div className="text-sm text-gray-500">Tổng số lượng sản phẩm in trong kỳ</div><div className="mt-2 text-3xl font-bold text-gray-900">{formatNumber(totalProductQuantity)}</div></div>
       </div>
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="mb-4 flex items-center gap-2"><BarChart3 size={18} className="text-gray-500" /><h2 className="text-base font-semibold text-gray-800">Tổng hợp số lượng theo sản phẩm in trong kỳ</h2></div>
+        <div className="space-y-3">
+          {productSummaryInPeriod.map((item) => <div key={item.name} className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-4 py-3"><div><div className="text-sm font-semibold text-gray-800">{item.name}</div><div className="text-xs text-gray-500">{item.orderCount} đơn</div></div><div className="text-lg font-bold text-gray-900">{formatNumber(item.quantity)}</div></div>)}
+          {productSummaryInPeriod.length === 0 && <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-500">Chưa có dữ liệu sản phẩm in theo khoảng ngày đã chọn.</div>}
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm"><div className="mb-4 flex items-center gap-2"><BarChart3 size={18} className="text-gray-500" /><h2 className="text-base font-semibold text-gray-800">Tổng hợp theo trạng thái</h2></div><div className="space-y-3">{reportByStatus.map((item) => <div key={item.name} className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-4 py-3"><div className="text-sm font-medium text-gray-800">{item.name}</div><div className="text-lg font-bold text-gray-900">{formatNumber(item.total)}</div></div>)}{reportByStatus.length === 0 && <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-500">Chưa có dữ liệu theo khoảng ngày đã chọn.</div>}</div></div>
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm"><div className="mb-4 flex items-center gap-2"><BarChart3 size={18} className="text-gray-500" /><h2 className="text-base font-semibold text-gray-800">Tổng hợp theo xưởng in</h2></div><div className="space-y-3">{reportByVendor.map((item) => <div key={item.name} className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-4 py-3"><div className="text-sm font-medium text-gray-800">{item.name}</div><div className="text-lg font-bold text-gray-900">{formatNumber(item.total)}</div></div>)}{reportByVendor.length === 0 && <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-500">Chưa có dữ liệu theo khoảng ngày đã chọn.</div>}</div></div>
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="mb-4 flex items-center gap-2"><BarChart3 size={18} className="text-gray-500" /><h2 className="text-base font-semibold text-gray-800">Tổng hợp theo trạng thái</h2></div>
+          <div className="space-y-4">
+            {reportByStatus.map((item) => <div key={item.name} className="rounded-xl border border-gray-200 bg-gray-50 p-4"><div className="flex items-center justify-between"><div><div className="text-sm font-semibold text-gray-800">{item.name}</div><div className="text-xs text-gray-500">{item.totalOrders} đơn • {formatNumber(item.totalQuantity)} sản phẩm</div></div></div><div className="mt-3 space-y-2">{item.products.map((product) => <div key={product.product} className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-sm"><span className="text-gray-700">{product.product}</span><span className="font-semibold text-gray-900">{formatNumber(product.quantity)}</span></div>)}</div></div>)}
+            {reportByStatus.length === 0 && <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-500">Chưa có dữ liệu theo trạng thái trong kỳ đã chọn.</div>}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="mb-4 flex items-center gap-2"><BarChart3 size={18} className="text-gray-500" /><h2 className="text-base font-semibold text-gray-800">Tổng hợp theo xưởng in</h2></div>
+          <div className="space-y-4">
+            {reportByVendor.map((item) => <div key={item.name} className="rounded-xl border border-gray-200 bg-gray-50 p-4"><div className="flex items-center justify-between"><div><div className="text-sm font-semibold text-gray-800">{item.name}</div><div className="text-xs text-gray-500">{item.totalOrders} đơn • {formatNumber(item.totalQuantity)} sản phẩm</div></div></div><div className="mt-3 space-y-2">{item.products.map((product) => <div key={product.product} className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-sm"><span className="text-gray-700">{product.product}</span><span className="font-semibold text-gray-900">{formatNumber(product.quantity)}</span></div>)}</div></div>)}
+            {reportByVendor.length === 0 && <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-500">Chưa có dữ liệu theo xưởng in trong kỳ đã chọn.</div>}
+          </div>
+        </div>
       </div>
     </>}
 

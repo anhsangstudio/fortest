@@ -31,7 +31,6 @@ import { Service,
 		ConsultationFilter,
 		ConsultationLogService,
 		PrintOrder,
-		PrintOrderItemRow,
 		PrintCatalogOption,
 		PrintVendorPrice,
 		CreatePrintVendorPriceInput,
@@ -1521,68 +1520,6 @@ export const fetchPrintOrders = async (): Promise<PrintOrder[]> => {
   return (res.data || []).map(printOrderFromDb);
 };
 
-
-const printOrderItemRowFromDb = (db: any): PrintOrderItemRow => ({
-  id: db.id,
-  printOrderId: db.print_order_id,
-  contractId: db.contract_id ?? null,
-  contractCode: db.contract_code || '',
-  customerId: db.customer_id ?? null,
-  tenKhachHang: db.ten_khach_hang || '',
-  ngayGuiIn: asDateOnly(db.ngay_gui_in) || '',
-  linkTheTrello: db.link_the_trello || '',
-  linkFiles: db.link_files || '',
-  trelloCardId: db.trello_card_id ?? null,
-  trelloBoardId: db.trello_board_id ?? null,
-  trelloListId: db.trello_list_id ?? null,
-  statusId: db.status_id ?? null,
-  tenTrangThai: db.ten_trang_thai || '',
-  nguoiKiemTraNhanAnh: db.nguoi_kiem_tra_nhan_anh || '',
-  tenNguoiKiemTraNhanAnh: db.ten_nguoi_kiem_tra_nhan_anh || '',
-  soLuong: Number(db.so_luong || 0),
-  sizeId: db.size_id ?? null,
-  tenKichThuoc: db.ten_kich_thuoc || '',
-  materialId: db.material_id ?? null,
-  tenChatLieu: db.ten_chat_lieu || '',
-  vendorId: db.vendor_id ?? null,
-  tenXuongIn: db.ten_xuong_in || '',
-  donGiaIn: Number(db.don_gia_in || 0),
-  thanhTien: Number(db.thanh_tien || 0),
-  ghiChuItem: db.ghi_chu_item || '',
-  ghiChuDon: db.ghi_chu_don || '',
-  thuTuHienThi: Number(db.thu_tu_hien_thi || 0),
-  dangSuDung: db.dang_su_dung !== false,
-  thongBaoDaCoAnh: !!db.thong_bao_da_co_anh,
-  thongBaoDaGiaoAnh: !!db.thong_bao_da_giao_anh,
-  thongBaoDangInAnh: !!db.thong_bao_dang_in_anh,
-  checkFlag: !!db.check_flag,
-  createdAt: db.created_at || '',
-  updatedAt: db.updated_at || '',
-});
-
-export const fetchPrintOrderItems = async (filters?: {
-  dateFrom?: string | null;
-  dateTo?: string | null;
-  statusId?: string | null;
-  vendorId?: string | null;
-}): Promise<PrintOrderItemRow[]> => {
-  if (!supabase) return [];
-
-  const rpcPayload = {
-    p_date_from: filters?.dateFrom || null,
-    p_date_to: filters?.dateTo || null,
-    p_status_id: filters?.statusId || null,
-    p_vendor_id: filters?.vendorId || null,
-  };
-
-  const res = await supabase
-    .rpc('rpc_get_print_order_items', rpcPayload);
-
-  throwIfError(res, 'fetchPrintOrderItems');
-
-  return (res.data || []).map(printOrderItemRowFromDb);
-};
-
 export const fetchPrintCatalogs = async (): Promise<{
   sizes: PrintCatalogOption[];
   materials: PrintCatalogOption[];
@@ -1749,9 +1686,9 @@ const printVendorPriceFromViewRow = (row: any): PrintVendorPrice => ({
 });
 
 const printCostRowFromRpc = (row: any): PrintCostRow => ({
-  rowId: `${row.print_order_id}-${row.line_type}`,
+  rowId: `${row.print_order_id}-${row.line_type || 'item'}-${row.size_id || 'na'}-${row.material_id || 'na'}-${row.vendor_id || 'na'}`,
   orderId: row.print_order_id,
-  lineType: row.line_type,
+  lineType: (row.line_type || 'item') as PrintCostRow['lineType'],
   ngayGuiIn: row.ngay_gui_in || '',
   tenKhachHang: row.ten_khach_hang || '',
   vendorId: row.vendor_id ?? null,
@@ -2162,6 +2099,7 @@ export const fetchPrintCostSummaryFromRpc = async (
   return buildPrintCostSummaryFromRpc(rows, summaryRes.data || []);
 };
 
+// Item-based print cost data, sourced from rpc_get_print_cost_rows / rpc_get_print_cost_summary_by_vendor
 export const fetchPrintCostData = async (
   filters?: PrintCostFilters
 ): Promise<{ rows: PrintCostRow[]; summary: PrintCostSummary }> => {

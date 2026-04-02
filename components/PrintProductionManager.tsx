@@ -57,6 +57,85 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
 
   const setRowSaving = (rowId: string, value: boolean) => setSavingMap((prev) => ({ ...prev, [rowId]: value }));
   const setItemSaving = (itemId: string, value: boolean) => setItemSavingMap((prev) => ({ ...prev, [itemId]: value }));
+  const findVendorPrice = async (vendorId: string, sizeId: string, materialId: string): Promise<number | null> => {
+    if (!supabase || !vendorId || !sizeId || !materialId) return null;
+    const { data, error: priceError } = await supabase
+      .from('print_vendor_prices')
+      .select('don_gia, created_at')
+      .eq('vendor_id', vendorId)
+      .eq('size_id', sizeId)
+      .eq('material_id', materialId)
+      .eq('dang_su_dung', true)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (priceError) {
+      console.error('Load vendor price error:', priceError);
+      return null;
+    }
+
+    const price = data?.[0]?.don_gia;
+    return price == null ? null : Number(price);
+  };
+
+  const applyAutoPriceToItemForm = async (itemId: string, nextVendorId: string, nextSizeId: string, nextMaterialId: string) => {
+    const autoPrice = await findVendorPrice(nextVendorId, nextSizeId, nextMaterialId);
+    if (autoPrice == null) return;
+
+    setItemForms((prev) => {
+      const current = prev[itemId];
+      if (!current) return prev;
+      return {
+        ...prev,
+        [itemId]: {
+          ...current,
+          vendorId: nextVendorId,
+          sizeId: nextSizeId,
+          materialId: nextMaterialId,
+          donGiaIn: autoPrice,
+        },
+      };
+    });
+  };
+
+  const handleItemFieldChange = async (
+    itemId: string,
+    field: 'vendorId' | 'sizeId' | 'materialId' | 'soLuong' | 'itemStatusId',
+    value: string | number
+  ) => {
+    if (field === 'soLuong') {
+      setItemForms((prev) => ({ ...prev, [itemId]: { ...prev[itemId], soLuong: Number(value) } }));
+      return;
+    }
+
+    if (field === 'itemStatusId') {
+      setItemForms((prev) => ({ ...prev, [itemId]: { ...prev[itemId], itemStatusId: String(value) } }));
+      return;
+    }
+
+    const current = itemForms[itemId];
+    if (!current) return;
+
+    const next = {
+      vendorId: field === 'vendorId' ? String(value) : current.vendorId,
+      sizeId: field === 'sizeId' ? String(value) : current.sizeId,
+      materialId: field === 'materialId' ? String(value) : current.materialId,
+    };
+
+    setItemForms((prev) => ({
+      ...prev,
+      [itemId]: {
+        ...prev[itemId],
+        vendorId: next.vendorId,
+        sizeId: next.sizeId,
+        materialId: next.materialId,
+      },
+    }));
+
+    if (next.vendorId && next.sizeId && next.materialId) {
+      await applyAutoPriceToItemForm(itemId, next.vendorId, next.sizeId, next.materialId);
+    }
+  };
 
   const loadStaffOptions = async () => {
     if (!supabase) return [];
@@ -302,7 +381,7 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
     const form = itemForms[itemId]; if (!form) return;
     setItemSaving(itemId, true); setError(null);
     try {
-      const { error: updateError } = await supabase.from('print_order_items').update({ so_luong: toNonNegativeNumber(form.soLuong), size_id: form.sizeId || null, material_id: form.materialId || null, vendor_id: form.vendorId || null, status_id: form.itemStatusId || null }).eq('id', itemId);
+      const { error: updateError } = await supabase.from('print_order_items').update({ so_luong: toNonNegativeNumber(form.soLuong), size_id: form.sizeId || null, material_id: form.materialId || null, vendor_id: form.vendorId || null, status_id: form.itemStatusId || null, don_gia_in: Number(form.donGiaIn || 0) }).eq('id', itemId);
       if (updateError) throw updateError;
       const nextForms = { ...itemForms, [itemId]: form };
       const autoHeaderStatus = computeHeaderStatusFromItems(nextForms);
@@ -449,14 +528,19 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
                 <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"><div className="text-sm font-black uppercase tracking-[0.14em] text-slate-500">Sản phẩm in #{index + 1}</div><div className="flex items-center gap-2">{isSavingItem && <Loader2 size={15} className="animate-spin text-blue-600" />}<button type="button" onClick={() => void handleDuplicateItem(item)} className="rounded-xl border border-slate-300 bg-white p-2.5 text-slate-700" title="Nhân bản dòng" disabled={isSavingItem}><Copy size={15} /></button>{canDeleteOrder && <button type="button" onClick={() => void handleDeleteItem(item)} className="rounded-xl border border-red-200 bg-white p-2.5 text-red-600" title="Xóa dòng" disabled={isSavingItem}><Trash2 size={15} /></button>}</div></div>
 
                 <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
-                  <div><label className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Kích Thước</label><select value={form.sizeId} onChange={(e) => setItemForms((prev) => ({ ...prev, [item.id]: { ...prev[item.id], sizeId: e.target.value } }))} className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium"><option value="">Chọn</option>{catalogs.sizes.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></div>
-                  <div><label className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Chất Liệu</label><select value={form.materialId} onChange={(e) => setItemForms((prev) => ({ ...prev, [item.id]: { ...prev[item.id], materialId: e.target.value } }))} className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium"><option value="">Chọn</option>{catalogs.materials.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></div>
-                  <div><label className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Số Lượng</label><input type="number" min={0} value={form.soLuong} onChange={(e) => setItemForms((prev) => ({ ...prev, [item.id]: { ...prev[item.id], soLuong: toNonNegativeNumber(e.target.value) } }))} className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium" /></div>
-                  <div><label className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Xưởng In</label><select value={form.vendorId} onChange={(e) => setItemForms((prev) => ({ ...prev, [item.id]: { ...prev[item.id], vendorId: e.target.value } }))} className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium"><option value="">Chọn</option>{catalogs.vendors.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></div>
-                  <div><label className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Tình Trạng</label><select value={form.itemStatusId} onChange={(e) => setItemForms((prev) => ({ ...prev, [item.id]: { ...prev[item.id], itemStatusId: e.target.value } }))} className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium"><option value="">Chọn</option>{catalogs.statuses.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></div>
+                  <div><label className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Kích Thước</label><select value={form.sizeId} onChange={(e) => { void handleItemFieldChange(item.id, 'sizeId', e.target.value); }} className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium"><option value="">Chọn</option>{catalogs.sizes.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></div>
+                  <div><label className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Chất Liệu</label><select value={form.materialId} onChange={(e) => { void handleItemFieldChange(item.id, 'materialId', e.target.value); }} className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium"><option value="">Chọn</option>{catalogs.materials.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></div>
+                  <div><label className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Số Lượng</label><input type="number" min={0} value={form.soLuong} onChange={(e) => { void handleItemFieldChange(item.id, 'soLuong', toNonNegativeNumber(e.target.value)); }} className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium" /></div>
+                  <div><label className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Xưởng In</label><select value={form.vendorId} onChange={(e) => { void handleItemFieldChange(item.id, 'vendorId', e.target.value); }} className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium"><option value="">Chọn</option>{catalogs.vendors.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></div>
+                  <div><label className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Tình Trạng</label><select value={form.itemStatusId} onChange={(e) => { void handleItemFieldChange(item.id, 'itemStatusId', e.target.value); }} className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium"><option value="">Chọn</option>{catalogs.statuses.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></div>
                 </div>
 
-                <div className="mt-4 flex justify-end"><button type="button" onClick={() => void handleSaveItem(item.id)} disabled={isSavingItem} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white disabled:opacity-60">{isSavingItem && <Loader2 size={16} className="animate-spin" />}Lưu sản phẩm</button></div>
+                <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div className="text-sm text-slate-500">
+                    Đơn giá tự tra theo bảng giá in: <span className="font-semibold text-slate-700">{formatNumber(form.donGiaIn || 0)}đ</span>
+                  </div>
+                  <button type="button" onClick={() => void handleSaveItem(item.id)} disabled={isSavingItem} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white disabled:opacity-60">{isSavingItem && <Loader2 size={16} className="animate-spin" />}Lưu sản phẩm</button>
+                </div>
               </div>;
             })}
           </div>}</div>

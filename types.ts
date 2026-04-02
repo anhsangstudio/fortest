@@ -540,7 +540,7 @@ export interface PrintVendorPriceFilters {
   isActive?: boolean;
 }
 
-export type PrintCostLineType = 'item' | 'large' | 'small';
+export type PrintCostLineType = 'large' | 'small';
 export type PrintPricingStatus = 'matched' | 'missing_price' | 'skipped';
 
 export interface PrintCostRow {
@@ -576,6 +576,54 @@ export interface PrintCostSummaryByVendor {
   totalQuantity: number;
   totalAmount: number;
   missingPriceRows: number;
+}
+
+
+export interface PrintVendorOpeningDebt {
+  id: string;
+  vendorId: string;
+  vendorName: string;
+  soTien: number;
+  ngayApDung: string;
+  ghiChu?: string;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreatePrintVendorOpeningDebtInput {
+  vendorId: string;
+  soTien: number;
+  ngayApDung: string;
+  ghiChu?: string;
+}
+
+export interface PrintVendorPayment {
+  id: string;
+  vendorId: string;
+  vendorName: string;
+  soTien: number;
+  ngayThanhToan: string;
+  ghiChu?: string;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreatePrintVendorPaymentInput {
+  vendorId: string;
+  soTien: number;
+  ngayThanhToan: string;
+  ghiChu?: string;
+}
+
+export interface PrintVendorDebtSummaryRow {
+  vendorId: string;
+  vendorName: string;
+  congNoDauKy: number;
+  phatSinhTrongKy: number;
+  daThanhToanTrongKy: number;
+  conNoCuoiKy: number;
 }
 
 export interface PrintCostSummary {

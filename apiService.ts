@@ -1686,9 +1686,9 @@ const printVendorPriceFromViewRow = (row: any): PrintVendorPrice => ({
 });
 
 const printCostRowFromRpc = (row: any): PrintCostRow => ({
-  rowId: `${row.print_order_id}-${row.line_type || 'item'}-${row.size_id || 'na'}-${row.material_id || 'na'}-${row.vendor_id || 'na'}`,
+  rowId: `${row.print_order_id}-${row.line_type}`,
   orderId: row.print_order_id,
-  lineType: (row.line_type || 'item') as PrintCostRow['lineType'],
+  lineType: row.line_type,
   ngayGuiIn: row.ngay_gui_in || '',
   tenKhachHang: row.ten_khach_hang || '',
   vendorId: row.vendor_id ?? null,
@@ -2099,7 +2099,6 @@ export const fetchPrintCostSummaryFromRpc = async (
   return buildPrintCostSummaryFromRpc(rows, summaryRes.data || []);
 };
 
-// Item-based print cost data, sourced from rpc_get_print_cost_rows / rpc_get_print_cost_summary_by_vendor
 export const fetchPrintCostData = async (
   filters?: PrintCostFilters
 ): Promise<{ rows: PrintCostRow[]; summary: PrintCostSummary }> => {
@@ -2273,4 +2272,179 @@ export const softDeletePrintMaterial = async (id: string) => {
     .eq('id', id);
 
   if (error) throw error;
+};
+
+
+const printVendorOpeningDebtFromDb = (row: any): PrintVendorOpeningDebt => ({
+  id: row.id,
+  vendorId: row.vendor_id,
+  vendorName: row.print_vendors?.ten_xuong_in || row.ten_xuong_in || '',
+  soTien: Number(row.so_tien || 0),
+  ngayApDung: row.ngay_ap_dung || '',
+  ghiChu: row.ghi_chu || '',
+  isActive: row.dang_su_dung !== false,
+  createdAt: row.created_at || '',
+  updatedAt: row.updated_at || '',
+});
+
+const printVendorPaymentFromDb = (row: any): PrintVendorPayment => ({
+  id: row.id,
+  vendorId: row.vendor_id,
+  vendorName: row.print_vendors?.ten_xuong_in || row.ten_xuong_in || '',
+  soTien: Number(row.so_tien || 0),
+  ngayThanhToan: row.ngay_thanh_toan || '',
+  ghiChu: row.ghi_chu || '',
+  isActive: row.dang_su_dung !== false,
+  createdAt: row.created_at || '',
+  updatedAt: row.updated_at || '',
+});
+
+const printVendorDebtSummaryFromRpc = (row: any): PrintVendorDebtSummaryRow => ({
+  vendorId: row.vendor_id,
+  vendorName: row.ten_xuong_in || '',
+  congNoDauKy: Number(row.cong_no_dau_ky || 0),
+  phatSinhTrongKy: Number(row.phat_sinh_trong_ky || 0),
+  daThanhToanTrongKy: Number(row.da_thanh_toan_trong_ky || 0),
+  conNoCuoiKy: Number(row.con_no_cuoi_ky || 0),
+});
+
+export const fetchPrintVendorOpeningDebts = async (): Promise<PrintVendorOpeningDebt[]> => {
+  if (!supabase) return [];
+  const res = await supabase
+    .from('print_vendor_opening_debts')
+    .select(`
+      id,
+      vendor_id,
+      so_tien,
+      ngay_ap_dung,
+      ghi_chu,
+      dang_su_dung,
+      created_at,
+      updated_at,
+      print_vendors (
+        ten_xuong_in
+      )
+    `)
+    .eq('dang_su_dung', true)
+    .order('ngay_ap_dung', { ascending: false })
+    .order('created_at', { ascending: false });
+
+  throwIfError(res, 'fetchPrintVendorOpeningDebts');
+  return (res.data || []).map(printVendorOpeningDebtFromDb);
+};
+
+export const createPrintVendorOpeningDebt = async (
+  input: CreatePrintVendorOpeningDebtInput
+): Promise<PrintVendorOpeningDebt> => {
+  if (!supabase) throw new Error('Supabase chưa được cấu hình.');
+  const res = await supabase
+    .from('print_vendor_opening_debts')
+    .insert({
+      vendor_id: input.vendorId,
+      so_tien: Number(input.soTien || 0),
+      ngay_ap_dung: input.ngayApDung,
+      ghi_chu: input.ghiChu || '',
+      dang_su_dung: true,
+    })
+    .select(`
+      id,
+      vendor_id,
+      so_tien,
+      ngay_ap_dung,
+      ghi_chu,
+      dang_su_dung,
+      created_at,
+      updated_at,
+      print_vendors (
+        ten_xuong_in
+      )
+    `)
+    .single();
+
+  throwIfError(res, 'createPrintVendorOpeningDebt');
+  return printVendorOpeningDebtFromDb(res.data);
+};
+
+export const softDeletePrintVendorOpeningDebt = async (id: string): Promise<void> => {
+  if (!supabase) throw new Error('Supabase chưa được cấu hình.');
+  const res = await supabase.from('print_vendor_opening_debts').update({ dang_su_dung: false }).eq('id', id);
+  throwIfError(res, 'softDeletePrintVendorOpeningDebt');
+};
+
+export const fetchPrintVendorPayments = async (): Promise<PrintVendorPayment[]> => {
+  if (!supabase) return [];
+  const res = await supabase
+    .from('print_vendor_payments')
+    .select(`
+      id,
+      vendor_id,
+      so_tien,
+      ngay_thanh_toan,
+      ghi_chu,
+      dang_su_dung,
+      created_at,
+      updated_at,
+      print_vendors (
+        ten_xuong_in
+      )
+    `)
+    .eq('dang_su_dung', true)
+    .order('ngay_thanh_toan', { ascending: false })
+    .order('created_at', { ascending: false });
+
+  throwIfError(res, 'fetchPrintVendorPayments');
+  return (res.data || []).map(printVendorPaymentFromDb);
+};
+
+export const createPrintVendorPayment = async (
+  input: CreatePrintVendorPaymentInput
+): Promise<PrintVendorPayment> => {
+  if (!supabase) throw new Error('Supabase chưa được cấu hình.');
+  const res = await supabase
+    .from('print_vendor_payments')
+    .insert({
+      vendor_id: input.vendorId,
+      so_tien: Number(input.soTien || 0),
+      ngay_thanh_toan: input.ngayThanhToan,
+      ghi_chu: input.ghiChu || '',
+      dang_su_dung: true,
+    })
+    .select(`
+      id,
+      vendor_id,
+      so_tien,
+      ngay_thanh_toan,
+      ghi_chu,
+      dang_su_dung,
+      created_at,
+      updated_at,
+      print_vendors (
+        ten_xuong_in
+      )
+    `)
+    .single();
+
+  throwIfError(res, 'createPrintVendorPayment');
+  return printVendorPaymentFromDb(res.data);
+};
+
+export const softDeletePrintVendorPayment = async (id: string): Promise<void> => {
+  if (!supabase) throw new Error('Supabase chưa được cấu hình.');
+  const res = await supabase.from('print_vendor_payments').update({ dang_su_dung: false }).eq('id', id);
+  throwIfError(res, 'softDeletePrintVendorPayment');
+};
+
+export const fetchPrintVendorDebtSummary = async (filters?: {
+  from?: string;
+  to?: string;
+  vendorId?: string;
+}): Promise<PrintVendorDebtSummaryRow[]> => {
+  if (!supabase) return [];
+  const res = await supabase.rpc('rpc_get_print_vendor_debt_summary', {
+    p_date_from: filters?.from || null,
+    p_date_to: filters?.to || null,
+    p_vendor_id: filters?.vendorId || null,
+  });
+  throwIfError(res, 'fetchPrintVendorDebtSummary');
+  return (res.data || []).map(printVendorDebtSummaryFromRpc);
 };

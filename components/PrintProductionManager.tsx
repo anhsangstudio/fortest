@@ -535,13 +535,7 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
                   <div className="w-24 shrink-0"><label className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Số Lượng</label><input type="number" min={0} value={form.soLuong} onChange={(e) => { void handleItemFieldChange(item.id, 'soLuong', toNonNegativeNumber(e.target.value)); }} className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-center" /></div>
                   <div className="flex-1 min-w-[120px]"><label className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Xưởng In</label><select value={form.vendorId} onChange={(e) => { void handleItemFieldChange(item.id, 'vendorId', e.target.value); }} className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium"><option value="">Chọn</option>{catalogs.vendors.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></div>
                   <div className="flex-1 min-w-[120px]"><label className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Tình Trạng</label><select value={form.itemStatusId} onChange={(e) => { void handleItemFieldChange(item.id, 'itemStatusId', e.target.value); }} className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium"><option value="">Chọn</option>{catalogs.statuses.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></div>
-                  
-                  {/* Nút lưu sản phẩm đưa lên ngang hàng (items-end sẽ đẩy nó xuống sát đáy bằng với các ô input) */}
-                  <div className="shrink-0">
-                    <button type="button" onClick={() => void handleSaveItem(item.id)} disabled={isSavingItem} className="h-[46px] inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 text-sm font-bold text-white disabled:opacity-60 transition-colors hover:bg-blue-700">
-                      {isSavingItem && <Loader2 size={16} className="animate-spin" />} Lưu sản phẩm
-                    </button>
-                  </div>
+                  <div className="shrink-0"><button type="button" onClick={() => void handleSaveItem(item.id)} disabled={isSavingItem} className="h-[46px] inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 text-sm font-bold text-white disabled:opacity-60 transition-colors hover:bg-blue-700">{isSavingItem && <Loader2 size={16} className="animate-spin" />} Lưu sản phẩm</button></div>
                 </div>
               </div>;
             })}
@@ -549,19 +543,33 @@ const PrintProductionManager: React.FC<Props> = ({ currentUser }) => {
         </section>
 
         <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-2 text-[12px] font-black uppercase tracking-[0.16em] text-amber-600"><UserRound size={16} /><span>3. Người Kiểm Tra Ảnh</span></div>
-          <div className="mt-5">
-            <label className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Người Kiểm Tra Ảnh</label>
-            <select value={headerForm.nguoiKiemTraNhanAnh} onChange={(e) => setHeaderForm((prev) => (prev ? { ...prev, nguoiKiemTraNhanAnh: e.target.value } : prev))} className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium">
-              <option value="">Chọn</option>
-              {staffOptions.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
-            </select>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-2 text-[12px] font-black uppercase tracking-[0.16em] text-amber-600 sm:w-1/4">
+              <UserRound size={16} /><span>3. Người Kiểm Tra Ảnh</span>
+            </div>
+            <div className="flex-1">
+              <select value={headerForm.nguoiKiemTraNhanAnh} onChange={(e) => setHeaderForm((prev) => (prev ? { ...prev, nguoiKiemTraNhanAnh: e.target.value } : prev))} className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium">
+                <option value="">Chọn</option>
+                {staffOptions.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+              </select>
+            </div>
           </div>
         </section>
 
         <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-2 text-[12px] font-black uppercase tracking-[0.16em] text-cyan-600"><LinkIcon size={16} /><span>4. Link File In</span></div>
-          <div className="mt-5"><label className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Link File In</label><input value={headerForm.linkFiles} onChange={(e) => setHeaderForm((prev) => (prev ? { ...prev, linkFiles: e.target.value } : prev))} className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium" /></div>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-2 text-[12px] font-black uppercase tracking-[0.16em] text-cyan-600 sm:w-1/4">
+              <LinkIcon size={16} /><span>4. Link File In</span>
+            </div>
+            <div className="flex-1 flex flex-col sm:flex-row items-center gap-3">
+              <input value={headerForm.linkFiles} onChange={(e) => setHeaderForm((prev) => (prev ? { ...prev, linkFiles: e.target.value } : prev))} placeholder="Dán đường dẫn link file in vào đây..." className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium flex-1" />
+              {headerForm.linkFiles && (
+                <a href={headerForm.linkFiles.startsWith('http') ? headerForm.linkFiles : `https://${headerForm.linkFiles}`} target="_blank" rel="noopener noreferrer" className="shrink-0 inline-flex h-[46px] items-center justify-center rounded-2xl bg-cyan-100 text-cyan-700 px-5 text-sm font-bold transition-colors hover:bg-cyan-200 w-full sm:w-auto">
+                  Xem File
+                </a>
+              )}
+            </div>
+          </div>
         </section>
 
         <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">

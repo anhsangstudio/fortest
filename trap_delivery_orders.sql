@@ -601,3 +601,227 @@ select public.trap_delivery_sync_all();
 -- select * from public.trap_delivery_get_rows(null, null, null, null, null);
 -- select * from public.trap_delivery_get_dashboard(null);
 -- select public.trap_delivery_get_dropdowns();
+
+
+
+
+
+
+-- =========================================================
+-- MODULE GIAO NHẬN TRÁP - STEP 2
+-- Mục tiêu:
+-- 1) RPC cập nhật dữ liệu vận hành trên từng dòng
+-- 2) RPC thêm/sửa/xóa mềm danh mục LOẠI ĐẾ TRÁP
+-- 3) RPC thêm/sửa/xóa mềm danh mục LOẠI TRÁP
+-- 4) Không đụng logic sync nguồn
+-- =========================================================
+
+-- 1) Cập nhật dữ liệu vận hành trên từng dòng
+create or replace function public.trap_delivery_update_row(
+  p_id uuid,
+  p_so_trap_to integer,
+  p_loai_de_trap_id uuid,
+  p_so_trap_nho integer,
+  p_loai_trap_id uuid,
+  p_khan_trum integer,
+  p_tinh_trang text,
+  p_nguoi_giao_staff_id text,
+  p_nguoi_nhan_staff_id text,
+  p_ghi_chu text
+)
+returns jsonb
+language plpgsql
+security definer
+as $$
+declare
+  v_exists uuid;
+begin
+  if p_tinh_trang not in (
+    'CHƯA LÀM',
+    'CHUẨN BỊ',
+    'ĐANG LÀM',
+    'ĐÃ GIAO TRÁP',
+    'CHƯA TRẢ TRÁP',
+    'TRẢ THIẾU ĐỒ',
+    'ĐÃ TRẢ ĐỦ'
+  ) then
+    raise exception 'Tình trạng không hợp lệ: %', p_tinh_trang;
+  end if;
+
+  if coalesce(p_so_trap_to, 0) < 0 then
+    raise exception 'Số tráp to không được âm';
+  end if;
+
+  if coalesce(p_so_trap_nho, 0) < 0 then
+    raise exception 'Số tráp nhỏ không được âm';
+  end if;
+
+  if coalesce(p_khan_trum, 0) < 0 then
+    raise exception 'Khăn trùm không được âm';
+  end if;
+
+  select id into v_exists
+  from public.trap_delivery_orders
+  where id = p_id
+    and is_active = true;
+
+  if v_exists is null then
+    raise exception 'Không tìm thấy dòng giao nhận tráp: %', p_id;
+  end if;
+
+  update public.trap_delivery_orders
+  set
+    so_trap_to = coalesce(p_so_trap_to, 0),
+    loai_de_trap_id = p_loai_de_trap_id,
+    so_trap_nho = coalesce(p_so_trap_nho, 0),
+    loai_trap_id = p_loai_trap_id,
+    khan_trum = coalesce(p_khan_trum, 0),
+    tinh_trang = p_tinh_trang,
+    nguoi_giao_staff_id = p_nguoi_giao_staff_id,
+    nguoi_nhan_staff_id = p_nguoi_nhan_staff_id,
+    ghi_chu = p_ghi_chu,
+    updated_at = now()
+  where id = p_id;
+
+  return jsonb_build_object(
+    'success', true,
+    'id', p_id
+  );
+end;
+$$;
+
+-- 2) Upsert LOẠI ĐẾ TRÁP
+create or replace function public.trap_base_type_upsert(
+  p_id uuid default null,
+  p_name text default null,
+  p_sort_order integer default 0
+)
+returns jsonb
+language plpgsql
+security definer
+as $$
+declare
+  v_id uuid;
+begin
+  if trim(coalesce(p_name, '')) = '' then
+    raise exception 'Tên loại đế tráp không được để trống';
+  end if;
+
+  if p_id is null then
+    insert into public.trap_base_types(name, sort_order, is_active)
+    values (trim(p_name), coalesce(p_sort_order, 0), true)
+    returning id into v_id;
+  else
+    update public.trap_base_types
+    set
+      name = trim(p_name),
+      sort_order = coalesce(p_sort_order, 0),
+      is_active = true,
+      updated_at = now()
+    where id = p_id
+    returning id into v_id;
+
+    if v_id is null then
+      raise exception 'Không tìm thấy loại đế tráp: %', p_id;
+    end if;
+  end if;
+
+  return jsonb_build_object(
+    'success', true,
+    'id', v_id
+  );
+end;
+$$;
+
+-- 3) Xóa mềm LOẠI ĐẾ TRÁP
+create or replace function public.trap_base_type_delete(
+  p_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+as $$
+begin
+  update public.trap_base_types
+  set
+    is_active = false,
+    updated_at = now()
+  where id = p_id;
+
+  return jsonb_build_object(
+    'success', true,
+    'id', p_id
+  );
+end;
+$$;
+
+-- 4) Upsert LOẠI TRÁP
+create or replace function public.trap_type_upsert(
+  p_id uuid default null,
+  p_name text default null,
+  p_sort_order integer default 0
+)
+returns jsonb
+language plpgsql
+security definer
+as $$
+declare
+  v_id uuid;
+begin
+  if trim(coalesce(p_name, '')) = '' then
+    raise exception 'Tên loại tráp không được để trống';
+  end if;
+
+  if p_id is null then
+    insert into public.trap_types(name, sort_order, is_active)
+    values (trim(p_name), coalesce(p_sort_order, 0), true)
+    returning id into v_id;
+  else
+    update public.trap_types
+    set
+      name = trim(p_name),
+      sort_order = coalesce(p_sort_order, 0),
+      is_active = true,
+      updated_at = now()
+    where id = p_id
+    returning id into v_id;
+
+    if v_id is null then
+      raise exception 'Không tìm thấy loại tráp: %', p_id;
+    end if;
+  end if;
+
+  return jsonb_build_object(
+    'success', true,
+    'id', v_id
+  );
+end;
+$$;
+
+-- 5) Xóa mềm LOẠI TRÁP
+create or replace function public.trap_type_delete(
+  p_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+as $$
+begin
+  update public.trap_types
+  set
+    is_active = false,
+    updated_at = now()
+  where id = p_id;
+
+  return jsonb_build_object(
+    'success', true,
+    'id', p_id
+  );
+end;
+$$;
+
+-- TEST:
+-- select public.trap_delivery_update_row(
+--   '00000000-0000-0000-0000-000000000000'::uuid,
+--   5, null, 2, null, 1, 'CHUẨN BỊ', null, null, 'test'
+-- );

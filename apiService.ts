@@ -2757,6 +2757,222 @@ export const createPhotoIdOrder = async (
 };
 
 
+export const fetchPhotoIdDashboard = async () => {
+  if (!supabase) {
+    return {
+      totalPaperInStock: 0,
+      totalInventoryItems: 0,
+      lowStockItems: 0,
+    };
+  }
 
+  const { data, error } = await supabase.rpc('photo_id_get_dashboard');
+
+  if (error) {
+    console.error('fetchPhotoIdDashboard error:', error);
+    throw new Error(error.message);
+  }
+
+  const row = Array.isArray(data) ? data[0] : data;
+
+  return {
+    totalPaperInStock: Number(row?.total_paper_in_stock || 0),
+    totalInventoryItems: Number(row?.total_inventory_items || 0),
+    lowStockItems: Number(row?.low_stock_items || 0),
+  };
+};
+
+export const fetchPhotoIdOrdersPaged = async (
+  page: number = 1,
+  pageSize: number = 20,
+  searchPhone: string | null = null
+) => {
+  if (!supabase) {
+    return {
+      rows: [],
+      totalRows: 0,
+      totalPages: 1,
+      currentPage: 1,
+      pageSize,
+    };
+  }
+
+  const { data, error } = await supabase.rpc('photo_id_get_orders_paged', {
+    p_page: page,
+    p_page_size: pageSize,
+    p_search_phone: searchPhone && searchPhone.trim() ? searchPhone.trim() : null,
+  });
+
+  if (error) {
+    console.error('fetchPhotoIdOrdersPaged error:', error);
+    throw new Error(error.message);
+  }
+
+  const rows = Array.isArray(data) ? data : [];
+  const first = rows[0];
+
+  return {
+    rows: rows.map((db: any) => ({
+      id: db.id,
+      orderCode: db.order_code,
+      orderDatetime: db.order_datetime,
+      customerId: db.customer_id,
+      customerName: db.customer_name || '',
+      customerPhone: db.customer_phone || '',
+      printPaperQuantity: Number(db.print_paper_quantity || 0),
+      amount: Number(db.amount || 0),
+      paymentMethod: db.payment_method || '',
+      driveFileUrl: db.drive_file_url || '',
+      driveFileId: db.drive_file_id || '',
+      note: db.note || '',
+      status: db.status || 'completed',
+      isReprint: !!db.is_reprint,
+      originalOrderId: db.original_order_id,
+      transactionId: db.transaction_id,
+      createdBy: db.created_by,
+      createdAt: db.created_at,
+      updatedAt: db.updated_at,
+    })),
+    totalRows: Number(first?.total_rows || 0),
+    totalPages: Number(first?.total_pages || 1),
+    currentPage: Number(first?.current_page || page),
+    pageSize: Number(first?.page_size || pageSize),
+  };
+};
+
+export const updatePhotoIdOrderRpc = async (input: {
+  id: string;
+  orderDatetime: string;
+  customerName: string;
+  customerPhone: string;
+  printPaperQuantity: number;
+  amount: number;
+  paymentMethod: string;
+  driveFileUrl?: string;
+  driveFileId?: string;
+  note?: string;
+  updatedBy?: string | null;
+}) => {
+  if (!supabase) throw new Error('Supabase chưa cấu hình');
+
+  const { error } = await supabase.rpc('photo_id_update_order', {
+    p_order_id: input.id,
+    p_order_datetime: input.orderDatetime,
+    p_customer_name: input.customerName,
+    p_customer_phone: input.customerPhone,
+    p_print_paper_quantity: input.printPaperQuantity,
+    p_amount: input.amount,
+    p_payment_method: input.paymentMethod,
+    p_drive_file_url: input.driveFileUrl || null,
+    p_drive_file_id: input.driveFileId || null,
+    p_note: input.note || null,
+    p_updated_by: input.updatedBy || null,
+  });
+
+  if (error) {
+    console.error('updatePhotoIdOrderRpc error:', error);
+    throw new Error(error.message);
+  }
+
+  return { success: true };
+};
+
+export const deletePhotoIdOrderRpc = async (orderId: string, deletedBy?: string | null) => {
+  if (!supabase) throw new Error('Supabase chưa cấu hình');
+
+  const { error } = await supabase.rpc('photo_id_delete_order', {
+    p_order_id: orderId,
+    p_deleted_by: deletedBy || null,
+  });
+
+  if (error) {
+    console.error('deletePhotoIdOrderRpc error:', error);
+    throw new Error(error.message);
+  }
+
+  return { success: true };
+};
+
+export const fetchPhotoIdRevenueReport = async (fromDate: string, toDate: string) => {
+  if (!supabase) {
+    return {
+      summary: {
+        totalOrders: 0,
+        totalPrintPaper: 0,
+        totalRevenue: 0,
+        averageOrderValue: 0,
+        totalCost: 0,
+        grossProfit: 0,
+      },
+      byDay: [],
+      byMonth: [],
+    };
+  }
+
+  const [
+    { data: summaryData, error: summaryError },
+    { data: dayData, error: dayError },
+    { data: monthData, error: monthError },
+  ] = await Promise.all([
+    supabase.rpc('photo_id_get_report_summary', {
+      p_from_date: fromDate,
+      p_to_date: toDate,
+    }),
+    supabase.rpc('photo_id_get_report_by_day', {
+      p_from_date: fromDate,
+      p_to_date: toDate,
+    }),
+    supabase.rpc('photo_id_get_report_by_month', {
+      p_from_date: fromDate,
+      p_to_date: toDate,
+    }),
+  ]);
+
+  if (summaryError) {
+    console.error('fetchPhotoIdRevenueReport summary error:', summaryError);
+    throw new Error(summaryError.message);
+  }
+
+  if (dayError) {
+    console.error('fetchPhotoIdRevenueReport byDay error:', dayError);
+    throw new Error(dayError.message);
+  }
+
+  if (monthError) {
+    console.error('fetchPhotoIdRevenueReport byMonth error:', monthError);
+    throw new Error(monthError.message);
+  }
+
+  const summaryRow = Array.isArray(summaryData) ? summaryData[0] : summaryData;
+
+  return {
+    summary: {
+      totalOrders: Number(summaryRow?.total_orders || 0),
+      totalPrintPaper: Number(summaryRow?.total_print_paper || 0),
+      totalRevenue: Number(summaryRow?.total_revenue || 0),
+      averageOrderValue: Number(summaryRow?.average_order_value || 0),
+      totalCost: Number(summaryRow?.total_cost || 0),
+      grossProfit: Number(summaryRow?.gross_profit || 0),
+    },
+    byDay: (dayData || []).map((row: any) => ({
+      reportDate: row.report_date,
+      totalOrders: Number(row.total_orders || 0),
+      totalPrintPaper: Number(row.total_print_paper || 0),
+      cashRevenue: Number(row.cash_revenue || 0),
+      bankRevenue: Number(row.bank_revenue || 0),
+      totalRevenue: Number(row.total_revenue || 0),
+      averageOrderValue: Number(row.average_order_value || 0),
+    })),
+    byMonth: (monthData || []).map((row: any) => ({
+      reportMonth: row.report_month,
+      totalOrders: Number(row.total_orders || 0),
+      totalPrintPaper: Number(row.total_print_paper || 0),
+      cashRevenue: Number(row.cash_revenue || 0),
+      bankRevenue: Number(row.bank_revenue || 0),
+      totalRevenue: Number(row.total_revenue || 0),
+      averageOrderValue: Number(row.average_order_value || 0),
+    })),
+  };
+};
 
 

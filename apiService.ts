@@ -2530,3 +2530,19 @@ export const searchPhotoIdOrdersByPhone = async (
   return (data || []).map(photoIdOrderFromDb);
 };
 
+export const fetchPhotoPaperInventory = async (): Promise<PhotoPaperInventory[]> => {
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from('photo_paper_inventory_view')
+    .select('*')
+    .order('paper_name', { ascending: true });
+
+  if (error) {
+    console.error('fetchPhotoPaperInventory error:', error);
+    throw new Error(error.message);
+  }
+
+  return (data || []).map(photoPaperInventoryFromDb);
+};
+

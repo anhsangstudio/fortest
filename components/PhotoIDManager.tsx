@@ -121,6 +121,7 @@ type StockInFormState = {
 };
 
 const PAGE_SIZE = 20;
+const REPORT_DAY_PAGE_SIZE = 20;
 const LOW_STOCK_THRESHOLD = 30;
 
 const formatCurrency = (value?: number | string | null) => {
@@ -262,11 +263,21 @@ export default function PhotoIDManager({ currentUser }: PhotoIDManagerProps) {
   });
   const [reportByDay, setReportByDay] = useState<ReportByDayRow[]>([]);
   const [reportByMonth, setReportByMonth] = useState<ReportByMonthRow[]>([]);
+  const [reportDayPage, setReportDayPage] = useState(1);
 
   const lowStockItems = useMemo(
     () => inventory.filter((item) => Number(item.currentQuantity || 0) < LOW_STOCK_THRESHOLD),
     [inventory]
   );
+
+  const pagedReportByDay = useMemo(() => {
+    const start = (reportDayPage - 1) * REPORT_DAY_PAGE_SIZE;
+    return reportByDay.slice(start, start + REPORT_DAY_PAGE_SIZE);
+  }, [reportByDay, reportDayPage]);
+
+  const reportDayTotalPages = useMemo(() => {
+    return Math.max(1, Math.ceil(reportByDay.length / REPORT_DAY_PAGE_SIZE));
+  }, [reportByDay]);
 
   const resetOrderForm = () => {
     setOrderForm(createEmptyOrderForm());
@@ -332,6 +343,7 @@ export default function PhotoIDManager({ currentUser }: PhotoIDManagerProps) {
       setReportSummary(data.summary);
       setReportByDay(data.byDay || []);
       setReportByMonth(data.byMonth || []);
+      setReportDayPage(1);
     } catch (error: any) {
       alert(error.message || 'Không tải được báo cáo doanh thu');
     } finally {
@@ -350,6 +362,12 @@ export default function PhotoIDManager({ currentUser }: PhotoIDManagerProps) {
       loadReport();
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (reportDayPage > reportDayTotalPages) {
+      setReportDayPage(reportDayTotalPages);
+    }
+  }, [reportDayPage, reportDayTotalPages]);
 
   const handleUploadFile = async (file?: File | null) => {
     if (!file) return;
@@ -398,12 +416,7 @@ export default function PhotoIDManager({ currentUser }: PhotoIDManagerProps) {
   };
 
   const refreshCoreData = async (page: number = currentPage) => {
-    await Promise.all([
-      loadDashboard(),
-      loadInventory(),
-      loadOrdersPage(page),
-    ]);
-
+    await Promise.all([loadDashboard(), loadInventory(), loadOrdersPage(page)]);
     if (canViewRevenueReport && activeTab === 'report') {
       await loadReport();
     }
@@ -725,6 +738,8 @@ export default function PhotoIDManager({ currentUser }: PhotoIDManagerProps) {
     </form>
   );
 
+  const paperStatusGood = dashboard.totalPaperInStock >= LOW_STOCK_THRESHOLD;
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -736,9 +751,21 @@ export default function PhotoIDManager({ currentUser }: PhotoIDManagerProps) {
         </div>
 
         <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm">
-          <div className="text-xs font-black uppercase tracking-widest text-slate-400">Giấy sắp hết (dưới 30 tờ)</div>
-          <div className="mt-2 text-3xl font-black text-red-600">
-            {loadingDashboard ? <span className="text-base text-slate-500">Đang tải...</span> : dashboard.lowStockItems}
+          <div className="text-xs font-black uppercase tracking-widest text-slate-400">Trạng thái giấy in</div>
+          <div className="mt-4">
+            {loadingDashboard ? (
+              <span className="text-sm font-bold text-slate-500">Đang tải...</span>
+            ) : (
+              <span
+                className={`inline-flex px-4 py-2 rounded-full text-sm font-black ${
+                  paperStatusGood
+                    ? 'bg-emerald-100 text-emerald-700'
+                    : 'bg-red-100 text-red-700'
+                }`}
+              >
+                {paperStatusGood ? 'CÒN NHIỀU GIẤY IN' : 'SẮP HẾT GIẤY IN'}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -1139,95 +1166,119 @@ export default function PhotoIDManager({ currentUser }: PhotoIDManagerProps) {
             </div>
           </div>
 
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-4 py-4 border-b border-slate-100 font-black text-slate-900">Tổng hợp doanh thu theo ngày</div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-slate-50">
-                  <tr className="text-left text-slate-500 uppercase text-[11px] tracking-widest font-black">
-                    <th className="px-4 py-4">Ngày</th>
-                    <th className="px-4 py-4">Số đơn</th>
-                    <th className="px-4 py-4">Số giấy in</th>
-                    <th className="px-4 py-4">Tiền mặt</th>
-                    <th className="px-4 py-4">Chuyển khoản</th>
-                    <th className="px-4 py-4">Tổng doanh thu</th>
-                    <th className="px-4 py-4">Giá trị TB</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {reportLoading ? (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-10 text-center text-slate-500 font-bold">
-                        <span className="inline-flex items-center gap-2"><Loader2 size={16} className="animate-spin" /> Đang tải báo cáo...</span>
-                      </td>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="px-4 py-4 border-b border-slate-100 font-black text-slate-900">Tổng hợp doanh thu theo tháng</div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50">
+                    <tr className="text-left text-slate-500 uppercase text-[11px] tracking-widest font-black">
+                      <th className="px-4 py-4">Tháng</th>
+                      <th className="px-4 py-4">Số đơn</th>
+                      <th className="px-4 py-4">Số giấy</th>
+                      <th className="px-4 py-4">Tiền mặt</th>
+                      <th className="px-4 py-4">Chuyển khoản</th>
+                      <th className="px-4 py-4">Tổng DT</th>
+                      <th className="px-4 py-4">TB đơn</th>
                     </tr>
-                  ) : reportByDay.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-10 text-center text-slate-500 font-bold">
-                        Không có dữ liệu trong khoảng ngày đã chọn.
-                      </td>
-                    </tr>
-                  ) : (
-                    reportByDay.map((row) => (
-                      <tr key={row.reportDate} className="border-t border-slate-100">
-                        <td className="px-4 py-4 whitespace-nowrap">{formatDateVN(row.reportDate)}</td>
-                        <td className="px-4 py-4">{row.totalOrders}</td>
-                        <td className="px-4 py-4">{row.totalPrintPaper}</td>
-                        <td className="px-4 py-4">{formatCurrency(row.cashRevenue)}</td>
-                        <td className="px-4 py-4">{formatCurrency(row.bankRevenue)}</td>
-                        <td className="px-4 py-4 font-bold">{formatCurrency(row.totalRevenue)}</td>
-                        <td className="px-4 py-4">{formatCurrency(row.averageOrderValue)}</td>
+                  </thead>
+                  <tbody>
+                    {reportLoading ? (
+                      <tr>
+                        <td colSpan={7} className="px-4 py-10 text-center text-slate-500 font-bold">
+                          <span className="inline-flex items-center gap-2"><Loader2 size={16} className="animate-spin" /> Đang tải báo cáo...</span>
+                        </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : reportByMonth.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-4 py-10 text-center text-slate-500 font-bold">
+                          Không có dữ liệu theo tháng.
+                        </td>
+                      </tr>
+                    ) : (
+                      reportByMonth.map((row) => (
+                        <tr key={row.reportMonth} className="border-t border-slate-100">
+                          <td className="px-4 py-4 whitespace-nowrap">{row.reportMonth}</td>
+                          <td className="px-4 py-4">{row.totalOrders}</td>
+                          <td className="px-4 py-4">{row.totalPrintPaper}</td>
+                          <td className="px-4 py-4">{formatCurrency(row.cashRevenue)}</td>
+                          <td className="px-4 py-4">{formatCurrency(row.bankRevenue)}</td>
+                          <td className="px-4 py-4 font-bold">{formatCurrency(row.totalRevenue)}</td>
+                          <td className="px-4 py-4">{formatCurrency(row.averageOrderValue)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
 
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-4 py-4 border-b border-slate-100 font-black text-slate-900">Tổng hợp doanh thu theo tháng</div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-slate-50">
-                  <tr className="text-left text-slate-500 uppercase text-[11px] tracking-widest font-black">
-                    <th className="px-4 py-4">Tháng</th>
-                    <th className="px-4 py-4">Số đơn</th>
-                    <th className="px-4 py-4">Số giấy in</th>
-                    <th className="px-4 py-4">Tiền mặt</th>
-                    <th className="px-4 py-4">Chuyển khoản</th>
-                    <th className="px-4 py-4">Tổng doanh thu</th>
-                    <th className="px-4 py-4">Giá trị TB</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {reportLoading ? (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-10 text-center text-slate-500 font-bold">
-                        <span className="inline-flex items-center gap-2"><Loader2 size={16} className="animate-spin" /> Đang tải báo cáo...</span>
-                      </td>
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="px-4 py-4 border-b border-slate-100 font-black text-slate-900">Tổng hợp doanh thu theo ngày</div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50">
+                    <tr className="text-left text-slate-500 uppercase text-[11px] tracking-widest font-black">
+                      <th className="px-4 py-4">Ngày</th>
+                      <th className="px-4 py-4">Số đơn</th>
+                      <th className="px-4 py-4">Số giấy</th>
+                      <th className="px-4 py-4">Tiền mặt</th>
+                      <th className="px-4 py-4">Chuyển khoản</th>
+                      <th className="px-4 py-4">Tổng DT</th>
+                      <th className="px-4 py-4">TB đơn</th>
                     </tr>
-                  ) : reportByMonth.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-10 text-center text-slate-500 font-bold">
-                        Không có dữ liệu theo tháng.
-                      </td>
-                    </tr>
-                  ) : (
-                    reportByMonth.map((row) => (
-                      <tr key={row.reportMonth} className="border-t border-slate-100">
-                        <td className="px-4 py-4 whitespace-nowrap">{row.reportMonth}</td>
-                        <td className="px-4 py-4">{row.totalOrders}</td>
-                        <td className="px-4 py-4">{row.totalPrintPaper}</td>
-                        <td className="px-4 py-4">{formatCurrency(row.cashRevenue)}</td>
-                        <td className="px-4 py-4">{formatCurrency(row.bankRevenue)}</td>
-                        <td className="px-4 py-4 font-bold">{formatCurrency(row.totalRevenue)}</td>
-                        <td className="px-4 py-4">{formatCurrency(row.averageOrderValue)}</td>
+                  </thead>
+                  <tbody>
+                    {reportLoading ? (
+                      <tr>
+                        <td colSpan={7} className="px-4 py-10 text-center text-slate-500 font-bold">
+                          <span className="inline-flex items-center gap-2"><Loader2 size={16} className="animate-spin" /> Đang tải báo cáo...</span>
+                        </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : reportByDay.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-4 py-10 text-center text-slate-500 font-bold">
+                          Không có dữ liệu trong khoảng ngày đã chọn.
+                        </td>
+                      </tr>
+                    ) : (
+                      pagedReportByDay.map((row) => (
+                        <tr key={row.reportDate} className="border-t border-slate-100">
+                          <td className="px-4 py-4 whitespace-nowrap">{formatDateVN(row.reportDate)}</td>
+                          <td className="px-4 py-4">{row.totalOrders}</td>
+                          <td className="px-4 py-4">{row.totalPrintPaper}</td>
+                          <td className="px-4 py-4">{formatCurrency(row.cashRevenue)}</td>
+                          <td className="px-4 py-4">{formatCurrency(row.bankRevenue)}</td>
+                          <td className="px-4 py-4 font-bold">{formatCurrency(row.totalRevenue)}</td>
+                          <td className="px-4 py-4">{formatCurrency(row.averageOrderValue)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="px-4 py-4 border-t border-slate-100 flex flex-col md:flex-row items-center justify-between gap-3">
+                <div className="text-sm text-slate-500 font-bold">
+                  Tổng {reportByDay.length.toLocaleString('vi-VN')} dòng • Trang {reportDayPage}/{reportDayTotalPages}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setReportDayPage((prev) => Math.max(1, prev - 1))}
+                    disabled={reportDayPage <= 1 || reportLoading}
+                    className="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 disabled:opacity-50 inline-flex items-center gap-2"
+                  >
+                    <ChevronLeft size={16} /> Trước
+                  </button>
+                  <button
+                    onClick={() => setReportDayPage((prev) => Math.min(reportDayTotalPages, prev + 1))}
+                    disabled={reportDayPage >= reportDayTotalPages || reportLoading}
+                    className="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 disabled:opacity-50 inline-flex items-center gap-2"
+                  >
+                    Sau <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

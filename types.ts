@@ -774,7 +774,20 @@ export interface TrapDeliveryDropdowns {
   staff: TrapDeliveryStaffOption[];
 }
 
+// ============================================
+// MODULE GIAO NHẬN TRÁP - DASHBOARD ĐIỀU PHỐI
+// ============================================
 
+export interface TrapDeliveryDispatchDashboard {
+  total_today: number;
+  total_tomorrow: number;
+  total_next_3_days: number;
+  total_pending_date: number;
+  total_prepare: number;
+  total_doing: number;
+  total_need_attention: number;
+  total_overdue: number;
+}
 
 
 

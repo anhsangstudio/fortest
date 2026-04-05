@@ -340,6 +340,7 @@ export default function App() {
                   {activeTab === 'quick_expense' && 'Ghi Phiếu Chi Nhanh'}
                   {activeTab === 'contracts' && 'Quản lý Hợp đồng'}
                   {activeTab === 'tasks' && 'Quản lý Công việc'}
+				  {activeTab === 'trap_delivery' && <TrapDeliveryManager />}
                   {activeTab === 'schedule' && 'Lịch làm việc'}
 				  {activeTab === 'consultation' && 'Nhật ký tư vấn'}
 				  {activeTab === 'consultation_sales_analytics' && 'Phân Tích Hiệu Suất Sale Nâng Cao'}

@@ -9,6 +9,8 @@ import {
   Plus,
   Trash2,
   X,
+  CalendarDays,
+  Clock3,
 } from 'lucide-react';
 import { trapDeliveryModuleApi } from '../apiService';
 import type {
@@ -18,7 +20,7 @@ import type {
   TrapDeliveryStatus,
 } from '../types';
 
-const STATUS_STYLE: Record<TrapDeliveryStatus, string> = {
+const STATUS_ROW_STYLE: Record<TrapDeliveryStatus, string> = {
   'CHƯA LÀM': '',
   'CHUẨN BỊ': 'bg-yellow-50',
   'ĐANG LÀM': 'bg-fuchsia-50',
@@ -26,6 +28,16 @@ const STATUS_STYLE: Record<TrapDeliveryStatus, string> = {
   'CHƯA TRẢ TRÁP': 'bg-pink-50',
   'TRẢ THIẾU ĐỒ': 'bg-red-50',
   'ĐÃ TRẢ ĐỦ': 'bg-emerald-50 line-through',
+};
+
+const STATUS_BADGE_STYLE: Record<TrapDeliveryStatus, string> = {
+  'CHƯA LÀM': 'bg-slate-100 text-slate-700',
+  'CHUẨN BỊ': 'bg-yellow-100 text-yellow-800',
+  'ĐANG LÀM': 'bg-fuchsia-100 text-fuchsia-800',
+  'ĐÃ GIAO TRÁP': 'bg-sky-100 text-sky-800',
+  'CHƯA TRẢ TRÁP': 'bg-pink-100 text-pink-800',
+  'TRẢ THIẾU ĐỒ': 'bg-red-100 text-red-800',
+  'ĐÃ TRẢ ĐỦ': 'bg-emerald-100 text-emerald-800',
 };
 
 const DEFAULT_DASHBOARD: TrapDeliveryDashboard = {
@@ -51,6 +63,18 @@ const getCurrentMonthVN = () => {
   const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
   const hcmMs = utcMs + 7 * 60 * 60 * 1000;
   return new Date(hcmMs).toISOString().slice(0, 7);
+};
+
+const formatDateVN = (value?: string | null) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
 };
 
 type FilterState = {
@@ -397,12 +421,36 @@ export default function TrapDeliveryManager() {
           </div>
         </div>
 
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setFilters((prev) => ({ ...prev, month: getCurrentMonthVN() }))}
+            className="px-3 py-2 rounded-2xl bg-slate-100 text-slate-700 text-sm font-black inline-flex items-center gap-2"
+          >
+            <CalendarDays size={14} /> Tháng hiện tại
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilters((prev) => ({ ...prev, month: 'PENDING_DATE' }))}
+            className="px-3 py-2 rounded-2xl bg-amber-100 text-amber-800 text-sm font-black inline-flex items-center gap-2"
+          >
+            <Clock3 size={14} /> Chưa có ngày
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilters((prev) => ({ ...prev, month: 'ALL' }))}
+            className="px-3 py-2 rounded-2xl bg-blue-100 text-blue-800 text-sm font-black"
+          >
+            Tất cả dữ liệu
+          </button>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3 w-full">
           <div className="min-w-0">
             <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Tháng</label>
             <input
               type="month"
-              value={filters.month}
+              value={filters.month === 'PENDING_DATE' || filters.month === 'ALL' ? '' : filters.month}
               onChange={(e) => setFilters((prev) => ({ ...prev, month: e.target.value }))}
               className="w-full px-4 py-3 rounded-2xl border border-slate-200"
             />
@@ -503,17 +551,21 @@ export default function TrapDeliveryManager() {
                 </tr>
               ) : (
                 rows.map((row) => (
-                  <tr key={row.id} className={`border-t border-slate-100 ${STATUS_STYLE[row.tinh_trang] || ''}`}>
+                  <tr key={row.id} className={`border-t border-slate-100 ${STATUS_ROW_STYLE[row.tinh_trang] || ''}`}>
                     <td className="px-4 py-4 font-bold whitespace-nowrap">{row.customer_name}</td>
                     <td className="px-4 py-4 whitespace-nowrap">{row.service_name}</td>
                     <td className="px-4 py-4 whitespace-nowrap">{Number(row.price || 0).toLocaleString('vi-VN')} đ</td>
-                    <td className="px-4 py-4 whitespace-nowrap">{row.delivery_date || ''}</td>
+                    <td className="px-4 py-4 whitespace-nowrap">{formatDateVN(row.delivery_date)}</td>
                     <td className="px-4 py-4 whitespace-nowrap">{row.so_trap_to}</td>
                     <td className="px-4 py-4 whitespace-nowrap">{row.loai_de_trap_name || ''}</td>
                     <td className="px-4 py-4 whitespace-nowrap">{row.so_trap_nho}</td>
                     <td className="px-4 py-4 whitespace-nowrap">{row.loai_trap_name || ''}</td>
                     <td className="px-4 py-4 whitespace-nowrap">{row.khan_trum}</td>
-                    <td className="px-4 py-4 whitespace-nowrap font-bold">{row.tinh_trang}</td>
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-3 py-1 rounded-full text-xs font-black ${STATUS_BADGE_STYLE[row.tinh_trang]}`}>
+                        {row.tinh_trang}
+                      </span>
+                    </td>
                     <td className="px-4 py-4 whitespace-nowrap">{row.nguoi_giao_name || ''}</td>
                     <td className="px-4 py-4 whitespace-nowrap">{row.nguoi_nhan_name || ''}</td>
                     <td className="px-4 py-4 min-w-[220px]">{row.ghi_chu || ''}</td>
@@ -561,7 +613,7 @@ export default function TrapDeliveryManager() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Ngày nhận tráp</label>
-                <input value={editForm.delivery_date || ''} disabled className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50" />
+                <input value={formatDateVN(editForm.delivery_date)} disabled className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50" />
               </div>
               <div>
                 <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Số tráp to</label>

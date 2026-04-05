@@ -697,3 +697,87 @@ export interface CreatePhotoIdOrderInput {
   isReprint?: boolean;
   originalOrderId?: string | null;
 }
+
+export type TrapDeliveryStatus =
+  | 'CHƯA LÀM'
+  | 'CHUẨN BỊ'
+  | 'ĐANG LÀM'
+  | 'ĐÃ GIAO TRÁP'
+  | 'CHƯA TRẢ TRÁP'
+  | 'TRẢ THIẾU ĐỒ'
+  | 'ĐÃ TRẢ ĐỦ';
+
+export interface TrapDeliveryRow {
+  id: string;
+  contract_id: string;
+  contract_item_id: string;
+  customer_id?: string | null;
+  customer_name: string;
+  service_name: string;
+  price: number;
+  delivery_date?: string | null;
+  delivery_month?: string | null;
+  month_group: string;
+  so_trap_to: number;
+  loai_de_trap_id?: string | null;
+  loai_de_trap_name?: string | null;
+  so_trap_nho: number;
+  loai_trap_id?: string | null;
+  loai_trap_name?: string | null;
+  khan_trum: number;
+  tinh_trang: TrapDeliveryStatus;
+  nguoi_giao_staff_id?: string | null;
+  nguoi_giao_name?: string | null;
+  nguoi_nhan_staff_id?: string | null;
+  nguoi_nhan_name?: string | null;
+  ghi_chu?: string | null;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface TrapDeliveryDashboard {
+  total_rows: number;
+  status_chua_lam: number;
+  status_chuan_bi: number;
+  status_dang_lam: number;
+  status_da_giao_trap: number;
+  status_chua_tra_trap: number;
+  status_tra_thieu_do: number;
+  status_da_tra_du: number;
+}
+
+export interface TrapDeliveryOptionItem {
+  id: string;
+  name: string;
+  sort_order?: number;
+}
+
+export interface TrapDeliveryStatusOption {
+  id: string;
+  status_name: TrapDeliveryStatus;
+  sort_order?: number;
+  color_code?: string | null;
+  is_strikethrough?: boolean;
+}
+
+export interface TrapDeliveryStaffOption {
+  id: string;
+  name: string;
+  role?: string | null;
+}
+
+export interface TrapDeliveryDropdowns {
+  baseTypes: TrapDeliveryOptionItem[];
+  trapTypes: TrapDeliveryOptionItem[];
+  statuses: TrapDeliveryStatusOption[];
+  staff: TrapDeliveryStaffOption[];
+}
+
+
+
+
+
+
+
+

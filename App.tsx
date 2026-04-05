@@ -336,6 +336,7 @@ export default function App() {
                   {activeTab === 'consultation_service_analytics' && 'Phân Tích Dịch Vụ'}
 				  {activeTab === 'print_production' && 'Quản lý In ấn'}
                   {activeTab === 'print_costs' && 'Chi phí in ấn'}
+				  {activeTab === 'photo_id' && 'Quản lý Ảnh thẻ'}
                   {activeTab === 'finance' && 'Quản lý Tài chính'}
                   {activeTab === 'payroll' && 'Bảng lương nhân sự'}
                   {activeTab === 'staff' && 'Danh sách nhân viên'}

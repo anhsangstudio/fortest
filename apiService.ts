@@ -2509,3 +2509,24 @@ export const fetchPhotoIdOrders = async (): Promise<PhotoIdOrder[]> => {
   return (data || []).map(photoIdOrderFromDb);
 };
 
+export const searchPhotoIdOrdersByPhone = async (
+  phone: string
+): Promise<PhotoIdOrder[]> => {
+  if (!supabase || !phone?.trim()) return [];
+
+  const keyword = phone.trim();
+
+  const { data, error } = await supabase
+    .from('photo_id_orders')
+    .select('*')
+    .ilike('customer_phone', `%${keyword}%`)
+    .order('order_datetime', { ascending: false });
+
+  if (error) {
+    console.error('searchPhotoIdOrdersByPhone error:', error);
+    throw new Error(error.message);
+  }
+
+  return (data || []).map(photoIdOrderFromDb);
+};
+

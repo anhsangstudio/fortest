@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'; 
 import { 
   LayoutDashboard, FileText, Calendar, DollarSign, Users, 
-  Package, Settings, LogOut, Menu, CheckSquare, Sparkles, Loader2, Lock, Receipt, BarChart3, Printer
+  Package, Settings, LogOut, Menu, CheckSquare, Sparkles, Loader2, Lock, Receipt, BarChart3, Printer, Camera
 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import ContractManager from './components/ContractManager';
@@ -17,6 +17,7 @@ import ConsultationSalesAnalytics from './components/ConsultationSalesAnalytics'
 import ConsultationServiceAnalytics from './components/ConsultationServiceAnalytics';
 import PrintProductionManager from './components/PrintProductionManager';
 import PrintCostManager from './components/PrintCostManager';
+import PhotoIDManager from './components/PhotoIDManager';
 import { 
   Contract, Customer, Staff, Service, Transaction, Schedule, 
   Task, StudioInfo, ExpenseCategoryItem, ServiceTypeItem, ServiceGroupItem 
@@ -272,6 +273,11 @@ export default function App() {
                   icon={DollarSign} label="Chi phí in ấn" id="print_costs" activeTab={activeTab} setActiveTab={setActiveTab}
                   visible={isAdmin}
                />
+
+				<SidebarItem
+                  icon={Camera} label="Ảnh thẻ" id="photo_id" activeTab={activeTab} setActiveTab={setActiveTab}
+                  visible={true}
+                />
 				
                <SidebarItem 
                   icon={DollarSign} label="Thu & Chi" id="finance" activeTab={activeTab} setActiveTab={setActiveTab} 

@@ -2976,3 +2976,73 @@ export const fetchPhotoIdRevenueReport = async (fromDate: string, toDate: string
 };
 
 
+// ============================================
+// MODULE GIAO NHẬN TRÁP
+// ============================================
+
+export const trapDeliveryApi = {
+  async syncAll() {
+    const { data, error } = await supabase.rpc("trap_delivery_sync_all");
+    throwIfError(error);
+    return data;
+  },
+
+  async syncByContract(contractId: string) {
+    const { data, error } = await supabase.rpc(
+      "trap_delivery_sync_contract",
+      {
+        p_contract_id: contractId,
+      }
+    );
+    throwIfError(error);
+    return data;
+  },
+
+  async getRows(params?: {
+    month?: string | null;
+    status?: string | null;
+    serviceName?: string | null;
+    staffId?: string | null;
+    search?: string | null;
+  }) {
+    const { data, error } = await supabase.rpc(
+      "trap_delivery_get_rows",
+      {
+        p_month: params?.month ?? null,
+        p_status: params?.status ?? null,
+        p_service_name: params?.serviceName ?? null,
+        p_staff_id: params?.staffId ?? null,
+        p_search: params?.search ?? null,
+      }
+    );
+
+    throwIfError(error);
+    return data || [];
+  },
+
+  async getDashboard(month?: string | null) {
+    const { data, error } = await supabase.rpc(
+      "trap_delivery_get_dashboard",
+      {
+        p_month: month ?? null,
+      }
+    );
+
+    throwIfError(error);
+    return data?.[0] || null;
+  },
+
+  async getDropdowns() {
+    const { data, error } = await supabase.rpc(
+      "trap_delivery_get_dropdowns"
+    );
+
+    throwIfError(error);
+    return data;
+  },
+};
+
+
+
+
+

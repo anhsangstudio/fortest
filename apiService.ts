@@ -2609,5 +2609,154 @@ export const createPhotoPaperStockIn = async ({
 };
 
 
+export const createPhotoIdOrder = async (
+  input: CreatePhotoIdOrderInput
+): Promise<{ success: true; order: PhotoIdOrder }> => {
+  if (!supabase) throw new Error('Supabase chưa cấu hình');
+
+  // 1) lấy mã đơn
+  const { data: orderCode, error: codeErr } = await supabase.rpc('get_next_photo_id_order_code');
+  if (codeErr) throw new Error(codeErr.message);
+
+  // 2) tìm customer theo số điện thoại
+  let customerId: string | null = null;
+
+  const { data: existingCustomer } = await supabase
+    .from('customers')
+    .select('*')
+    .eq('phone', input.customerPhone)
+    .limit(1)
+    .maybeSingle();
+
+  if (existingCustomer) {
+    customerId = existingCustomer.id;
+
+    await supabase
+      .from('customers')
+      .update({
+        name: input.customerName,
+        phone: input.customerPhone,
+      })
+      .eq('id', customerId);
+  } else {
+    const newCustomerId = generateTextId('CUS');
+
+    const { error: cusErr } = await supabase
+      .from('customers')
+      .insert({
+        id: newCustomerId,
+        name: input.customerName,
+        phone: input.customerPhone,
+      });
+
+    if (cusErr) throw new Error(cusErr.message);
+    customerId = newCustomerId;
+  }
+
+  // 3) lấy kho giấy mặc định
+  const { data: paperInv, error: paperErr } = await supabase
+    .from('photo_paper_inventory')
+    .select('*')
+    .eq('paper_name', 'Giấy ảnh thẻ mặc định')
+    .single();
+
+  if (paperErr || !paperInv) throw new Error('Chưa có kho giấy mặc định');
+
+  const currentQty = Number(paperInv.current_quantity || 0);
+  const avgCost = Number(paperInv.average_cost || 0);
+
+  if (currentQty < input.printPaperQuantity) {
+    throw new Error('Số lượng giấy trong kho không đủ');
+  }
+
+  // 4) tạo order
+  const { data: orderInserted, error: orderErr } = await supabase
+    .from('photo_id_orders')
+    .insert({
+      order_code: orderCode,
+      order_datetime: input.orderDatetime || new Date().toISOString(),
+      customer_id: customerId,
+      customer_name: input.customerName,
+      customer_phone: input.customerPhone,
+      print_paper_quantity: input.printPaperQuantity,
+      amount: input.amount,
+      payment_method: input.paymentMethod,
+      drive_file_url: input.driveFileUrl,
+      drive_file_id: input.driveFileId,
+      note: input.note,
+      status: 'completed',
+      is_reprint: !!input.isReprint,
+      original_order_id: input.originalOrderId || null,
+      created_by: input.createdBy || null,
+    })
+    .select('*')
+    .single();
+
+  if (orderErr || !orderInserted) throw new Error(orderErr?.message || 'Tạo đơn thất bại');
+
+  // 5) tạo transaction thu
+  const txId = generateTextId('TX');
+
+  const { error: txErr } = await supabase
+    .from('transactions')
+    .insert({
+      id: txId,
+      transaction_type: 'income',
+      main_category: 'Ảnh thẻ',
+      category: 'Ảnh thẻ',
+      amount: input.amount,
+      description: `Thu tiền đơn ảnh thẻ ${orderCode} - ${input.customerName}`,
+      transaction_date: new Date().toISOString().slice(0, 10),
+      staff_id: input.createdBy || null,
+      payment_method: input.paymentMethod,
+      reference_type: 'photo_id_order',
+      reference_id: orderInserted.id,
+      external_id: `photo_id_order_${orderInserted.id}`,
+    });
+
+  if (txErr) throw new Error(txErr.message);
+
+  // 6) ghi xuất kho giấy
+  const totalCost = Number(input.printPaperQuantity || 0) * avgCost;
+
+  const { error: outErr } = await supabase
+    .from('photo_paper_stock_movements')
+    .insert({
+      paper_inventory_id: paperInv.id,
+      movement_type: 'OUT',
+      quantity: input.printPaperQuantity,
+      unit_cost: avgCost,
+      total_cost: totalCost,
+      related_photo_order_id: orderInserted.id,
+      note: `Xuất kho cho đơn ${orderCode}`,
+      created_by: input.createdBy || null,
+    });
+
+  if (outErr) throw new Error(outErr.message);
+
+  // 7) cập nhật tồn kho
+  const { error: invUpdErr } = await supabase
+    .from('photo_paper_inventory')
+    .update({
+      current_quantity: currentQty - input.printPaperQuantity,
+    })
+    .eq('id', paperInv.id);
+
+  if (invUpdErr) throw new Error(invUpdErr.message);
+
+  // 8) cập nhật transaction_id về order
+  await supabase
+    .from('photo_id_orders')
+    .update({ transaction_id: txId })
+    .eq('id', orderInserted.id);
+
+  return {
+    success: true,
+    order: photoIdOrderFromDb({ ...orderInserted, transaction_id: txId }),
+  };
+};
+
+
+
 
 

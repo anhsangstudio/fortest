@@ -11,6 +11,7 @@ import {
   X,
   CalendarDays,
   Clock3,
+  Printer,
 } from 'lucide-react';
 import { trapDeliveryModuleApi } from '../apiService';
 import type {
@@ -75,6 +76,15 @@ const formatDateVN = (value?: string | null) => {
     month: '2-digit',
     day: '2-digit',
   }).format(date);
+};
+
+const escapeHtml = (value?: string | number | null) => {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
 };
 
 type FilterState = {
@@ -201,6 +211,14 @@ export default function TrapDeliveryManager() {
     return Array.from(new Set(rows.map((x) => x.service_name).filter(Boolean))).sort();
   }, [rows]);
 
+  const monthLabel = useMemo(() => {
+    if (filters.month === 'ALL') return 'Tất cả dữ liệu';
+    if (filters.month === 'PENDING_DATE') return 'Chưa có ngày';
+    if (!filters.month) return 'Tháng hiện tại';
+    const [year, month] = filters.month.split('-');
+    return `Tháng ${month}/${year}`;
+  }, [filters.month]);
+
   const loadAll = async () => {
     try {
       setLoading(true);
@@ -246,6 +264,194 @@ export default function TrapDeliveryManager() {
     } finally {
       setSyncing(false);
     }
+  };
+
+  const handlePrintExport = () => {
+    if (!rows.length) {
+      alert('Không có dữ liệu để xuất file in.');
+      return;
+    }
+
+    const statusFiltersText = filters.status || 'Tất cả';
+    const serviceFiltersText = filters.serviceName || 'Tất cả';
+    const staffFiltersText =
+      dropdowns.staff.find((x) => x.id === filters.staffId)?.name || (filters.staffId ? filters.staffId : 'Tất cả');
+
+    const htmlRows = rows
+      .map(
+        (row, index) => `
+          <tr>
+            <td>${index + 1}</td>
+            <td>${escapeHtml(row.customer_name)}</td>
+            <td>${escapeHtml(row.service_name)}</td>
+            <td>${escapeHtml(Number(row.price || 0).toLocaleString('vi-VN'))} đ</td>
+            <td>${escapeHtml(formatDateVN(row.delivery_date))}</td>
+            <td>${escapeHtml(row.so_trap_to)}</td>
+            <td>${escapeHtml(row.loai_de_trap_name || '')}</td>
+            <td>${escapeHtml(row.so_trap_nho)}</td>
+            <td>${escapeHtml(row.loai_trap_name || '')}</td>
+            <td>${escapeHtml(row.khan_trum)}</td>
+            <td>${escapeHtml(row.tinh_trang)}</td>
+            <td>${escapeHtml(row.nguoi_giao_name || '')}</td>
+            <td>${escapeHtml(row.nguoi_nhan_name || '')}</td>
+            <td>${escapeHtml(row.ghi_chu || '')}</td>
+          </tr>
+        `
+      )
+      .join('');
+
+    const printWindow = window.open('', '_blank', 'width=1400,height=900');
+    if (!printWindow) {
+      alert('Trình duyệt đang chặn cửa sổ in. Hãy cho phép popup rồi thử lại.');
+      return;
+    }
+
+    const html = `
+      <!doctype html>
+      <html lang="vi">
+      <head>
+        <meta charset="UTF-8" />
+        <title>Xuất File In - Giao Nhận Tráp</title>
+        <style>
+          * { box-sizing: border-box; }
+          body {
+            font-family: Arial, Helvetica, sans-serif;
+            margin: 24px;
+            color: #0f172a;
+          }
+          .header {
+            margin-bottom: 18px;
+          }
+          .title {
+            font-size: 24px;
+            font-weight: 800;
+            margin-bottom: 6px;
+          }
+          .meta {
+            font-size: 13px;
+            color: #475569;
+            margin: 2px 0;
+          }
+          .summary {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin: 18px 0 22px;
+          }
+          .card {
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            padding: 12px;
+          }
+          .card-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            color: #64748b;
+            font-weight: 700;
+            margin-bottom: 6px;
+          }
+          .card-value {
+            font-size: 24px;
+            font-weight: 800;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: auto;
+          }
+          th, td {
+            border: 1px solid #cbd5e1;
+            padding: 8px 10px;
+            font-size: 12px;
+            vertical-align: top;
+          }
+          th {
+            background: #f8fafc;
+            text-align: left;
+            font-weight: 800;
+          }
+          .footer-note {
+            margin-top: 14px;
+            font-size: 12px;
+            color: #64748b;
+          }
+          @page {
+            size: landscape;
+            margin: 10mm;
+          }
+          @media print {
+            body { margin: 0; }
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="title">PHIẾU IN GIAO NHẬN TRÁP</div>
+          <div class="meta">Bộ lọc tháng: ${escapeHtml(monthLabel)}</div>
+          <div class="meta">Tình trạng: ${escapeHtml(statusFiltersText)} | Loại dịch vụ: ${escapeHtml(serviceFiltersText)} | Nhân sự: ${escapeHtml(staffFiltersText)}</div>
+          <div class="meta">Từ khóa: ${escapeHtml(filters.search || 'Không có')} | Thời điểm in: ${escapeHtml(new Date().toLocaleString('vi-VN'))}</div>
+        </div>
+
+        <div class="summary">
+          <div class="card">
+            <div class="card-label">Tổng đơn</div>
+            <div class="card-value">${escapeHtml(dashboard.total_rows)}</div>
+          </div>
+          <div class="card">
+            <div class="card-label">Chưa làm</div>
+            <div class="card-value">${escapeHtml(dashboard.status_chua_lam)}</div>
+          </div>
+          <div class="card">
+            <div class="card-label">Trả thiếu đồ</div>
+            <div class="card-value">${escapeHtml(dashboard.status_tra_thieu_do)}</div>
+          </div>
+          <div class="card">
+            <div class="card-label">Đã trả đủ</div>
+            <div class="card-value">${escapeHtml(dashboard.status_da_tra_du)}</div>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>STT</th>
+              <th>Khách hàng</th>
+              <th>Loại dịch vụ</th>
+              <th>Giá tiền</th>
+              <th>Ngày nhận tráp</th>
+              <th>Số tráp to</th>
+              <th>Loại đế tráp</th>
+              <th>Số tráp nhỏ</th>
+              <th>Loại tráp</th>
+              <th>Khăn trùm</th>
+              <th>Tình trạng</th>
+              <th>Người giao</th>
+              <th>Người nhận</th>
+              <th>Ghi chú</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${htmlRows}
+          </tbody>
+        </table>
+
+        <div class="footer-note">
+          Tài liệu in từ module Quản Lý Giao Nhận Tráp của Ánh Sáng Studio.
+        </div>
+
+        <script>
+          window.onload = function () {
+            window.print();
+          };
+        </script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
   };
 
   const openEditModal = (row: TrapDeliveryRow) => {
@@ -386,6 +592,12 @@ export default function TrapDeliveryManager() {
           </div>
 
           <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handlePrintExport}
+              className="px-4 py-3 rounded-2xl bg-emerald-600 text-white font-black text-sm inline-flex items-center gap-2"
+            >
+              <Printer size={16} /> Xuất File in
+            </button>
             <button
               onClick={handleApplyFilters}
               className="px-4 py-3 rounded-2xl bg-slate-100 text-slate-700 font-black text-sm inline-flex items-center gap-2"

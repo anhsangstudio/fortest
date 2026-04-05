@@ -12,10 +12,14 @@ import {
   CalendarDays,
   Clock3,
   Printer,
+  AlarmClock,
+  CalendarClock,
+  TriangleAlert,
 } from 'lucide-react';
-import { trapDeliveryModuleApi } from '../apiService';
+import { trapDeliveryModuleApi, trapDeliveryDispatchApi } from '../apiService';
 import type {
   TrapDeliveryDashboard,
+  TrapDeliveryDispatchDashboard,
   TrapDeliveryDropdowns,
   TrapDeliveryRow,
   TrapDeliveryStatus,
@@ -50,6 +54,17 @@ const DEFAULT_DASHBOARD: TrapDeliveryDashboard = {
   status_chua_tra_trap: 0,
   status_tra_thieu_do: 0,
   status_da_tra_du: 0,
+};
+
+const DEFAULT_DISPATCH_DASHBOARD: TrapDeliveryDispatchDashboard = {
+  total_today: 0,
+  total_tomorrow: 0,
+  total_next_3_days: 0,
+  total_pending_date: 0,
+  total_prepare: 0,
+  total_doing: 0,
+  total_need_attention: 0,
+  total_overdue: 0,
 };
 
 const DEFAULT_DROPDOWNS: TrapDeliveryDropdowns = {
@@ -184,12 +199,14 @@ function CenteredPortalModal({
 export default function TrapDeliveryManager() {
   const [rows, setRows] = useState<TrapDeliveryRow[]>([]);
   const [dashboard, setDashboard] = useState<TrapDeliveryDashboard>(DEFAULT_DASHBOARD);
+  const [dispatchDashboard, setDispatchDashboard] = useState<TrapDeliveryDispatchDashboard>(DEFAULT_DISPATCH_DASHBOARD);
   const [dropdowns, setDropdowns] = useState<TrapDeliveryDropdowns>(DEFAULT_DROPDOWNS);
 
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [savingRow, setSavingRow] = useState(false);
   const [savingOption, setSavingOption] = useState(false);
+  const [autoUpdatingStatus, setAutoUpdatingStatus] = useState(false);
 
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [baseTypeModalOpen, setBaseTypeModalOpen] = useState(false);
@@ -223,7 +240,7 @@ export default function TrapDeliveryManager() {
     try {
       setLoading(true);
 
-      const [rowData, dashboardData, dropdownData] = await Promise.all([
+      const [rowData, dashboardData, dropdownData, dispatchData] = await Promise.all([
         trapDeliveryModuleApi.getRows({
           month: filters.month || null,
           status: filters.status || null,
@@ -233,11 +250,13 @@ export default function TrapDeliveryManager() {
         }),
         trapDeliveryModuleApi.getDashboard(filters.month || null),
         trapDeliveryModuleApi.getDropdowns(),
+        trapDeliveryDispatchApi.getDispatchDashboard(),
       ]);
 
       setRows(rowData || []);
       setDashboard(dashboardData || DEFAULT_DASHBOARD);
       setDropdowns(dropdownData || DEFAULT_DROPDOWNS);
+      setDispatchDashboard(dispatchData || DEFAULT_DISPATCH_DASHBOARD);
     } catch (error: any) {
       alert(error.message || 'Không tải được dữ liệu giao nhận tráp');
     } finally {
@@ -251,6 +270,19 @@ export default function TrapDeliveryManager() {
 
   const handleApplyFilters = async () => {
     await loadAll();
+  };
+
+  const handleAutoUpdateStatuses = async () => {
+    try {
+      setAutoUpdatingStatus(true);
+      await trapDeliveryDispatchApi.autoUpdateStatuses();
+      await loadAll();
+      alert('Đã tự động cập nhật trạng thái theo ngày nhận tráp.');
+    } catch (error: any) {
+      alert(error.message || 'Tự động cập nhật trạng thái thất bại');
+    } finally {
+      setAutoUpdatingStatus(false);
+    }
   };
 
   const handleSyncAll = async () => {
@@ -381,7 +413,6 @@ export default function TrapDeliveryManager() {
           }
           @media print {
             body { margin: 0; }
-            .no-print { display: none; }
           }
         </style>
       </head>
@@ -565,6 +596,41 @@ export default function TrapDeliveryManager() {
 
   return (
     <div className="w-full min-w-0 max-w-full space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 xl:grid-cols-8 gap-4 w-full">
+        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0">
+          <div className="text-xs font-black uppercase tracking-widest text-slate-400">Hôm nay</div>
+          <div className="mt-2 text-3xl font-black text-slate-900">{dispatchDashboard.total_today}</div>
+        </div>
+        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0">
+          <div className="text-xs font-black uppercase tracking-widest text-slate-400">Ngày mai</div>
+          <div className="mt-2 text-3xl font-black text-slate-900">{dispatchDashboard.total_tomorrow}</div>
+        </div>
+        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0">
+          <div className="text-xs font-black uppercase tracking-widest text-slate-400">3 ngày tới</div>
+          <div className="mt-2 text-3xl font-black text-blue-700">{dispatchDashboard.total_next_3_days}</div>
+        </div>
+        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0">
+          <div className="text-xs font-black uppercase tracking-widest text-slate-400">Chưa có ngày</div>
+          <div className="mt-2 text-3xl font-black text-amber-700">{dispatchDashboard.total_pending_date}</div>
+        </div>
+        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0">
+          <div className="text-xs font-black uppercase tracking-widest text-slate-400">Chuẩn bị</div>
+          <div className="mt-2 text-3xl font-black text-yellow-700">{dispatchDashboard.total_prepare}</div>
+        </div>
+        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0">
+          <div className="text-xs font-black uppercase tracking-widest text-slate-400">Đang làm</div>
+          <div className="mt-2 text-3xl font-black text-fuchsia-700">{dispatchDashboard.total_doing}</div>
+        </div>
+        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0">
+          <div className="text-xs font-black uppercase tracking-widest text-slate-400">Cần chú ý</div>
+          <div className="mt-2 text-3xl font-black text-red-600">{dispatchDashboard.total_need_attention}</div>
+        </div>
+        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0">
+          <div className="text-xs font-black uppercase tracking-widest text-slate-400">Quá hạn</div>
+          <div className="mt-2 text-3xl font-black text-orange-700">{dispatchDashboard.total_overdue}</div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 w-full">
         <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0">
           <div className="text-xs font-black uppercase tracking-widest text-slate-400">Tổng đơn tráp</div>
@@ -592,6 +658,14 @@ export default function TrapDeliveryManager() {
           </div>
 
           <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleAutoUpdateStatuses}
+              disabled={autoUpdatingStatus}
+              className="px-4 py-3 rounded-2xl bg-violet-600 text-white font-black text-sm inline-flex items-center gap-2"
+            >
+              {autoUpdatingStatus ? <Loader2 size={16} className="animate-spin" /> : <AlarmClock size={16} />}
+              Tự cập nhật trạng thái
+            </button>
             <button
               onClick={handlePrintExport}
               className="px-4 py-3 rounded-2xl bg-emerald-600 text-white font-black text-sm inline-flex items-center gap-2"
@@ -633,6 +707,18 @@ export default function TrapDeliveryManager() {
           </div>
         </div>
 
+        {(dispatchDashboard.total_overdue > 0 || dispatchDashboard.total_need_attention > 0) && (
+          <div className="rounded-3xl border border-red-200 bg-red-50 p-4 text-red-800 flex items-start gap-3">
+            <TriangleAlert className="mt-0.5" size={18} />
+            <div className="text-sm">
+              <div className="font-black">Có việc cần ưu tiên xử lý.</div>
+              <div className="mt-1">
+                Quá hạn: <strong>{dispatchDashboard.total_overdue}</strong> dòng, cần chú ý: <strong>{dispatchDashboard.total_need_attention}</strong> dòng.
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -654,6 +740,27 @@ export default function TrapDeliveryManager() {
             className="px-3 py-2 rounded-2xl bg-blue-100 text-blue-800 text-sm font-black"
           >
             Tất cả dữ liệu
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilters((prev) => ({ ...prev, status: 'CHUẨN BỊ' }))}
+            className="px-3 py-2 rounded-2xl bg-yellow-100 text-yellow-800 text-sm font-black"
+          >
+            Lọc CHUẨN BỊ
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilters((prev) => ({ ...prev, status: 'ĐANG LÀM' }))}
+            className="px-3 py-2 rounded-2xl bg-fuchsia-100 text-fuchsia-800 text-sm font-black"
+          >
+            Lọc ĐANG LÀM
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilters((prev) => ({ ...prev, status: 'CHƯA TRẢ TRÁP' }))}
+            className="px-3 py-2 rounded-2xl bg-pink-100 text-pink-800 text-sm font-black"
+          >
+            Lọc CHƯA TRẢ
           </button>
         </div>
 

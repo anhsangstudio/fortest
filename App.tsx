@@ -17,6 +17,7 @@ import ConsultationSalesAnalytics from './components/ConsultationSalesAnalytics'
 import ConsultationServiceAnalytics from './components/ConsultationServiceAnalytics';
 import PrintProductionManager from './components/PrintProductionManager';
 import PrintCostManager from './components/PrintCostManager';
+import TrapDeliveryManager from './components/TrapDeliveryManager';
 import PhotoIDManager from './components/PhotoIDManager';
 import { 
   Contract, Customer, Staff, Service, Transaction, Schedule, 
@@ -248,6 +249,15 @@ export default function App() {
                   icon={CheckSquare} label="Công việc" id="tasks" activeTab={activeTab} setActiveTab={setActiveTab}
                   badge={pendingTasksCount > 0 ? pendingTasksCount : undefined}
                />
+
+				<SidebarItem
+                  icon={Package} label="Giao Nhận Tráp"  id="trap_delivery"  activeTab={activeTab}  setActiveTab={setActiveTab}
+                  visible={true}
+                />
+
+
+
+				
                <SidebarItem 
                   icon={Calendar} label="Lịch trình" id="schedule" activeTab={activeTab} setActiveTab={setActiveTab} 
                   visible={canAccess('schedules')}

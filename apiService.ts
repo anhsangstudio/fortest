@@ -37,6 +37,10 @@ import { Service,
 		UpdatePrintVendorPriceInput,
 		PrintVendorPriceFilters,
 		PrintCostRow,
+		PhotoIdOrder,
+		PhotoPaperInventory,
+		PhotoPaperStockMovement,
+		CreatePhotoIdOrderInput,
 		PrintCostFilters,
 		PrintCostSummary,} from './types';
 
@@ -308,6 +312,41 @@ const transactionToDb = (t: Partial<Transaction>) => ({
   bill_image_url: t.billImageUrl,
   contract_code: t.contractCode,
   staff_name: t.staffName
+});
+
+const photoIdOrderFromDb = (db: any): PhotoIdOrder => ({
+  id: db.id,
+  orderCode: db.order_code,
+  orderDatetime: db.order_datetime,
+  customerId: db.customer_id,
+  customerName: db.customer_name || '',
+  customerPhone: db.customer_phone || '',
+  printPaperQuantity: Number(db.print_paper_quantity || 0),
+  amount: Number(db.amount || 0),
+  paymentMethod: db.payment_method || '',
+  driveFileUrl: db.drive_file_url || '',
+  driveFileId: db.drive_file_id || '',
+  note: db.note || '',
+  status: db.status || 'completed',
+  isReprint: !!db.is_reprint,
+  originalOrderId: db.original_order_id,
+  transactionId: db.transaction_id,
+  createdBy: db.created_by,
+  createdAt: db.created_at,
+  updatedAt: db.updated_at
+});
+
+const photoPaperInventoryFromDb = (db: any): PhotoPaperInventory => ({
+  id: db.id,
+  paperName: db.paper_name,
+  unit: db.unit,
+  currentQuantity: Number(db.current_quantity || 0),
+  warningThreshold: Number(db.warning_threshold || 0),
+  averageCost: Number(db.average_cost || 0),
+  isActive: !!db.is_active,
+  isLowStock: !!db.is_low_stock,
+  createdAt: db.created_at,
+  updatedAt: db.updated_at
 });
 
 export const studioInfoFromDb = (db: any): StudioInfo => ({

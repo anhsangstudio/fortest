@@ -634,3 +634,66 @@ export interface PrintCostSummary {
   missingPriceRows: number;
   byVendor: PrintCostSummaryByVendor[];
 }
+
+export interface PhotoIdOrder {
+  id: string;
+  orderCode: string;
+  orderDatetime: string;
+  customerId?: string | null;
+  customerName: string;
+  customerPhone: string;
+  printPaperQuantity: number;
+  amount: number;
+  paymentMethod?: string;
+  driveFileUrl?: string;
+  driveFileId?: string;
+  note?: string;
+  status: string;
+  isReprint: boolean;
+  originalOrderId?: string | null;
+  transactionId?: string | null;
+  createdBy?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PhotoPaperInventory {
+  id: string;
+  paperName: string;
+  unit: string;
+  currentQuantity: number;
+  warningThreshold: number;
+  averageCost: number;
+  isActive: boolean;
+  isLowStock?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PhotoPaperStockMovement {
+  id: string;
+  paperInventoryId: string;
+  movementType: 'IN' | 'OUT' | 'ADJUST';
+  quantity: number;
+  unitCost: number;
+  totalCost: number;
+  relatedPhotoOrderId?: string | null;
+  note?: string;
+  createdBy?: string | null;
+  createdAt?: string;
+}
+
+export interface CreatePhotoIdOrderInput {
+  customerName: string;
+  customerPhone: string;
+  printPaperQuantity: number;
+  amount: number;
+  paymentMethod: string;
+  driveFileUrl?: string;
+  driveFileId?: string;
+  note?: string;
+  createdBy?: string | null;
+  orderDatetime?: string;
+  isReprint?: boolean;
+  originalOrderId?: string | null;
+}

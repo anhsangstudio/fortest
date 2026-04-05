@@ -1,6 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Search, Plus, RefreshCw, AlertTriangle, ExternalLink, Download, Package, Save, ImagePlus } from 'lucide-react';
-import { Staff } from '../types';
+import {
+  Search,
+  Plus,
+  RefreshCw,
+  Upload,
+  Loader2,
+  ExternalLink,
+  Download,
+  Package,
+  AlertTriangle,
+} from 'lucide-react';
+import ResponsiveModal from './ResponsiveModal';
 import {
   fetchPhotoIdOrders,
   searchPhotoIdOrdersByPhone,
@@ -8,12 +18,9 @@ import {
   createPhotoPaperStockIn,
   createPhotoIdOrder,
 } from '../apiService';
+import type { Staff } from '../types';
 
-type Props = {
-  currentUser: Staff | null;
-};
-
-type OrderRow = {
+type PhotoIdOrderRow = {
   id: string;
   orderCode: string;
   orderDatetime: string;
@@ -26,9 +33,10 @@ type OrderRow = {
   driveFileId?: string;
   note?: string;
   status?: string;
+  isReprint?: boolean;
 };
 
-type InventoryRow = {
+type PhotoPaperInventoryRow = {
   id: string;
   paperName: string;
   unit: string;
@@ -38,132 +46,158 @@ type InventoryRow = {
   isLowStock?: boolean;
 };
 
-const formatMoney = (value: number) =>
-  new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(Number(value || 0));
+interface PhotoIDManagerProps {
+  currentUser: Staff | null;
+}
 
-const formatDateTime = (value?: string) => {
+type OrderFormState = {
+  orderDatetime: string;
+  customerName: string;
+  customerPhone: string;
+  printPaperQuantity: string;
+  amount: string;
+  paymentMethod: string;
+  driveFileUrl: string;
+  driveFileId: string;
+  note: string;
+  isReprint: boolean;
+};
+
+type StockInFormState = {
+  paperInventoryId: string;
+  quantity: string;
+  unitCost: string;
+  note: string;
+};
+
+const EMPTY_ORDER_FORM: OrderFormState = {
+  orderDatetime: new Date().toISOString().slice(0, 16),
+  customerName: '',
+  customerPhone: '',
+  printPaperQuantity: '1',
+  amount: '',
+  paymentMethod: 'Tiền mặt',
+  driveFileUrl: '',
+  driveFileId: '',
+  note: '',
+  isReprint: false,
+};
+
+const EMPTY_STOCK_IN_FORM: StockInFormState = {
+  paperInventoryId: '',
+  quantity: '',
+  unitCost: '',
+  note: '',
+};
+
+const formatCurrency = (value?: number | string | null) => {
+  const amount = Number(value || 0);
+  return `${amount.toLocaleString('vi-VN')} đ`;
+};
+
+const formatDateTime = (value?: string | null) => {
   if (!value) return '';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString('vi-VN');
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('vi-VN');
 };
 
-const extractDriveFileId = (url: string) => {
-  if (!url) return '';
-  const match1 = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
-  if (match1?.[1]) return match1[1];
-  const match2 = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-  if (match2?.[1]) return match2[1];
-  return '';
-};
+const normalizePhone = (value: string) => value.replace(/\s+/g, '').trim();
 
-const PhotoIDManager: React.FC<Props> = ({ currentUser }) => {
+export default function PhotoIDManager({ currentUser }: PhotoIDManagerProps) {
   const [activeTab, setActiveTab] = useState<'orders' | 'lookup' | 'inventory'>('orders');
-  const [orders, setOrders] = useState<OrderRow[]>([]);
-  const [inventory, setInventory] = useState<InventoryRow[]>([]);
+
+  const [orders, setOrders] = useState<PhotoIdOrderRow[]>([]);
+  const [inventory, setInventory] = useState<PhotoPaperInventoryRow[]>([]);
+
+  const [loadingOrders, setLoadingOrders] = useState(false);
+  const [loadingInventory, setLoadingInventory] = useState(false);
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [submittingOrder, setSubmittingOrder] = useState(false);
+  const [submittingStockIn, setSubmittingStockIn] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
+
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [stockInModalOpen, setStockInModalOpen] = useState(false);
+
+  const [orderForm, setOrderForm] = useState<OrderFormState>(EMPTY_ORDER_FORM);
+  const [stockInForm, setStockInForm] = useState<StockInFormState>(EMPTY_STOCK_IN_FORM);
+
   const [lookupPhone, setLookupPhone] = useState('');
-  const [lookupResults, setLookupResults] = useState<OrderRow[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
+  const [lookupResults, setLookupResults] = useState<PhotoIdOrderRow[]>([]);
 
-  const [form, setForm] = useState({
-    orderDatetime: new Date().toISOString().slice(0, 16),
-    customerName: '',
-    customerPhone: '',
-    printPaperQuantity: 1,
-    amount: 0,
-    paymentMethod: 'Tiền mặt',
-    driveFileUrl: '',
-    driveFileId: '',
-    note: '',
-  });
-
-  const [stockInForm, setStockInForm] = useState({
-    paperInventoryId: '',
-    quantity: 0,
-    unitCost: 0,
-    note: '',
-  });
-
-  const activeInventory = useMemo(
-    () => inventory.find(item => item.id === stockInForm.paperInventoryId) || inventory[0] || null,
-    [inventory, stockInForm.paperInventoryId]
+  const lowStockItems = useMemo(
+    () => inventory.filter((item) => item.currentQuantity <= item.warningThreshold),
+    [inventory]
   );
 
-  const totalOrderRevenue = useMemo(
-    () => orders.reduce((sum, item) => sum + Number(item.amount || 0), 0),
-    [orders]
-  );
-
-  const loadOrders = async () => {
-    const rows = await fetchPhotoIdOrders();
-    setOrders(rows as unknown as OrderRow[]);
+  const resetOrderForm = () => {
+    setOrderForm({
+      ...EMPTY_ORDER_FORM,
+      orderDatetime: new Date().toISOString().slice(0, 16),
+    });
   };
 
-  const loadInventory = async () => {
-    const rows = await fetchPhotoPaperInventory();
-    const mapped = rows as unknown as InventoryRow[];
-    setInventory(mapped);
-    if (mapped.length > 0) {
-      setStockInForm(prev => ({
-        ...prev,
-        paperInventoryId: prev.paperInventoryId || mapped[0].id,
-      }));
+  const resetStockInForm = () => {
+    setStockInForm({
+      ...EMPTY_STOCK_IN_FORM,
+      paperInventoryId: inventory[0]?.id || '',
+    });
+  };
+
+  const loadOrders = async () => {
+    try {
+      setLoadingOrders(true);
+      const data = await fetchPhotoIdOrders();
+      setOrders((data || []) as PhotoIdOrderRow[]);
+    } catch (error: any) {
+      alert(error.message || 'Không tải được danh sách đơn ảnh thẻ');
+    } finally {
+      setLoadingOrders(false);
     }
   };
 
-  const loadBootstrap = async () => {
-    setIsLoading(true);
-    setError('');
+  const loadInventory = async () => {
     try {
-      await Promise.all([loadOrders(), loadInventory()]);
-    } catch (e: any) {
-      setError(e.message || 'Không tải được dữ liệu module ảnh thẻ');
+      setLoadingInventory(true);
+      const data = await fetchPhotoPaperInventory();
+      setInventory((data || []) as PhotoPaperInventoryRow[]);
+      setStockInForm((prev) => ({
+        ...prev,
+        paperInventoryId: prev.paperInventoryId || data?.[0]?.id || '',
+      }));
+    } catch (error: any) {
+      alert(error.message || 'Không tải được kho giấy');
     } finally {
-      setIsLoading(false);
+      setLoadingInventory(false);
     }
   };
 
   useEffect(() => {
-    loadBootstrap();
+    loadOrders();
+    loadInventory();
   }, []);
 
-  const resetOrderForm = () => {
-    setForm({
-      orderDatetime: new Date().toISOString().slice(0, 16),
-      customerName: '',
-      customerPhone: '',
-      printPaperQuantity: 1,
-      amount: 0,
-      paymentMethod: 'Tiền mặt',
-      driveFileUrl: '',
-      driveFileId: '',
-      note: '',
-    });
-  };
-
-  const handleUploadFile = async (file: File) => {
+  const handleUploadFile = async (file?: File | null) => {
     if (!file) return;
-    if (!form.customerPhone.trim()) {
-      setError('Hãy nhập số điện thoại trước khi upload file.');
+    if (!orderForm.customerPhone.trim()) {
+      alert('Hãy nhập số điện thoại trước khi upload ảnh.');
       return;
     }
 
-    setIsLoading(true);
-    setError('');
-    setMessage('');
-
     try {
+      setUploadingFile(true);
+
       const formData = new FormData();
       formData.append('file', file);
       formData.append(
         'metadata',
         JSON.stringify({
-          module: 'PHOTO_ID',
-          customerPhone: form.customerPhone.trim(),
+          category: 'AnhThe',
           timestamp: Date.now(),
           staffName: currentUser?.name || 'Staff',
+          customerPhone: normalizePhone(orderForm.customerPhone),
+          module: 'PHOTO_ID',
         })
       );
 
@@ -172,340 +206,250 @@ const PhotoIDManager: React.FC<Props> = ({ currentUser }) => {
         body: formData,
       });
 
-      const data = await response.json();
-      if (!response.ok || !data?.success) {
-        throw new Error(data?.error || 'Upload file thất bại');
+      const result = await response.json();
+
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error || 'Upload file thất bại');
       }
 
-      setForm(prev => ({
+      setOrderForm((prev) => ({
         ...prev,
-        driveFileUrl: data.url || '',
-        driveFileId: data.fileId || extractDriveFileId(data.url || ''),
+        driveFileUrl: result.url || '',
+        driveFileId: result.fileId || '',
       }));
-      setMessage('Upload file ảnh thành công.');
-    } catch (e: any) {
-      setError(e.message || 'Upload file thất bại');
+    } catch (error: any) {
+      alert(error.message || 'Upload ảnh thất bại');
     } finally {
-      setIsLoading(false);
+      setUploadingFile(false);
     }
   };
 
   const handleCreateOrder = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setMessage('');
 
-    if (!form.customerName.trim()) return setError('Vui lòng nhập tên khách hàng.');
-    if (!form.customerPhone.trim()) return setError('Vui lòng nhập số điện thoại.');
-    if (Number(form.printPaperQuantity) <= 0) return setError('Số lượng giấy in phải lớn hơn 0.');
-    if (Number(form.amount) < 0) return setError('Số tiền không hợp lệ.');
+    const customerName = orderForm.customerName.trim();
+    const customerPhone = normalizePhone(orderForm.customerPhone);
+    const printPaperQuantity = Number(orderForm.printPaperQuantity || 0);
+    const amount = Number(orderForm.amount || 0);
 
-    setIsLoading(true);
+    if (!customerName) return alert('Vui lòng nhập tên khách hàng.');
+    if (!customerPhone) return alert('Vui lòng nhập số điện thoại.');
+    if (printPaperQuantity <= 0) return alert('Số lượng giấy in phải lớn hơn 0.');
+    if (amount < 0) return alert('Số tiền không hợp lệ.');
+
     try {
-      await createPhotoIdOrder({
-        customerName: form.customerName.trim(),
-        customerPhone: form.customerPhone.trim(),
-        printPaperQuantity: Number(form.printPaperQuantity || 0),
-        amount: Number(form.amount || 0),
-        paymentMethod: form.paymentMethod,
-        driveFileUrl: form.driveFileUrl || '',
-        driveFileId: form.driveFileId || extractDriveFileId(form.driveFileUrl || ''),
-        note: form.note,
-        createdBy: currentUser?.id || null,
-        orderDatetime: form.orderDatetime ? new Date(form.orderDatetime).toISOString() : new Date().toISOString(),
-      });
+      setSubmittingOrder(true);
 
-      setMessage('Đã tạo đơn ảnh thẻ thành công.');
+      await createPhotoIdOrder({
+        customerName,
+        customerPhone,
+        printPaperQuantity,
+        amount,
+        paymentMethod: orderForm.paymentMethod,
+        driveFileUrl: orderForm.driveFileUrl,
+        driveFileId: orderForm.driveFileId,
+        note: orderForm.note.trim(),
+        createdBy: currentUser?.id || null,
+        orderDatetime: new Date(orderForm.orderDatetime).toISOString(),
+        isReprint: orderForm.isReprint,
+      } as any);
+
+      alert('Đã tạo đơn ảnh thẻ thành công.');
+      setCreateModalOpen(false);
       resetOrderForm();
       await Promise.all([loadOrders(), loadInventory()]);
-    } catch (e: any) {
-      setError(e.message || 'Tạo đơn ảnh thẻ thất bại');
+    } catch (error: any) {
+      alert(error.message || 'Tạo đơn ảnh thẻ thất bại');
     } finally {
-      setIsLoading(false);
+      setSubmittingOrder(false);
     }
   };
 
-  const handleLookup = async () => {
-    setError('');
-    setMessage('');
-    if (!lookupPhone.trim()) {
+  const handleSearch = async () => {
+    const phone = normalizePhone(lookupPhone);
+    if (!phone) {
       setLookupResults([]);
-      return setError('Vui lòng nhập số điện thoại để tra cứu.');
+      return alert('Hãy nhập số điện thoại để tra cứu.');
     }
 
-    setIsLoading(true);
     try {
-      const rows = await searchPhotoIdOrdersByPhone(lookupPhone.trim());
-      setLookupResults(rows as unknown as OrderRow[]);
-      if (!rows.length) setMessage('Không tìm thấy dữ liệu phù hợp.');
-    } catch (e: any) {
-      setError(e.message || 'Tra cứu thất bại');
+      setLookupLoading(true);
+      const data = await searchPhotoIdOrdersByPhone(phone);
+      setLookupResults((data || []) as PhotoIdOrderRow[]);
+    } catch (error: any) {
+      alert(error.message || 'Tra cứu thất bại');
     } finally {
-      setIsLoading(false);
+      setLookupLoading(false);
     }
   };
 
   const handleStockIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setMessage('');
 
-    if (!stockInForm.paperInventoryId) return setError('Vui lòng chọn loại giấy.');
-    if (Number(stockInForm.quantity) <= 0) return setError('Số lượng nhập phải lớn hơn 0.');
-    if (Number(stockInForm.unitCost) < 0) return setError('Đơn giá không hợp lệ.');
+    const quantity = Number(stockInForm.quantity || 0);
+    const unitCost = Number(stockInForm.unitCost || 0);
 
-    setIsLoading(true);
+    if (!stockInForm.paperInventoryId) return alert('Hãy chọn kho giấy.');
+    if (quantity <= 0) return alert('Số lượng nhập phải lớn hơn 0.');
+    if (unitCost < 0) return alert('Đơn giá không hợp lệ.');
+
     try {
+      setSubmittingStockIn(true);
       await createPhotoPaperStockIn({
         paperInventoryId: stockInForm.paperInventoryId,
-        quantity: Number(stockInForm.quantity || 0),
-        unitCost: Number(stockInForm.unitCost || 0),
-        note: stockInForm.note,
+        quantity,
+        unitCost,
+        note: stockInForm.note.trim(),
         createdBy: currentUser?.id || null,
       });
 
-      setMessage('Đã nhập kho giấy thành công.');
-      setStockInForm(prev => ({ ...prev, quantity: 0, unitCost: 0, note: '' }));
+      alert('Đã nhập kho giấy thành công.');
+      setStockInModalOpen(false);
+      resetStockInForm();
       await loadInventory();
-    } catch (e: any) {
-      setError(e.message || 'Nhập kho thất bại');
+    } catch (error: any) {
+      alert(error.message || 'Nhập kho thất bại');
     } finally {
-      setIsLoading(false);
+      setSubmittingStockIn(false);
     }
+  };
+
+  const openLink = (url?: string) => {
+    if (!url) return alert('Đơn này chưa có link ảnh.');
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const downloadLink = (url?: string) => {
+    if (!url) return alert('Đơn này chưa có link ảnh.');
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.click();
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:flex-row md:items-center md:justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-800">Module Ảnh thẻ</h2>
-          <p className="mt-1 text-sm text-slate-500">Tạo đơn ảnh thẻ, tra cứu file theo số điện thoại và quản lý kho giấy.</p>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm">
+          <div className="text-xs font-black uppercase tracking-widest text-slate-400">Tổng đơn ảnh thẻ</div>
+          <div className="mt-2 text-3xl font-black text-slate-900">{orders.length}</div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={loadBootstrap}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            <RefreshCw size={16} /> Tải lại dữ liệu
-          </button>
+        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm">
+          <div className="text-xs font-black uppercase tracking-widest text-slate-400">Doanh thu đơn đã lưu</div>
+          <div className="mt-2 text-3xl font-black text-slate-900">
+            {formatCurrency(orders.reduce((sum, item) => sum + Number(item.amount || 0), 0))}
+          </div>
         </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-4">
-        <div className="rounded-2xl bg-white p-4 shadow-sm border border-slate-200">
-          <p className="text-sm text-slate-500">Tổng đơn ảnh thẻ</p>
-          <p className="mt-2 text-2xl font-bold text-slate-800">{orders.length}</p>
+        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm">
+          <div className="text-xs font-black uppercase tracking-widest text-slate-400">Mã kho giấy</div>
+          <div className="mt-2 text-3xl font-black text-slate-900">{inventory.length}</div>
         </div>
-        <div className="rounded-2xl bg-white p-4 shadow-sm border border-slate-200">
-          <p className="text-sm text-slate-500">Doanh thu tạm tính</p>
-          <p className="mt-2 text-2xl font-bold text-emerald-600">{formatMoney(totalOrderRevenue)}</p>
-        </div>
-        <div className="rounded-2xl bg-white p-4 shadow-sm border border-slate-200">
-          <p className="text-sm text-slate-500">Loại giấy đang quản lý</p>
-          <p className="mt-2 text-2xl font-bold text-slate-800">{inventory.length}</p>
-        </div>
-        <div className="rounded-2xl bg-white p-4 shadow-sm border border-slate-200">
-          <p className="text-sm text-slate-500">Loại giấy sắp hết</p>
-          <p className="mt-2 text-2xl font-bold text-amber-600">{inventory.filter(item => item.isLowStock).length}</p>
+        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm">
+          <div className="text-xs font-black uppercase tracking-widest text-slate-400">Giấy sắp hết</div>
+          <div className="mt-2 text-3xl font-black text-red-600">{lowStockItems.length}</div>
         </div>
       </div>
 
-      {error && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
-      )}
-      {message && !error && (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</div>
-      )}
-
-      <div className="flex flex-wrap gap-2">
-        {[
-          { key: 'orders', label: 'Đơn ảnh thẻ' },
-          { key: 'lookup', label: 'Tra cứu ảnh cũ' },
-          { key: 'inventory', label: 'Kho giấy' },
-        ].map(tab => (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => setActiveTab(tab.key as 'orders' | 'lookup' | 'inventory')}
-            className={`rounded-xl px-4 py-2 text-sm font-medium ${
-              activeTab === tab.key
-                ? 'bg-blue-600 text-white'
-                : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="bg-white rounded-3xl p-3 border border-slate-200 shadow-sm flex flex-wrap gap-2">
+        <button
+          onClick={() => setActiveTab('orders')}
+          className={`px-4 py-3 rounded-2xl text-sm font-black ${activeTab === 'orders' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'}`}
+        >
+          Đơn ảnh thẻ
+        </button>
+        <button
+          onClick={() => setActiveTab('lookup')}
+          className={`px-4 py-3 rounded-2xl text-sm font-black ${activeTab === 'lookup' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'}`}
+        >
+          Tra cứu ảnh cũ
+        </button>
+        <button
+          onClick={() => setActiveTab('inventory')}
+          className={`px-4 py-3 rounded-2xl text-sm font-black ${activeTab === 'inventory' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'}`}
+        >
+          Kho giấy
+        </button>
       </div>
 
       {activeTab === 'orders' && (
-        <div className="grid gap-6 xl:grid-cols-[420px,1fr]">
-          <form onSubmit={handleCreateOrder} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-            <div className="flex items-center gap-2 text-lg font-semibold text-slate-800">
-              <Plus size={18} /> Tạo đơn ảnh thẻ
-            </div>
-
+        <div className="space-y-4">
+          <div className="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm flex flex-wrap gap-3 justify-between items-center">
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Dấu thời gian</label>
-              <input
-                type="datetime-local"
-                value={form.orderDatetime}
-                onChange={e => setForm(prev => ({ ...prev, orderDatetime: e.target.value }))}
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-blue-500"
-              />
+              <div className="text-lg font-black text-slate-900">Danh sách đơn ảnh thẻ</div>
+              <div className="text-sm text-slate-500">Tạo đơn mới, lưu link ảnh và đồng bộ doanh thu.</div>
             </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Tên khách hàng</label>
-              <input
-                value={form.customerName}
-                onChange={e => setForm(prev => ({ ...prev, customerName: e.target.value }))}
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-blue-500"
-                placeholder="Nhập tên khách hàng"
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Số điện thoại</label>
-              <input
-                value={form.customerPhone}
-                onChange={e => setForm(prev => ({ ...prev, customerPhone: e.target.value }))}
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-blue-500"
-                placeholder="Nhập số điện thoại"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Số lượng giấy in</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={form.printPaperQuantity}
-                  onChange={e => setForm(prev => ({ ...prev, printPaperQuantity: Number(e.target.value || 0) }))}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Số tiền</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={form.amount}
-                  onChange={e => setForm(prev => ({ ...prev, amount: Number(e.target.value || 0) }))}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-blue-500"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Phương thức thanh toán</label>
-              <select
-                value={form.paymentMethod}
-                onChange={e => setForm(prev => ({ ...prev, paymentMethod: e.target.value }))}
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-blue-500"
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={loadOrders}
+                className="px-4 py-3 rounded-2xl bg-slate-100 text-slate-700 font-black text-sm flex items-center gap-2"
               >
-                <option value="Tiền mặt">Tiền mặt</option>
-                <option value="Chuyển khoản">Chuyển khoản</option>
-              </select>
-            </div>
-
-            <div className="rounded-xl border border-dashed border-slate-300 p-3">
-              <label className="mb-2 block text-sm font-medium text-slate-700">Upload file ảnh lên Drive</label>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={e => {
-                  const file = e.target.files?.[0];
-                  if (file) handleUploadFile(file);
+                <RefreshCw size={16} /> Tải lại
+              </button>
+              <button
+                onClick={() => {
+                  resetOrderForm();
+                  setCreateModalOpen(true);
                 }}
-                className="block w-full text-sm"
-              />
-              {form.driveFileUrl && (
-                <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm">
-                  <div className="font-medium text-slate-700">Đã có link file:</div>
-                  <a href={form.driveFileUrl} target="_blank" rel="noreferrer" className="mt-1 block break-all text-blue-600 hover:underline">
-                    {form.driveFileUrl}
-                  </a>
-                </div>
-              )}
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Ghi chú</label>
-              <textarea
-                rows={3}
-                value={form.note}
-                onChange={e => setForm(prev => ({ ...prev, note: e.target.value }))}
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-blue-500"
-                placeholder="Ghi chú thêm nếu có"
-              />
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+                className="px-4 py-3 rounded-2xl bg-blue-600 text-white font-black text-sm flex items-center gap-2"
               >
-                <Save size={16} /> Lưu đơn ảnh thẻ
-              </button>
-              <button
-                type="button"
-                onClick={resetOrderForm}
-                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                Làm mới form
+                <Plus size={16} /> Tạo đơn mới
               </button>
             </div>
-          </form>
+          </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="mb-4 flex items-center gap-2 text-lg font-semibold text-slate-800">
-              <ImagePlus size={18} /> Danh sách đơn ảnh thẻ
-            </div>
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-slate-50 text-left text-slate-600">
-                    <th className="px-3 py-2">Thời gian</th>
-                    <th className="px-3 py-2">Mã đơn</th>
-                    <th className="px-3 py-2">Khách hàng</th>
-                    <th className="px-3 py-2">SĐT</th>
-                    <th className="px-3 py-2">SL giấy</th>
-                    <th className="px-3 py-2">Số tiền</th>
-                    <th className="px-3 py-2">Thanh toán</th>
-                    <th className="px-3 py-2">File ảnh</th>
+                <thead className="bg-slate-50">
+                  <tr className="text-left text-slate-500 uppercase text-[11px] tracking-widest font-black">
+                    <th className="px-4 py-4">Thời gian</th>
+                    <th className="px-4 py-4">Mã đơn</th>
+                    <th className="px-4 py-4">Khách hàng</th>
+                    <th className="px-4 py-4">SĐT</th>
+                    <th className="px-4 py-4">Số giấy</th>
+                    <th className="px-4 py-4">Số tiền</th>
+                    <th className="px-4 py-4">Thanh toán</th>
+                    <th className="px-4 py-4">Ảnh</th>
+                    <th className="px-4 py-4">Ghi chú</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {orders.map(item => (
-                    <tr key={item.id} className="border-b last:border-b-0 hover:bg-slate-50">
-                      <td className="px-3 py-2">{formatDateTime(item.orderDatetime)}</td>
-                      <td className="px-3 py-2 font-medium text-slate-800">{item.orderCode}</td>
-                      <td className="px-3 py-2">{item.customerName}</td>
-                      <td className="px-3 py-2">{item.customerPhone}</td>
-                      <td className="px-3 py-2">{item.printPaperQuantity}</td>
-                      <td className="px-3 py-2">{formatMoney(item.amount)}</td>
-                      <td className="px-3 py-2">{item.paymentMethod || ''}</td>
-                      <td className="px-3 py-2">
-                        {item.driveFileUrl ? (
-                          <a href={item.driveFileUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
-                            Mở file
-                          </a>
-                        ) : (
-                          <span className="text-slate-400">Chưa có</span>
-                        )}
+                  {loadingOrders ? (
+                    <tr>
+                      <td colSpan={9} className="px-4 py-10 text-center text-slate-500 font-bold">
+                        <span className="inline-flex items-center gap-2"><Loader2 size={16} className="animate-spin" /> Đang tải dữ liệu...</span>
                       </td>
                     </tr>
-                  ))}
-                  {!orders.length && (
+                  ) : orders.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-3 py-6 text-center text-slate-500">
+                      <td colSpan={9} className="px-4 py-10 text-center text-slate-500 font-bold">
                         Chưa có đơn ảnh thẻ nào.
                       </td>
                     </tr>
+                  ) : (
+                    orders.map((item) => (
+                      <tr key={item.id} className="border-t border-slate-100 align-top">
+                        <td className="px-4 py-4 whitespace-nowrap">{formatDateTime(item.orderDatetime)}</td>
+                        <td className="px-4 py-4 font-black whitespace-nowrap">{item.orderCode}</td>
+                        <td className="px-4 py-4">{item.customerName}</td>
+                        <td className="px-4 py-4 whitespace-nowrap">{item.customerPhone}</td>
+                        <td className="px-4 py-4 whitespace-nowrap">{item.printPaperQuantity}</td>
+                        <td className="px-4 py-4 whitespace-nowrap font-bold">{formatCurrency(item.amount)}</td>
+                        <td className="px-4 py-4 whitespace-nowrap">{item.paymentMethod || ''}</td>
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          <div className="flex gap-2">
+                            <button onClick={() => openLink(item.driveFileUrl)} className="p-2 rounded-xl bg-slate-100 text-slate-700">
+                              <ExternalLink size={15} />
+                            </button>
+                            <button onClick={() => downloadLink(item.driveFileUrl)} className="p-2 rounded-xl bg-slate-100 text-slate-700">
+                              <Download size={15} />
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 min-w-[240px]">{item.note || ''}</td>
+                      </tr>
+                    ))
                   )}
                 </tbody>
               </table>
@@ -515,201 +459,74 @@ const PhotoIDManager: React.FC<Props> = ({ currentUser }) => {
       )}
 
       {activeTab === 'lookup' && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end">
-            <div className="flex-1">
-              <label className="mb-1 block text-sm font-medium text-slate-700">Nhập số điện thoại khách hàng</label>
+        <div className="space-y-4">
+          <div className="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm">
+            <div className="text-lg font-black text-slate-900">Tra cứu ảnh cũ theo số điện thoại</div>
+            <div className="mt-1 text-sm text-slate-500">Nhập số điện thoại để mở link Drive và tải ảnh về in lại.</div>
+            <div className="mt-4 flex flex-col md:flex-row gap-3">
               <input
                 value={lookupPhone}
-                onChange={e => setLookupPhone(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-blue-500"
-                placeholder="Ví dụ: 0987654321"
+                onChange={(e) => setLookupPhone(e.target.value)}
+                placeholder="Nhập số điện thoại khách hàng"
+                className="flex-1 px-4 py-3 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
               />
-            </div>
-            <button
-              type="button"
-              onClick={handleLookup}
-              disabled={isLoading}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
-            >
-              <Search size={16} /> Tra cứu ảnh cũ
-            </button>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b bg-slate-50 text-left text-slate-600">
-                  <th className="px-3 py-2">Thời gian</th>
-                  <th className="px-3 py-2">Mã đơn</th>
-                  <th className="px-3 py-2">Khách hàng</th>
-                  <th className="px-3 py-2">SĐT</th>
-                  <th className="px-3 py-2">SL giấy</th>
-                  <th className="px-3 py-2">Số tiền</th>
-                  <th className="px-3 py-2">Ghi chú</th>
-                  <th className="px-3 py-2">Tác vụ</th>
-                </tr>
-              </thead>
-              <tbody>
-                {lookupResults.map(item => (
-                  <tr key={item.id} className="border-b last:border-b-0 hover:bg-slate-50 align-top">
-                    <td className="px-3 py-2">{formatDateTime(item.orderDatetime)}</td>
-                    <td className="px-3 py-2 font-medium text-slate-800">{item.orderCode}</td>
-                    <td className="px-3 py-2">{item.customerName}</td>
-                    <td className="px-3 py-2">{item.customerPhone}</td>
-                    <td className="px-3 py-2">{item.printPaperQuantity}</td>
-                    <td className="px-3 py-2">{formatMoney(item.amount)}</td>
-                    <td className="px-3 py-2">{item.note || ''}</td>
-                    <td className="px-3 py-2">
-                      <div className="flex flex-wrap gap-2">
-                        {item.driveFileUrl && (
-                          <>
-                            <a
-                              href={item.driveFileUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1 hover:bg-slate-50"
-                            >
-                              <ExternalLink size={14} /> Mở
-                            </a>
-                            <a
-                              href={item.driveFileUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              download
-                              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1 hover:bg-slate-50"
-                            >
-                              <Download size={14} /> Tải
-                            </a>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {!lookupResults.length && (
-                  <tr>
-                    <td colSpan={8} className="px-3 py-6 text-center text-slate-500">
-                      Chưa có kết quả tra cứu.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'inventory' && (
-        <div className="grid gap-6 xl:grid-cols-[420px,1fr]">
-          <form onSubmit={handleStockIn} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-            <div className="flex items-center gap-2 text-lg font-semibold text-slate-800">
-              <Package size={18} /> Nhập kho giấy ảnh thẻ
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Loại giấy</label>
-              <select
-                value={stockInForm.paperInventoryId}
-                onChange={e => setStockInForm(prev => ({ ...prev, paperInventoryId: e.target.value }))}
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-blue-500"
+              <button
+                onClick={handleSearch}
+                className="px-4 py-3 rounded-2xl bg-blue-600 text-white font-black text-sm flex items-center justify-center gap-2"
               >
-                {inventory.map(item => (
-                  <option key={item.id} value={item.id}>{item.paperName}</option>
-                ))}
-              </select>
+                {lookupLoading ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />} Tìm kiếm
+              </button>
             </div>
+          </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Số lượng nhập</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={stockInForm.quantity}
-                  onChange={e => setStockInForm(prev => ({ ...prev, quantity: Number(e.target.value || 0) }))}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Đơn giá</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={stockInForm.unitCost}
-                  onChange={e => setStockInForm(prev => ({ ...prev, unitCost: Number(e.target.value || 0) }))}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-blue-500"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Ghi chú</label>
-              <textarea
-                rows={3}
-                value={stockInForm.note}
-                onChange={e => setStockInForm(prev => ({ ...prev, note: e.target.value }))}
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-blue-500"
-              />
-            </div>
-
-            <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700">
-              <div><span className="font-medium">Tồn hiện tại:</span> {activeInventory?.currentQuantity ?? 0} {activeInventory?.unit || 'tờ'}</div>
-              <div><span className="font-medium">Giá vốn TB:</span> {formatMoney(activeInventory?.averageCost ?? 0)}</div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
-            >
-              <Save size={16} /> Lưu nhập kho
-            </button>
-          </form>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="mb-4 flex items-center gap-2 text-lg font-semibold text-slate-800">
-              <Package size={18} /> Tồn kho giấy ảnh thẻ
-            </div>
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-slate-50 text-left text-slate-600">
-                    <th className="px-3 py-2">Loại giấy</th>
-                    <th className="px-3 py-2">Đơn vị</th>
-                    <th className="px-3 py-2">Tồn kho</th>
-                    <th className="px-3 py-2">Ngưỡng cảnh báo</th>
-                    <th className="px-3 py-2">Giá vốn TB</th>
-                    <th className="px-3 py-2">Trạng thái</th>
+                <thead className="bg-slate-50">
+                  <tr className="text-left text-slate-500 uppercase text-[11px] tracking-widest font-black">
+                    <th className="px-4 py-4">Thời gian</th>
+                    <th className="px-4 py-4">Mã đơn</th>
+                    <th className="px-4 py-4">Khách hàng</th>
+                    <th className="px-4 py-4">Số giấy</th>
+                    <th className="px-4 py-4">Số tiền</th>
+                    <th className="px-4 py-4">Ảnh</th>
+                    <th className="px-4 py-4">Ghi chú</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {inventory.map(item => (
-                    <tr key={item.id} className="border-b last:border-b-0 hover:bg-slate-50">
-                      <td className="px-3 py-2 font-medium text-slate-800">{item.paperName}</td>
-                      <td className="px-3 py-2">{item.unit}</td>
-                      <td className="px-3 py-2">{item.currentQuantity}</td>
-                      <td className="px-3 py-2">{item.warningThreshold}</td>
-                      <td className="px-3 py-2">{formatMoney(item.averageCost)}</td>
-                      <td className="px-3 py-2">
-                        {item.isLowStock ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-700">
-                            <AlertTriangle size={12} /> Sắp hết
-                          </span>
-                        ) : (
-                          <span className="inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700">
-                            Bình thường
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                  {!inventory.length && (
+                  {lookupLoading ? (
                     <tr>
-                      <td colSpan={6} className="px-3 py-6 text-center text-slate-500">
-                        Chưa có dữ liệu kho giấy.
+                      <td colSpan={7} className="px-4 py-10 text-center text-slate-500 font-bold">
+                        <span className="inline-flex items-center gap-2"><Loader2 size={16} className="animate-spin" /> Đang tra cứu...</span>
                       </td>
                     </tr>
+                  ) : lookupResults.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-10 text-center text-slate-500 font-bold">
+                        Chưa có kết quả tra cứu.
+                      </td>
+                    </tr>
+                  ) : (
+                    lookupResults.map((item) => (
+                      <tr key={item.id} className="border-t border-slate-100 align-top">
+                        <td className="px-4 py-4 whitespace-nowrap">{formatDateTime(item.orderDatetime)}</td>
+                        <td className="px-4 py-4 font-black whitespace-nowrap">{item.orderCode}</td>
+                        <td className="px-4 py-4">{item.customerName}</td>
+                        <td className="px-4 py-4 whitespace-nowrap">{item.printPaperQuantity}</td>
+                        <td className="px-4 py-4 whitespace-nowrap font-bold">{formatCurrency(item.amount)}</td>
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          <div className="flex gap-2">
+                            <button onClick={() => openLink(item.driveFileUrl)} className="p-2 rounded-xl bg-slate-100 text-slate-700">
+                              <ExternalLink size={15} />
+                            </button>
+                            <button onClick={() => downloadLink(item.driveFileUrl)} className="p-2 rounded-xl bg-slate-100 text-slate-700">
+                              <Download size={15} />
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 min-w-[240px]">{item.note || ''}</td>
+                      </tr>
+                    ))
                   )}
                 </tbody>
               </table>
@@ -718,13 +535,287 @@ const PhotoIDManager: React.FC<Props> = ({ currentUser }) => {
         </div>
       )}
 
-      {isLoading && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
-          Đang xử lý dữ liệu, vui lòng chờ...
+      {activeTab === 'inventory' && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm flex flex-wrap gap-3 justify-between items-center">
+            <div>
+              <div className="text-lg font-black text-slate-900">Kho giấy ảnh thẻ</div>
+              <div className="mt-1 text-sm text-slate-500">Theo dõi tồn kho, ngưỡng cảnh báo và giá vốn trung bình.</div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={loadInventory}
+                className="px-4 py-3 rounded-2xl bg-slate-100 text-slate-700 font-black text-sm flex items-center gap-2"
+              >
+                <RefreshCw size={16} /> Tải lại
+              </button>
+              <button
+                onClick={() => {
+                  resetStockInForm();
+                  setStockInModalOpen(true);
+                }}
+                className="px-4 py-3 rounded-2xl bg-blue-600 text-white font-black text-sm flex items-center gap-2"
+              >
+                <Package size={16} /> Nhập kho giấy
+              </button>
+            </div>
+          </div>
+
+          {lowStockItems.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-3xl p-4 flex items-start gap-3">
+              <AlertTriangle className="mt-0.5" size={18} />
+              <div>
+                <div className="font-black">Có giấy đang ở mức cảnh báo.</div>
+                <div className="text-sm mt-1">
+                  {lowStockItems.map((item) => `${item.paperName} (${item.currentQuantity} ${item.unit})`).join(', ')}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50">
+                  <tr className="text-left text-slate-500 uppercase text-[11px] tracking-widest font-black">
+                    <th className="px-4 py-4">Tên giấy</th>
+                    <th className="px-4 py-4">Tồn hiện tại</th>
+                    <th className="px-4 py-4">Đơn vị</th>
+                    <th className="px-4 py-4">Ngưỡng cảnh báo</th>
+                    <th className="px-4 py-4">Giá vốn TB</th>
+                    <th className="px-4 py-4">Trạng thái</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loadingInventory ? (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-10 text-center text-slate-500 font-bold">
+                        <span className="inline-flex items-center gap-2"><Loader2 size={16} className="animate-spin" /> Đang tải tồn kho...</span>
+                      </td>
+                    </tr>
+                  ) : inventory.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-10 text-center text-slate-500 font-bold">
+                        Chưa có dữ liệu kho giấy.
+                      </td>
+                    </tr>
+                  ) : (
+                    inventory.map((item) => (
+                      <tr key={item.id} className="border-t border-slate-100">
+                        <td className="px-4 py-4 font-bold">{item.paperName}</td>
+                        <td className="px-4 py-4">{item.currentQuantity}</td>
+                        <td className="px-4 py-4">{item.unit}</td>
+                        <td className="px-4 py-4">{item.warningThreshold}</td>
+                        <td className="px-4 py-4">{formatCurrency(item.averageCost)}</td>
+                        <td className="px-4 py-4">
+                          {item.currentQuantity <= item.warningThreshold ? (
+                            <span className="inline-flex px-3 py-1 rounded-full bg-red-100 text-red-700 text-xs font-black">Sắp hết</span>
+                          ) : (
+                            <span className="inline-flex px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-black">Bình thường</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
+
+      <ResponsiveModal open={createModalOpen} onClose={() => setCreateModalOpen(false)} size="lg">
+        <form onSubmit={handleCreateOrder} className="flex flex-col max-h-[90vh]">
+          <div className="px-6 py-5 border-b border-slate-200">
+            <div className="text-xl font-black text-slate-900">Tạo đơn ảnh thẻ</div>
+            <div className="text-sm text-slate-500 mt-1">Lưu đơn, đồng bộ khoản thu và trừ giấy trong kho.</div>
+          </div>
+
+          <div className="p-6 overflow-y-auto space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Dấu thời gian</label>
+                <input
+                  type="datetime-local"
+                  value={orderForm.orderDatetime}
+                  onChange={(e) => setOrderForm((prev) => ({ ...prev, orderDatetime: e.target.value }))}
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Phương thức thanh toán</label>
+                <select
+                  value={orderForm.paymentMethod}
+                  onChange={(e) => setOrderForm((prev) => ({ ...prev, paymentMethod: e.target.value }))}
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="Tiền mặt">Tiền mặt</option>
+                  <option value="Chuyển khoản">Chuyển khoản</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Tên khách hàng</label>
+                <input
+                  value={orderForm.customerName}
+                  onChange={(e) => setOrderForm((prev) => ({ ...prev, customerName: e.target.value }))}
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Nhập tên khách hàng"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Số điện thoại</label>
+                <input
+                  value={orderForm.customerPhone}
+                  onChange={(e) => setOrderForm((prev) => ({ ...prev, customerPhone: e.target.value }))}
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Nhập số điện thoại"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Số lượng giấy in</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={orderForm.printPaperQuantity}
+                  onChange={(e) => setOrderForm((prev) => ({ ...prev, printPaperQuantity: e.target.value }))}
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Số tiền</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={orderForm.amount}
+                  onChange={(e) => setOrderForm((prev) => ({ ...prev, amount: e.target.value }))}
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Nhập số tiền"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Upload file ảnh lên Drive</label>
+              <label className="flex items-center justify-center gap-2 px-4 py-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 cursor-pointer text-slate-700 font-bold">
+                {uploadingFile ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                {uploadingFile ? 'Đang upload...' : 'Chọn file ảnh để upload'}
+                <input
+                  type="file"
+                  className="hidden"
+                  onChange={(e) => handleUploadFile(e.target.files?.[0] || null)}
+                />
+              </label>
+              {orderForm.driveFileUrl && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button type="button" onClick={() => openLink(orderForm.driveFileUrl)} className="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 text-sm font-black flex items-center gap-2">
+                    <ExternalLink size={14} /> Mở link Drive
+                  </button>
+                  <button type="button" onClick={() => downloadLink(orderForm.driveFileUrl)} className="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 text-sm font-black flex items-center gap-2">
+                    <Download size={14} /> Tải ảnh
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Ghi chú</label>
+              <textarea
+                value={orderForm.note}
+                onChange={(e) => setOrderForm((prev) => ({ ...prev, note: e.target.value }))}
+                rows={4}
+                className="w-full px-4 py-3 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Ghi chú nội bộ nếu cần"
+              />
+            </div>
+
+            <label className="flex items-center gap-3 text-sm font-bold text-slate-700">
+              <input
+                type="checkbox"
+                checked={orderForm.isReprint}
+                onChange={(e) => setOrderForm((prev) => ({ ...prev, isReprint: e.target.checked }))}
+              />
+              Đây là đơn in lại ảnh cũ
+            </label>
+          </div>
+
+          <div className="px-6 py-4 border-t border-slate-200 flex justify-end gap-3">
+            <button type="button" onClick={() => setCreateModalOpen(false)} className="px-4 py-3 rounded-2xl bg-slate-100 text-slate-700 font-black text-sm">
+              Đóng
+            </button>
+            <button type="submit" disabled={submittingOrder || uploadingFile} className="px-4 py-3 rounded-2xl bg-blue-600 text-white font-black text-sm inline-flex items-center gap-2">
+              {submittingOrder ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} Lưu đơn
+            </button>
+          </div>
+        </form>
+      </ResponsiveModal>
+
+      <ResponsiveModal open={stockInModalOpen} onClose={() => setStockInModalOpen(false)} size="md">
+        <form onSubmit={handleStockIn} className="flex flex-col">
+          <div className="px-6 py-5 border-b border-slate-200">
+            <div className="text-xl font-black text-slate-900">Nhập kho giấy</div>
+            <div className="text-sm text-slate-500 mt-1">Cộng tồn kho và cập nhật giá vốn trung bình.</div>
+          </div>
+
+          <div className="p-6 space-y-4">
+            <div>
+              <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Kho giấy</label>
+              <select
+                value={stockInForm.paperInventoryId}
+                onChange={(e) => setStockInForm((prev) => ({ ...prev, paperInventoryId: e.target.value }))}
+                className="w-full px-4 py-3 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Chọn kho giấy</option>
+                {inventory.map((item) => (
+                  <option key={item.id} value={item.id}>{item.paperName}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Số lượng nhập</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={stockInForm.quantity}
+                  onChange={(e) => setStockInForm((prev) => ({ ...prev, quantity: e.target.value }))}
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Đơn giá / tờ</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={stockInForm.unitCost}
+                  onChange={(e) => setStockInForm((prev) => ({ ...prev, unitCost: e.target.value }))}
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Ghi chú</label>
+              <textarea
+                rows={3}
+                value={stockInForm.note}
+                onChange={(e) => setStockInForm((prev) => ({ ...prev, note: e.target.value }))}
+                className="w-full px-4 py-3 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Ví dụ: nhập thêm 2 ram giấy"
+              />
+            </div>
+          </div>
+
+          <div className="px-6 py-4 border-t border-slate-200 flex justify-end gap-3">
+            <button type="button" onClick={() => setStockInModalOpen(false)} className="px-4 py-3 rounded-2xl bg-slate-100 text-slate-700 font-black text-sm">
+              Đóng
+            </button>
+            <button type="submit" disabled={submittingStockIn} className="px-4 py-3 rounded-2xl bg-blue-600 text-white font-black text-sm inline-flex items-center gap-2">
+              {submittingStockIn ? <Loader2 size={16} className="animate-spin" /> : <Package size={16} />} Xác nhận nhập kho
+            </button>
+          </div>
+        </form>
+      </ResponsiveModal>
     </div>
   );
-};
-
-export default PhotoIDManager;
+}

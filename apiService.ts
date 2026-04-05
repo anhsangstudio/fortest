@@ -2546,3 +2546,68 @@ export const fetchPhotoPaperInventory = async (): Promise<PhotoPaperInventory[]>
   return (data || []).map(photoPaperInventoryFromDb);
 };
 
+export const createPhotoPaperStockIn = async ({
+  paperInventoryId,
+  quantity,
+  unitCost,
+  note,
+  createdBy,
+}: {
+  paperInventoryId: string;
+  quantity: number;
+  unitCost: number;
+  note?: string;
+  createdBy?: string | null;
+}) => {
+  if (!supabase) throw new Error('Supabase chưa cấu hình');
+
+  const totalCost = Number(quantity || 0) * Number(unitCost || 0);
+
+  const { data: inv, error: invErr } = await supabase
+    .from('photo_paper_inventory')
+    .select('*')
+    .eq('id', paperInventoryId)
+    .single();
+
+  if (invErr || !inv) throw new Error(invErr?.message || 'Không tìm thấy kho giấy');
+
+  const oldQty = Number(inv.current_quantity || 0);
+  const oldAvg = Number(inv.average_cost || 0);
+
+  const newQty = oldQty + quantity;
+
+  const newAvg =
+    newQty > 0
+      ? ((oldQty * oldAvg) + totalCost) / newQty
+      : 0;
+
+  const { error: mvErr } = await supabase
+    .from('photo_paper_stock_movements')
+    .insert({
+      paper_inventory_id: paperInventoryId,
+      movement_type: 'IN',
+      quantity,
+      unit_cost: unitCost,
+      total_cost: totalCost,
+      note,
+      created_by: createdBy,
+    });
+
+  if (mvErr) throw new Error(mvErr.message);
+
+  const { error: updErr } = await supabase
+    .from('photo_paper_inventory')
+    .update({
+      current_quantity: newQty,
+      average_cost: newAvg,
+    })
+    .eq('id', paperInventoryId);
+
+  if (updErr) throw new Error(updErr.message);
+
+  return { success: true };
+};
+
+
+
+

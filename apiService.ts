@@ -75,6 +75,11 @@ const throwIfError = (res: any, context: string) => {
   }
 };
 
+const generateTextId = (prefix: string) => {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+};
+
+
 // --- MAPPERS ---
 
 const staffFromDb = (db: any): Staff => ({

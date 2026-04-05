@@ -3043,6 +3043,129 @@ export const trapDeliveryApi = {
 };
 
 
+// ============================================
+// MODULE GIAO NHẬN TRÁP
+// ============================================
+
+export const trapDeliveryModuleApi = {
+  async syncAll() {
+    const { data, error } = await supabase.rpc('trap_delivery_sync_all');
+    throwIfError(error, 'trap_delivery_sync_all failed');
+    return data;
+  },
+
+  async syncByContract(contractId: string) {
+    const { data, error } = await supabase.rpc('trap_delivery_sync_contract', {
+      p_contract_id: contractId,
+    });
+    throwIfError(error, 'trap_delivery_sync_contract failed');
+    return data;
+  },
+
+  async getRows(params?: {
+    month?: string | null;
+    status?: string | null;
+    serviceName?: string | null;
+    staffId?: string | null;
+    search?: string | null;
+  }) {
+    const { data, error } = await supabase.rpc('trap_delivery_get_rows', {
+      p_month: params?.month ?? null,
+      p_status: params?.status ?? null,
+      p_service_name: params?.serviceName ?? null,
+      p_staff_id: params?.staffId ?? null,
+      p_search: params?.search ?? null,
+    });
+    throwIfError(error, 'trap_delivery_get_rows failed');
+    return data || [];
+  },
+
+  async getDashboard(month?: string | null) {
+    const { data, error } = await supabase.rpc('trap_delivery_get_dashboard', {
+      p_month: month ?? null,
+    });
+    throwIfError(error, 'trap_delivery_get_dashboard failed');
+    return Array.isArray(data) ? (data[0] || null) : data;
+  },
+
+  async getDropdowns() {
+    const { data, error } = await supabase.rpc('trap_delivery_get_dropdowns');
+    throwIfError(error, 'trap_delivery_get_dropdowns failed');
+    return data;
+  },
+
+  async updateRow(input: {
+    id: string;
+    soTrapTo: number;
+    loaiDeTrapId?: string | null;
+    soTrapNho: number;
+    loaiTrapId?: string | null;
+    khanTrum: number;
+    tinhTrang: string;
+    nguoiGiaoStaffId?: string | null;
+    nguoiNhanStaffId?: string | null;
+    ghiChu?: string | null;
+  }) {
+    const { data, error } = await supabase.rpc('trap_delivery_update_row', {
+      p_id: input.id,
+      p_so_trap_to: input.soTrapTo,
+      p_loai_de_trap_id: input.loaiDeTrapId ?? null,
+      p_so_trap_nho: input.soTrapNho,
+      p_loai_trap_id: input.loaiTrapId ?? null,
+      p_khan_trum: input.khanTrum,
+      p_tinh_trang: input.tinhTrang,
+      p_nguoi_giao_staff_id: input.nguoiGiaoStaffId ?? null,
+      p_nguoi_nhan_staff_id: input.nguoiNhanStaffId ?? null,
+      p_ghi_chu: input.ghiChu ?? null,
+    });
+    throwIfError(error, 'trap_delivery_update_row failed');
+    return data;
+  },
+
+  async upsertBaseType(input: {
+    id?: string | null;
+    name: string;
+    sortOrder?: number;
+  }) {
+    const { data, error } = await supabase.rpc('trap_base_type_upsert', {
+      p_id: input.id ?? null,
+      p_name: input.name,
+      p_sort_order: input.sortOrder ?? 0,
+    });
+    throwIfError(error, 'trap_base_type_upsert failed');
+    return data;
+  },
+
+  async deleteBaseType(id: string) {
+    const { data, error } = await supabase.rpc('trap_base_type_delete', {
+      p_id: id,
+    });
+    throwIfError(error, 'trap_base_type_delete failed');
+    return data;
+  },
+
+  async upsertTrapType(input: {
+    id?: string | null;
+    name: string;
+    sortOrder?: number;
+  }) {
+    const { data, error } = await supabase.rpc('trap_type_upsert', {
+      p_id: input.id ?? null,
+      p_name: input.name,
+      p_sort_order: input.sortOrder ?? 0,
+    });
+    throwIfError(error, 'trap_type_upsert failed');
+    return data;
+  },
+
+  async deleteTrapType(id: string) {
+    const { data, error } = await supabase.rpc('trap_type_delete', {
+      p_id: id,
+    });
+    throwIfError(error, 'trap_type_delete failed');
+    return data;
+  },
+};
 
 
 

@@ -3167,5 +3167,23 @@ export const trapDeliveryModuleApi = {
   },
 };
 
+// ============================================
+// MODULE GIAO NHẬN TRÁP - DASHBOARD ĐIỀU PHỐI
+// ============================================
+
+export const trapDeliveryDispatchApi = {
+  async autoUpdateStatuses() {
+    const { data, error } = await supabase.rpc('trap_delivery_auto_update_statuses');
+    throwIfError(error, 'trap_delivery_auto_update_statuses failed');
+    return data;
+  },
+
+  async getDispatchDashboard() {
+    const { data, error } = await supabase.rpc('trap_delivery_get_dispatch_dashboard');
+    throwIfError(error, 'trap_delivery_get_dispatch_dashboard failed');
+    return Array.isArray(data) ? (data[0] || null) : data;
+  },
+};
+
 
 

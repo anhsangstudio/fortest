@@ -406,6 +406,10 @@ export default function App() {
             {activeTab === 'print_costs' && isAdmin && (
               <PrintCostManager />
             )}
+			{activeTab === 'photo_id' && (
+              <PhotoIDManager currentUser={currentUser} />
+            )}
+
             {activeTab === 'payroll' && canAccess('staff') && (
               <PayrollManager 
                 staff={staff}

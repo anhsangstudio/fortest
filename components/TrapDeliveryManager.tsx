@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   RefreshCw,
   Loader2,
@@ -7,8 +8,8 @@ import {
   Settings2,
   Plus,
   Trash2,
+  X,
 } from 'lucide-react';
-import ResponsiveModal from './ResponsiveModal';
 import { trapDeliveryModuleApi } from '../apiService';
 import type {
   TrapDeliveryDashboard,
@@ -105,6 +106,46 @@ const EMPTY_EDIT_FORM: EditFormState = {
   nguoi_nhan_staff_id: '',
   ghi_chu: '',
 };
+
+function CenteredPortalModal({
+  open,
+  onClose,
+  title,
+  children,
+  maxWidthClass = 'max-w-5xl',
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  children: React.ReactNode;
+  maxWidthClass?: string;
+}) {
+  if (!open || typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999]">
+      <div className="absolute inset-0 bg-slate-900/45" onClick={onClose} />
+      <div className="absolute inset-0 flex items-center justify-center p-3 sm:p-4 md:p-6">
+        <div className={`w-full ${maxWidthClass} max-h-[92vh] rounded-3xl bg-white shadow-2xl border border-slate-200 overflow-hidden`}>
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+            <div className="text-lg font-black text-slate-900">{title}</div>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-xl bg-slate-100 text-slate-700"
+              type="button"
+            >
+              <X size={18} />
+            </button>
+          </div>
+          <div className="overflow-y-auto max-h-[calc(92vh-72px)]">
+            {children}
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
 
 export default function TrapDeliveryManager() {
   const [rows, setRows] = useState<TrapDeliveryRow[]>([]);
@@ -293,29 +334,29 @@ export default function TrapDeliveryManager() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm">
+    <div className="w-full min-w-0 max-w-full space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 w-full">
+        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0">
           <div className="text-xs font-black uppercase tracking-widest text-slate-400">Tổng đơn tráp</div>
           <div className="mt-2 text-3xl font-black text-slate-900">{dashboard.total_rows}</div>
         </div>
-        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm">
+        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0">
           <div className="text-xs font-black uppercase tracking-widest text-slate-400">Chưa làm</div>
           <div className="mt-2 text-3xl font-black text-slate-900">{dashboard.status_chua_lam}</div>
         </div>
-        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm">
+        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0">
           <div className="text-xs font-black uppercase tracking-widest text-slate-400">Trả thiếu đồ</div>
           <div className="mt-2 text-3xl font-black text-red-600">{dashboard.status_tra_thieu_do}</div>
         </div>
-        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm">
+        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0">
           <div className="text-xs font-black uppercase tracking-widest text-slate-400">Đã trả đủ</div>
           <div className="mt-2 text-3xl font-black text-emerald-600">{dashboard.status_da_tra_du}</div>
         </div>
       </div>
 
-      <div className="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm space-y-4">
+      <div className="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm space-y-4 w-full min-w-0">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <div className="text-lg font-black text-slate-900">Quản Lý Giao Nhận Tráp</div>
             <div className="text-sm text-slate-500">Một bảng duy nhất + filter tháng, thay thế Google Sheet hiện tại.</div>
           </div>
@@ -356,8 +397,8 @@ export default function TrapDeliveryManager() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-          <div>
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3 w-full">
+          <div className="min-w-0">
             <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Tháng</label>
             <input
               type="month"
@@ -367,7 +408,7 @@ export default function TrapDeliveryManager() {
             />
           </div>
 
-          <div>
+          <div className="min-w-0">
             <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Tình trạng</label>
             <select
               value={filters.status}
@@ -381,7 +422,7 @@ export default function TrapDeliveryManager() {
             </select>
           </div>
 
-          <div>
+          <div className="min-w-0">
             <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Loại dịch vụ</label>
             <select
               value={filters.serviceName}
@@ -395,7 +436,7 @@ export default function TrapDeliveryManager() {
             </select>
           </div>
 
-          <div>
+          <div className="min-w-0">
             <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Nhân sự</label>
             <select
               value={filters.staffId}
@@ -409,7 +450,7 @@ export default function TrapDeliveryManager() {
             </select>
           </div>
 
-          <div>
+          <div className="min-w-0">
             <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Từ khóa</label>
             <div className="relative">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -424,9 +465,9 @@ export default function TrapDeliveryManager() {
         </div>
       </div>
 
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden w-full min-w-0">
+        <div className="w-full overflow-x-auto">
+          <table className="w-full min-w-[1700px] text-sm">
             <thead className="bg-slate-50">
               <tr className="text-left text-slate-500 uppercase text-[11px] tracking-widest font-black">
                 <th className="px-4 py-4">Khách hàng</th>
@@ -492,14 +533,16 @@ export default function TrapDeliveryManager() {
         </div>
       </div>
 
-      <ResponsiveModal open={editModalOpen} onClose={() => setEditModalOpen(false)} size="lg">
-        <form onSubmit={handleSaveRow} className="flex flex-col max-h-[90vh]">
-          <div className="px-6 py-5 border-b border-slate-200">
-            <div className="text-xl font-black text-slate-900">Cập nhật dòng giao nhận tráp</div>
-            <div className="text-sm text-slate-500 mt-1">Dữ liệu nguồn không sửa, chỉ sửa dữ liệu vận hành.</div>
-          </div>
+      <CenteredPortalModal
+        open={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        title="Cập nhật dòng giao nhận tráp"
+        maxWidthClass="max-w-6xl"
+      >
+        <form onSubmit={handleSaveRow} className="flex flex-col">
+          <div className="p-6 space-y-4">
+            <div className="text-sm text-slate-500">Dữ liệu nguồn không sửa, chỉ sửa dữ liệu vận hành.</div>
 
-          <div className="p-6 overflow-y-auto space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Khách hàng</label>
@@ -599,12 +642,15 @@ export default function TrapDeliveryManager() {
             </button>
           </div>
         </form>
-      </ResponsiveModal>
+      </CenteredPortalModal>
 
-      <ResponsiveModal open={baseTypeModalOpen} onClose={() => setBaseTypeModalOpen(false)} size="md">
+      <CenteredPortalModal
+        open={baseTypeModalOpen}
+        onClose={() => setBaseTypeModalOpen(false)}
+        title="Quản lý loại đế tráp"
+        maxWidthClass="max-w-3xl"
+      >
         <div className="p-6 space-y-4">
-          <div className="text-xl font-black text-slate-900">Quản lý loại đế tráp</div>
-
           <form onSubmit={handleSaveBaseType} className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <input
               value={baseTypeForm.name}
@@ -633,12 +679,14 @@ export default function TrapDeliveryManager() {
                   <button
                     onClick={() => setBaseTypeForm({ id: item.id, name: item.name, sortOrder: String(item.sort_order || 0) })}
                     className="px-3 py-2 rounded-xl bg-amber-100 text-amber-700 text-xs font-black"
+                    type="button"
                   >
                     Sửa
                   </button>
                   <button
                     onClick={() => handleDeleteBaseType(item.id)}
                     className="px-3 py-2 rounded-xl bg-red-100 text-red-700 text-xs font-black inline-flex items-center gap-1"
+                    type="button"
                   >
                     <Trash2 size={12} /> Xóa
                   </button>
@@ -647,12 +695,15 @@ export default function TrapDeliveryManager() {
             ))}
           </div>
         </div>
-      </ResponsiveModal>
+      </CenteredPortalModal>
 
-      <ResponsiveModal open={trapTypeModalOpen} onClose={() => setTrapTypeModalOpen(false)} size="md">
+      <CenteredPortalModal
+        open={trapTypeModalOpen}
+        onClose={() => setTrapTypeModalOpen(false)}
+        title="Quản lý loại tráp"
+        maxWidthClass="max-w-3xl"
+      >
         <div className="p-6 space-y-4">
-          <div className="text-xl font-black text-slate-900">Quản lý loại tráp</div>
-
           <form onSubmit={handleSaveTrapType} className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <input
               value={trapTypeForm.name}
@@ -681,12 +732,14 @@ export default function TrapDeliveryManager() {
                   <button
                     onClick={() => setTrapTypeForm({ id: item.id, name: item.name, sortOrder: String(item.sort_order || 0) })}
                     className="px-3 py-2 rounded-xl bg-amber-100 text-amber-700 text-xs font-black"
+                    type="button"
                   >
                     Sửa
                   </button>
                   <button
                     onClick={() => handleDeleteTrapType(item.id)}
                     className="px-3 py-2 rounded-xl bg-red-100 text-red-700 text-xs font-black inline-flex items-center gap-1"
+                    type="button"
                   >
                     <Trash2 size={12} /> Xóa
                   </button>
@@ -695,7 +748,7 @@ export default function TrapDeliveryManager() {
             ))}
           </div>
         </div>
-      </ResponsiveModal>
+      </CenteredPortalModal>
     </div>
   );
 }

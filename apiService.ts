@@ -2492,3 +2492,20 @@ export const fetchPrintVendorDebtSummary = async (filters?: {
   throwIfError(res, 'fetchPrintVendorDebtSummary');
   return (res.data || []).map(printVendorDebtSummaryFromRpc);
 };
+
+export const fetchPhotoIdOrders = async (): Promise<PhotoIdOrder[]> => {
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from('photo_id_orders')
+    .select('*')
+    .order('order_datetime', { ascending: false });
+
+  if (error) {
+    console.error('fetchPhotoIdOrders error:', error);
+    throw new Error(error.message);
+  }
+
+  return (data || []).map(photoIdOrderFromDb);
+};
+

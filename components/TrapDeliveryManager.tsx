@@ -610,7 +610,7 @@ const handleDashboardFilterClick = async (specialFilter: string) => {
 
   return (
     <div className="w-full min-w-0 max-w-full space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-4 xl:grid-cols-8 gap-4 w-full">
+      <div className="grid grid-cols-1 md:grid-cols-4 xl:grid-cols-9 gap-4 w-full">
         <button
           type="button"
           onClick={() => handleDashboardFilterClick('TODAY')}
@@ -619,6 +619,7 @@ const handleDashboardFilterClick = async (specialFilter: string) => {
           <div className="text-xs font-black uppercase tracking-widest text-slate-400">Hôm nay</div>
           <div className="mt-2 text-3xl font-black text-slate-900">{dispatchDashboard.total_today}</div>
         </button>
+      
         <button
           type="button"
           onClick={() => handleDashboardFilterClick('TOMORROW')}
@@ -627,6 +628,7 @@ const handleDashboardFilterClick = async (specialFilter: string) => {
           <div className="text-xs font-black uppercase tracking-widest text-slate-400">Ngày mai</div>
           <div className="mt-2 text-3xl font-black text-slate-900">{dispatchDashboard.total_tomorrow}</div>
         </button>
+      
         <button
           type="button"
           onClick={() => handleDashboardFilterClick('NEXT_3_DAYS')}
@@ -635,6 +637,7 @@ const handleDashboardFilterClick = async (specialFilter: string) => {
           <div className="text-xs font-black uppercase tracking-widest text-slate-400">3 ngày tới</div>
           <div className="mt-2 text-3xl font-black text-blue-700">{dispatchDashboard.total_next_3_days}</div>
         </button>
+      
         <button
           type="button"
           onClick={() => handleDashboardFilterClick('PENDING_DATE')}
@@ -643,6 +646,7 @@ const handleDashboardFilterClick = async (specialFilter: string) => {
           <div className="text-xs font-black uppercase tracking-widest text-slate-400">Chưa có ngày</div>
           <div className="mt-2 text-3xl font-black text-amber-700">{dispatchDashboard.total_pending_date}</div>
         </button>
+      
         <button
           type="button"
           onClick={() => handleDashboardFilterClick('PREPARE')}
@@ -651,6 +655,7 @@ const handleDashboardFilterClick = async (specialFilter: string) => {
           <div className="text-xs font-black uppercase tracking-widest text-slate-400">Chuẩn bị</div>
           <div className="mt-2 text-3xl font-black text-yellow-700">{dispatchDashboard.total_prepare}</div>
         </button>
+      
         <button
           type="button"
           onClick={() => handleDashboardFilterClick('DOING')}
@@ -659,6 +664,7 @@ const handleDashboardFilterClick = async (specialFilter: string) => {
           <div className="text-xs font-black uppercase tracking-widest text-slate-400">Đang làm</div>
           <div className="mt-2 text-3xl font-black text-fuchsia-700">{dispatchDashboard.total_doing}</div>
         </button>
+      
         <button
           type="button"
           onClick={() => handleDashboardFilterClick('NOT_RETURNED')}
@@ -667,6 +673,7 @@ const handleDashboardFilterClick = async (specialFilter: string) => {
           <div className="text-xs font-black uppercase tracking-widest text-slate-400">Chưa trả</div>
           <div className="mt-2 text-3xl font-black text-pink-700">{dispatchDashboard.total_not_returned}</div>
         </button>
+      
         <button
           type="button"
           onClick={() => handleDashboardFilterClick('MISSING_ITEMS')}
@@ -674,6 +681,15 @@ const handleDashboardFilterClick = async (specialFilter: string) => {
         >
           <div className="text-xs font-black uppercase tracking-widest text-slate-400">Trả thiếu đồ</div>
           <div className="mt-2 text-3xl font-black text-red-600">{dispatchDashboard.total_missing_items}</div>
+        </button>
+      
+        <button
+          type="button"
+          onClick={() => handleDashboardFilterClick('OVERDUE')}
+          className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0 text-left hover:border-orange-400 hover:shadow-md transition"
+        >
+          <div className="text-xs font-black uppercase tracking-widest text-slate-400">Quá hạn</div>
+          <div className="mt-2 text-3xl font-black text-orange-700">{dispatchDashboard.total_overdue}</div>
         </button>
       </div>
 
@@ -768,42 +784,72 @@ const handleDashboardFilterClick = async (specialFilter: string) => {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => setFilters((prev) => ({ ...prev, month: getCurrentMonthVN() }))}
+            onClick={() => setFilters((prev) => ({ ...prev, month: getCurrentMonthVN(), specialFilter: '' }))}
             className="px-3 py-2 rounded-2xl bg-slate-100 text-slate-700 text-sm font-black inline-flex items-center gap-2"
           >
             <CalendarDays size={14} /> Tháng hiện tại
           </button>
           <button
             type="button"
-            onClick={() => setFilters((prev) => ({ ...prev, month: 'PENDING_DATE' }))}
+            onClick={() =>
+  setFilters((prev) => ({
+    ...prev,
+    month: 'PENDING_DATE',
+    specialFilter: '',
+  }))
+}
             className="px-3 py-2 rounded-2xl bg-amber-100 text-amber-800 text-sm font-black inline-flex items-center gap-2"
           >
             <Clock3 size={14} /> Chưa có ngày
           </button>
           <button
             type="button"
-            onClick={() => setFilters((prev) => ({ ...prev, month: 'ALL' }))}
+            onClick={() =>
+  setFilters((prev) => ({
+    ...prev,
+    month: 'ALL',
+    specialFilter: '',
+  }))
+}
             className="px-3 py-2 rounded-2xl bg-blue-100 text-blue-800 text-sm font-black"
           >
             Tất cả dữ liệu
           </button>
           <button
             type="button"
-            onClick={() => setFilters((prev) => ({ ...prev, status: 'CHUẨN BỊ' }))}
+            onClick={() =>
+  setFilters((prev) => ({
+    ...prev,
+    status: 'CHUẨN BỊ',
+    specialFilter: '',
+  }))
+}
             className="px-3 py-2 rounded-2xl bg-yellow-100 text-yellow-800 text-sm font-black"
           >
             Lọc CHUẨN BỊ
           </button>
           <button
             type="button"
-            onClick={() => setFilters((prev) => ({ ...prev, status: 'ĐANG LÀM' }))}
+            onClick={() =>
+  setFilters((prev) => ({
+    ...prev,
+    status: 'ĐANG LÀM',
+    specialFilter: '',
+  }))
+}
             className="px-3 py-2 rounded-2xl bg-fuchsia-100 text-fuchsia-800 text-sm font-black"
           >
             Lọc ĐANG LÀM
           </button>
           <button
             type="button"
-            onClick={() => setFilters((prev) => ({ ...prev, status: 'CHƯA TRẢ TRÁP' }))}
+            onClick={() =>
+  setFilters((prev) => ({
+    ...prev,
+    status: 'CHƯA TRẢ TRÁP',
+    specialFilter: '',
+  }))
+}
             className="px-3 py-2 rounded-2xl bg-pink-100 text-pink-800 text-sm font-black"
           >
             Lọc CHƯA TRẢ

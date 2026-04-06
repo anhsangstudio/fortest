@@ -238,34 +238,39 @@ const [filters, setFilters] = useState<FilterState>({
     return `Tháng ${month}/${year}`;
   }, [filters.month]);
 
-  const loadAll = async () => {
-    try {
-      setLoading(true);
-
-      const [rowData, dashboardData, dropdownData, dispatchData] = await Promise.all([
-trapDeliveryModuleApi.getRows({
-  month: filters.month || null,
-  status: filters.status || null,
-  serviceName: filters.serviceName || null,
-  staffId: filters.staffId || null,
-  search: filters.search || null,
-  specialFilter: filters.specialFilter || null,
-}),
-        trapDeliveryModuleApi.getDashboard(filters.month || null),
-        trapDeliveryModuleApi.getDropdowns(),
-        trapDeliveryDispatchApi.getDispatchDashboard(),
-      ]);
-
-      setRows(rowData || []);
-      setDashboard(dashboardData || DEFAULT_DASHBOARD);
-      setDropdowns(dropdownData || DEFAULT_DROPDOWNS);
-      setDispatchDashboard(dispatchData || DEFAULT_DISPATCH_DASHBOARD);
-    } catch (error: any) {
-      alert(error.message || 'Không tải được dữ liệu giao nhận tráp');
-    } finally {
-      setLoading(false);
-    }
+const loadAll = async (overrideFilters?: Partial<FilterState>) => {
+  const activeFilters: FilterState = {
+    ...filters,
+    ...overrideFilters,
   };
+
+  try {
+    setLoading(true);
+
+    const [rowData, dashboardData, dropdownData, dispatchData] = await Promise.all([
+      trapDeliveryModuleApi.getRows({
+        month: activeFilters.month || null,
+        status: activeFilters.status || null,
+        serviceName: activeFilters.serviceName || null,
+        staffId: activeFilters.staffId || null,
+        search: activeFilters.search || null,
+        specialFilter: activeFilters.specialFilter || null,
+      }),
+      trapDeliveryModuleApi.getDashboard(activeFilters.month || null),
+      trapDeliveryModuleApi.getDropdowns(),
+      trapDeliveryDispatchApi.getDispatchDashboard(),
+    ]);
+
+    setRows(rowData || []);
+    setDashboard(dashboardData || DEFAULT_DASHBOARD);
+    setDropdowns(dropdownData || DEFAULT_DROPDOWNS);
+    setDispatchDashboard(dispatchData || DEFAULT_DISPATCH_DASHBOARD);
+  } catch (error: any) {
+    alert(error.message || 'Không tải được dữ liệu giao nhận tráp');
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
     loadAll();
@@ -276,14 +281,23 @@ trapDeliveryModuleApi.getRows({
   };
 
 const handleDashboardFilterClick = async (specialFilter: string) => {
-  setFilters((prev) => ({
-    ...prev,
+  let nextMonth = 'ALL';
+
+  if (specialFilter === 'PENDING_DATE') {
+    nextMonth = 'PENDING_DATE';
+  }
+
+  const nextFilters: FilterState = {
+    month: nextMonth,
+    status: '',
+    serviceName: '',
+    staffId: '',
+    search: '',
     specialFilter,
-  }));
-  
-  setTimeout(() => {
-    loadAll();
-  }, 0);
+  };
+
+  setFilters(nextFilters);
+  await loadAll(nextFilters);
 };
   
   const handleAutoUpdateStatuses = async () => {
@@ -772,80 +786,143 @@ const handleDashboardFilterClick = async (specialFilter: string) => {
           </div>
         )}
 
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setFilters((prev) => ({ ...prev, month: getCurrentMonthVN(), specialFilter: '' }))}
-            className="px-3 py-2 rounded-2xl bg-slate-100 text-slate-700 text-sm font-black inline-flex items-center gap-2"
-          >
-            <CalendarDays size={14} /> Tháng hiện tại
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-  setFilters((prev) => ({
-    ...prev,
-    month: 'PENDING_DATE',
-    specialFilter: '',
-  }))
-}
-            className="px-3 py-2 rounded-2xl bg-amber-100 text-amber-800 text-sm font-black inline-flex items-center gap-2"
-          >
-            <Clock3 size={14} /> Chưa có ngày
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-  setFilters((prev) => ({
-    ...prev,
-    month: 'ALL',
-    specialFilter: '',
-  }))
-}
-            className="px-3 py-2 rounded-2xl bg-blue-100 text-blue-800 text-sm font-black"
-          >
-            Tất cả dữ liệu
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-  setFilters((prev) => ({
-    ...prev,
-    status: 'CHUẨN BỊ',
-    specialFilter: '',
-  }))
-}
-            className="px-3 py-2 rounded-2xl bg-yellow-100 text-yellow-800 text-sm font-black"
-          >
-            Lọc CHUẨN BỊ
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-  setFilters((prev) => ({
-    ...prev,
-    status: 'ĐANG LÀM',
-    specialFilter: '',
-  }))
-}
-            className="px-3 py-2 rounded-2xl bg-fuchsia-100 text-fuchsia-800 text-sm font-black"
-          >
-            Lọc ĐANG LÀM
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-  setFilters((prev) => ({
-    ...prev,
-    status: 'CHƯA TRẢ TRÁP',
-    specialFilter: '',
-  }))
-}
-            className="px-3 py-2 rounded-2xl bg-pink-100 text-pink-800 text-sm font-black"
-          >
-            Lọc CHƯA TRẢ
-          </button>
-        </div>
+<div className="flex flex-wrap gap-2">
+  <button
+    type="button"
+    onClick={async () => {
+      const nextFilters: FilterState = {
+        ...filters,
+        month: getCurrentMonthVN(),
+        specialFilter: '',
+      };
+      setFilters(nextFilters);
+      await loadAll(nextFilters);
+    }}
+    className="px-3 py-2 rounded-2xl bg-slate-100 text-slate-700 text-sm font-black inline-flex items-center gap-2"
+  >
+    <CalendarDays size={14} /> Tháng hiện tại
+  </button>
+
+  <button
+    type="button"
+    onClick={async () => {
+      const nextFilters: FilterState = {
+        ...filters,
+        month: 'PENDING_DATE',
+        status: '',
+        serviceName: '',
+        staffId: '',
+        search: '',
+        specialFilter: '',
+      };
+      setFilters(nextFilters);
+      await loadAll(nextFilters);
+    }}
+    className="px-3 py-2 rounded-2xl bg-amber-100 text-amber-800 text-sm font-black inline-flex items-center gap-2"
+  >
+    <Clock3 size={14} /> Chưa có ngày
+  </button>
+
+  <button
+    type="button"
+    onClick={async () => {
+      const nextFilters: FilterState = {
+        ...filters,
+        month: 'ALL',
+        status: '',
+        serviceName: '',
+        staffId: '',
+        search: '',
+        specialFilter: '',
+      };
+      setFilters(nextFilters);
+      await loadAll(nextFilters);
+    }}
+    className="px-3 py-2 rounded-2xl bg-blue-100 text-blue-800 text-sm font-black"
+  >
+    Tất cả dữ liệu
+  </button>
+
+  <button
+    type="button"
+    onClick={async () => {
+      const nextFilters: FilterState = {
+        ...filters,
+        month: 'ALL',
+        status: 'CHUẨN BỊ',
+        serviceName: '',
+        staffId: '',
+        search: '',
+        specialFilter: '',
+      };
+      setFilters(nextFilters);
+      await loadAll(nextFilters);
+    }}
+    className="px-3 py-2 rounded-2xl bg-yellow-100 text-yellow-800 text-sm font-black"
+  >
+    Lọc CHUẨN BỊ
+  </button>
+
+  <button
+    type="button"
+    onClick={async () => {
+      const nextFilters: FilterState = {
+        ...filters,
+        month: 'ALL',
+        status: 'ĐANG LÀM',
+        serviceName: '',
+        staffId: '',
+        search: '',
+        specialFilter: '',
+      };
+      setFilters(nextFilters);
+      await loadAll(nextFilters);
+    }}
+    className="px-3 py-2 rounded-2xl bg-fuchsia-100 text-fuchsia-800 text-sm font-black"
+  >
+    Lọc ĐANG LÀM
+  </button>
+
+  <button
+    type="button"
+    onClick={async () => {
+      const nextFilters: FilterState = {
+        ...filters,
+        month: 'ALL',
+        status: 'CHƯA TRẢ TRÁP',
+        serviceName: '',
+        staffId: '',
+        search: '',
+        specialFilter: '',
+      };
+      setFilters(nextFilters);
+      await loadAll(nextFilters);
+    }}
+    className="px-3 py-2 rounded-2xl bg-pink-100 text-pink-800 text-sm font-black"
+  >
+    Lọc CHƯA TRẢ
+  </button>
+
+  <button
+    type="button"
+    onClick={async () => {
+      const nextFilters: FilterState = {
+        ...filters,
+        month: 'ALL',
+        status: '',
+        serviceName: '',
+        staffId: '',
+        search: '',
+        specialFilter: '',
+      };
+      setFilters(nextFilters);
+      await loadAll(nextFilters);
+    }}
+    className="px-3 py-2 rounded-2xl bg-slate-100 text-slate-700 text-sm font-black"
+  >
+    Bỏ lọc dashboard
+  </button>
+</div>
 
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3 w-full">
           <div className="min-w-0">

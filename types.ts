@@ -785,8 +785,9 @@ export interface TrapDeliveryDispatchDashboard {
   total_pending_date: number;
   total_prepare: number;
   total_doing: number;
-  total_need_attention: number;
-  total_overdue: number;
+  total_not_returned: number;
+  total_missing_items: number;
+  
 }
 
 

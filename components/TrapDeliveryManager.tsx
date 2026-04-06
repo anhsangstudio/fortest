@@ -682,15 +682,6 @@ const handleDashboardFilterClick = async (specialFilter: string) => {
           <div className="text-xs font-black uppercase tracking-widest text-slate-400">Trả thiếu đồ</div>
           <div className="mt-2 text-3xl font-black text-red-600">{dispatchDashboard.total_missing_items}</div>
         </button>
-      
-        <button
-          type="button"
-          onClick={() => handleDashboardFilterClick('OVERDUE')}
-          className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0 text-left hover:border-orange-400 hover:shadow-md transition"
-        >
-          <div className="text-xs font-black uppercase tracking-widest text-slate-400">Quá hạn</div>
-          <div className="mt-2 text-3xl font-black text-orange-700">{dispatchDashboard.total_overdue}</div>
-        </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 w-full">

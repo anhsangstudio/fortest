@@ -700,7 +700,6 @@ const handleDashboardFilterClick = async (specialFilter: string) => {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="text-lg font-black text-slate-900">Quản Lý Giao Nhận Tráp</div>
-            <div className="text-sm text-slate-500">Một bảng duy nhất + filter tháng, thay thế Google Sheet hiện tại.</div>
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -759,8 +758,8 @@ const handleDashboardFilterClick = async (specialFilter: string) => {
             <div className="text-sm">
               <div className="font-black">Có việc cần ưu tiên xử lý.</div>
               <div className="mt-1">
-                Chưa trả: <strong>{dispatchDashboard.total_not_returned}</strong> dòng,
-                Trả thiếu đồ: <strong>{dispatchDashboard.total_missing_items}</strong> dòng.
+                Chưa trả: <strong>{dispatchDashboard.total_not_returned}</strong> khách hàng,
+                Trả thiếu đồ: <strong>{dispatchDashboard.total_missing_items}</strong> khách hàng.
               </div>
             </div>
           </div>

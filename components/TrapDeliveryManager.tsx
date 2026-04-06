@@ -753,13 +753,14 @@ const handleDashboardFilterClick = async (specialFilter: string) => {
           </div>
         </div>
 
-        {(dispatchDashboard.total_overdue > 0 || dispatchDashboard.total_need_attention > 0) && (
+        {(dispatchDashboard.total_overdue > 0 || dispatchDashboard.total_not_returned > 0 || dispatchDashboard.total_missing_items > 0 > 0) && (
           <div className="rounded-3xl border border-red-200 bg-red-50 p-4 text-red-800 flex items-start gap-3">
             <TriangleAlert className="mt-0.5" size={18} />
             <div className="text-sm">
               <div className="font-black">Có việc cần ưu tiên xử lý.</div>
               <div className="mt-1">
-                Quá hạn: <strong>{dispatchDashboard.total_overdue}</strong> dòng, cần chú ý: <strong>{dispatchDashboard.total_need_attention}</strong> dòng.
+                Chưa trả: <strong>{dispatchDashboard.total_not_returned}</strong> dòng,
+                Trả thiếu đồ: <strong>{dispatchDashboard.total_missing_items}</strong> dòng.
               </div>
             </div>
           </div>

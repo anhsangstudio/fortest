@@ -1281,6 +1281,34 @@ const deleteBy = async (table: string, key: string, value: any) => {
   return true;
 };
 
+
+export const deleteRemovedContractItemsSafe = async (contractId: string, contractItemIds: string[]) => {
+  if (!isConfigured || !supabase) return { success: true, simulated: true };
+  const normalizedIds = Array.from(new Set((contractItemIds || []).filter(Boolean)));
+  if (!contractId) throw new Error('Thiếu contractId để xóa dịch vụ khỏi hợp đồng');
+  if (normalizedIds.length === 0) return { success: true, data: { deleted_item_ids: [] } };
+
+  const { data, error } = await supabase.rpc('contract_delete_removed_items_safe', {
+    p_contract_id: contractId,
+    p_item_ids: normalizedIds,
+  });
+
+  throwIfError({ data, error }, `rpc contract_delete_removed_items_safe(${contractId})`);
+  return { success: true, data };
+};
+
+export const deleteContractSafe = async (contractId: string) => {
+  if (!isConfigured || !supabase) return { success: true, simulated: true };
+  if (!contractId) throw new Error('Thiếu contractId để xóa hợp đồng');
+
+  const { data, error } = await supabase.rpc('contract_delete_safe', {
+    p_contract_id: contractId,
+  });
+
+  throwIfError({ data, error }, `rpc contract_delete_safe(${contractId})`);
+  return { success: true, data };
+};
+
 export const syncData = async (table: string, action: 'CREATE' | 'UPDATE' | 'DELETE', rawData: any) => {
   if (!isConfigured || !supabase) return { success: true, simulated: true, data: rawData };
   let tableName = table.toLowerCase();
@@ -1294,6 +1322,10 @@ export const syncData = async (table: string, action: 'CREATE' | 'UPDATE' | 'DEL
 
   if (action === 'DELETE') {
     if (tableName === 'services') { await deleteBy('services', 'ma_dv', rawData.ma_dv ?? rawData.id ?? rawData.code); return { success: true }; }
+    if (tableName === 'contracts') {
+      await deleteContractSafe(rawData?.id);
+      return { success: true };
+    }
     await deleteBy(tableName, 'id', rawData.id); return { success: true };
   	if (tableName === 'staff') {
 		  if (!rawData?.id) {
@@ -1358,8 +1390,7 @@ export const syncData = async (table: string, action: 'CREATE' | 'UPDATE' | 'DEL
     const payloadIds = items.map((i: any) => i.id);
     const idsToDelete = existingIds.filter((id) => !payloadIds.includes(id));
     if (idsToDelete.length > 0) {
-       await supabase.from('tasks').delete().in('contract_item_id', idsToDelete);
-       await supabase.from('contract_items').delete().in('id', idsToDelete);
+       await deleteRemovedContractItemsSafe(savedContract.id, idsToDelete);
     }
     for (const it of items) {
       const savedItemRes = await upsertOne('contract_items', contractItemToDb({ ...it, contractId: savedContract.id }));

@@ -777,10 +777,10 @@ const handleDashboardFilterClick = async (specialFilter: string) => {
           <div className="rounded-3xl border border-red-200 bg-red-50 p-4 text-red-800 flex items-start gap-3">
             <TriangleAlert className="mt-0.5" size={18} />
             <div className="text-sm">
-              <div className="font-black">Có việc cần ưu tiên xử lý.</div>
+              
               <div className="mt-1">
-                Chưa trả: <strong>{dispatchDashboard.total_not_returned}</strong> khách hàng,
-                Trả thiếu đồ: <strong>{dispatchDashboard.total_missing_items}</strong> khách hàng.
+                Số khách chưa trả tráp: <strong>{dispatchDashboard.total_not_returned}</strong> khách hàng   |   
+                Số khách trả thiếu đồ: <strong>{dispatchDashboard.total_missing_items}</strong> khách hàng.
               </div>
             </div>
           </div>

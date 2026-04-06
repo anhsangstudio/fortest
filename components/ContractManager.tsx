@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Plus, Search, X, Trash2, Calendar as CalIcon, User, CreditCard, Package, Settings, AlignLeft, MapPin, CalendarDays, AlertCircle, Loader2, CheckCircle2, History, Banknote, ArrowRight, CloudOff, Printer, ExternalLink, FileText, Briefcase, Wallet, Info, Tag, Edit3, UserPlus, Clock, Check, MessageSquare, FileCheck, Share2, ChevronLeft, Pencil, ChevronRight } from 'lucide-react';
 import { Contract, ContractStatus, Service, Customer, Staff, ContractItem, Transaction, TransactionType, StudioInfo, Schedule } from '../types';
-import { syncData, isConfigured, generateContractCode, createScheduleLabel, updateScheduleLabel, deleteScheduleLabel, fetchContractsPaginated, fetchTransactionsByContractId } from '../apiService';
+import { syncData, isConfigured, generateContractCode, createScheduleLabel, updateScheduleLabel, deleteScheduleLabel, fetchContractsPaginated, fetchTransactionsByContractId, deleteContractSafe } from '../apiService';
 import ContractPrint from './ContractPrint';
 
 interface Props {
@@ -385,7 +385,7 @@ const handleOpenEdit = async (contract: Contract) => {
     if (window.confirm("Bạn có chắc chắn muốn xóa hợp đồng này?")) {
       setIsSaving(true);
       try {
-        await syncData('contracts', 'DELETE', { id: editingContractId });
+        await deleteContractSafe(editingContractId);
         setContracts(prev => prev.filter(c => c.id !== editingContractId)); 
         await loadContracts(); 
         await refreshTasks();

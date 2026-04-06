@@ -704,20 +704,6 @@ const handleDashboardFilterClick = async (specialFilter: string) => {
 
           <div className="flex flex-wrap gap-2">
             <button
-              onClick={handleAutoUpdateStatuses}
-              disabled={autoUpdatingStatus}
-              className="px-4 py-3 rounded-2xl bg-violet-600 text-white font-black text-sm inline-flex items-center gap-2"
-            >
-              {autoUpdatingStatus ? <Loader2 size={16} className="animate-spin" /> : <AlarmClock size={16} />}
-              Tự cập nhật trạng thái
-            </button>
-            <button
-              onClick={handlePrintExport}
-              className="px-4 py-3 rounded-2xl bg-emerald-600 text-white font-black text-sm inline-flex items-center gap-2"
-            >
-              <Printer size={16} /> Xuất File in
-            </button>
-            <button
               onClick={handleApplyFilters}
               className="px-4 py-3 rounded-2xl bg-slate-100 text-slate-700 font-black text-sm inline-flex items-center gap-2"
             >
@@ -732,13 +718,21 @@ const handleDashboardFilterClick = async (specialFilter: string) => {
               Sync dữ liệu
             </button>
             <button
+              onClick={handleAutoUpdateStatuses}
+              disabled={autoUpdatingStatus}
+              className="px-4 py-3 rounded-2xl bg-violet-600 text-white font-black text-sm inline-flex items-center gap-2"
+            >
+              {autoUpdatingStatus ? <Loader2 size={16} className="animate-spin" /> : <AlarmClock size={16} />}
+              Tự cập nhật trạng thái
+            </button>						
+            <button
               onClick={() => {
                 setBaseTypeForm(EMPTY_OPTION_FORM);
                 setBaseTypeModalOpen(true);
               }}
               className="px-4 py-3 rounded-2xl bg-slate-900 text-white font-black text-sm inline-flex items-center gap-2"
             >
-              <Settings2 size={16} /> Loại đế tráp
+              <Settings2 size={16} /> Thêm loại đế tráp
             </button>
             <button
               onClick={() => {
@@ -747,7 +741,13 @@ const handleDashboardFilterClick = async (specialFilter: string) => {
               }}
               className="px-4 py-3 rounded-2xl bg-slate-900 text-white font-black text-sm inline-flex items-center gap-2"
             >
-              <Settings2 size={16} /> Loại tráp
+              <Settings2 size={16} /> Thêm loại tráp
+            </button>
+            <button
+              onClick={handlePrintExport}
+              className="px-4 py-3 rounded-2xl bg-emerald-600 text-white font-black text-sm inline-flex items-center gap-2"
+            >
+              <Printer size={16} /> Xuất File in
             </button>
           </div>
         </div>

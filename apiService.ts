@@ -3062,20 +3062,22 @@ export const trapDeliveryModuleApi = {
     return data;
   },
 
-  async getRows(params?: {
-    month?: string | null;
-    status?: string | null;
-    serviceName?: string | null;
-    staffId?: string | null;
-    search?: string | null;
-  }) {
-    const { data, error } = await supabase.rpc('trap_delivery_get_rows', {
-      p_month: params?.month ?? null,
-      p_status: params?.status ?? null,
-      p_service_name: params?.serviceName ?? null,
-      p_staff_id: params?.staffId ?? null,
-      p_search: params?.search ?? null,
-    });
+async getRows(params?: {
+  month?: string | null;
+  status?: string | null;
+  serviceName?: string | null;
+  staffId?: string | null;
+  search?: string | null;
+  specialFilter?: string | null;
+}) {
+const { data, error } = await supabase.rpc('trap_delivery_get_rows', {
+  p_month: params?.month ?? null,
+  p_status: params?.status ?? null,
+  p_service_name: params?.serviceName ?? null,
+  p_staff_id: params?.staffId ?? null,
+  p_search: params?.search ?? null,
+  p_special_filter: params?.specialFilter ?? null,
+});
     throwIfError(error, 'trap_delivery_get_rows failed');
     return data || [];
   },

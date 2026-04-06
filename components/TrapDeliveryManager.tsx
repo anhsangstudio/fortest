@@ -108,6 +108,7 @@ type FilterState = {
   serviceName: string;
   staffId: string;
   search: string;
+  specialFilter: string;
 };
 
 type EditFormState = {
@@ -216,13 +217,14 @@ export default function TrapDeliveryManager() {
   const [baseTypeForm, setBaseTypeForm] = useState<OptionFormState>(EMPTY_OPTION_FORM);
   const [trapTypeForm, setTrapTypeForm] = useState<OptionFormState>(EMPTY_OPTION_FORM);
 
-  const [filters, setFilters] = useState<FilterState>({
-    month: getCurrentMonthVN(),
-    status: '',
-    serviceName: '',
-    staffId: '',
-    search: '',
-  });
+const [filters, setFilters] = useState<FilterState>({
+  month: getCurrentMonthVN(),
+  status: '',
+  serviceName: '',
+  staffId: '',
+  search: '',
+  specialFilter: '',
+});
 
   const serviceOptions = useMemo(() => {
     return Array.from(new Set(rows.map((x) => x.service_name).filter(Boolean))).sort();
@@ -241,13 +243,14 @@ export default function TrapDeliveryManager() {
       setLoading(true);
 
       const [rowData, dashboardData, dropdownData, dispatchData] = await Promise.all([
-        trapDeliveryModuleApi.getRows({
-          month: filters.month || null,
-          status: filters.status || null,
-          serviceName: filters.serviceName || null,
-          staffId: filters.staffId || null,
-          search: filters.search || null,
-        }),
+trapDeliveryModuleApi.getRows({
+  month: filters.month || null,
+  status: filters.status || null,
+  serviceName: filters.serviceName || null,
+  staffId: filters.staffId || null,
+  search: filters.search || null,
+  specialFilter: filters.specialFilter || null,
+}),
         trapDeliveryModuleApi.getDashboard(filters.month || null),
         trapDeliveryModuleApi.getDropdowns(),
         trapDeliveryDispatchApi.getDispatchDashboard(),
@@ -272,6 +275,17 @@ export default function TrapDeliveryManager() {
     await loadAll();
   };
 
+const handleDashboardFilterClick = async (specialFilter: string) => {
+  setFilters((prev) => ({
+    ...prev,
+    specialFilter,
+  }));
+  
+  setTimeout(() => {
+    loadAll();
+  }, 0);
+};
+  
   const handleAutoUpdateStatuses = async () => {
     try {
       setAutoUpdatingStatus(true);
@@ -597,38 +611,78 @@ export default function TrapDeliveryManager() {
   return (
     <div className="w-full min-w-0 max-w-full space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-4 xl:grid-cols-8 gap-4 w-full">
-        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0">
+        <button
+          type="button"
+          onClick={() => handleDashboardFilterClick('TODAY')}
+          className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0 text-left hover:border-blue-400 hover:shadow-md transition"
+        >
           <div className="text-xs font-black uppercase tracking-widest text-slate-400">Hôm nay</div>
           <div className="mt-2 text-3xl font-black text-slate-900">{dispatchDashboard.total_today}</div>
-        </div>
-        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0">
+        </button>
+        <button
+          type="button"
+          onClick={() => handleDashboardFilterClick('TOMORROW')}
+          className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0 text-left hover:border-blue-400 hover:shadow-md transition"
+        >
           <div className="text-xs font-black uppercase tracking-widest text-slate-400">Ngày mai</div>
           <div className="mt-2 text-3xl font-black text-slate-900">{dispatchDashboard.total_tomorrow}</div>
-        </div>
-        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0">
+        </button>
+        <button
+          type="button"
+          onClick={() => handleDashboardFilterClick('NEXT_3_DAYS')}
+          className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0 text-left hover:border-blue-400 hover:shadow-md transition"
+        >
           <div className="text-xs font-black uppercase tracking-widest text-slate-400">3 ngày tới</div>
           <div className="mt-2 text-3xl font-black text-blue-700">{dispatchDashboard.total_next_3_days}</div>
-        </div>
-        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0">
+        </button>
+        <button
+          type="button"
+          onClick={() => handleDashboardFilterClick('PENDING_DATE')}
+          className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0 text-left hover:border-amber-400 hover:shadow-md transition"
+        >
           <div className="text-xs font-black uppercase tracking-widest text-slate-400">Chưa có ngày</div>
           <div className="mt-2 text-3xl font-black text-amber-700">{dispatchDashboard.total_pending_date}</div>
-        </div>
-        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0">
+        </button>
+        <button
+          type="button"
+          onClick={() => handleDashboardFilterClick('PREPARE')}
+          className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0 text-left hover:border-yellow-400 hover:shadow-md transition"
+        >
           <div className="text-xs font-black uppercase tracking-widest text-slate-400">Chuẩn bị</div>
           <div className="mt-2 text-3xl font-black text-yellow-700">{dispatchDashboard.total_prepare}</div>
-        </div>
-        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0">
+        </button>
+        <button
+          type="button"
+          onClick={() => handleDashboardFilterClick('DOING')}
+          className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0 text-left hover:border-fuchsia-400 hover:shadow-md transition"
+        >
           <div className="text-xs font-black uppercase tracking-widest text-slate-400">Đang làm</div>
           <div className="mt-2 text-3xl font-black text-fuchsia-700">{dispatchDashboard.total_doing}</div>
-        </div>
-        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0">
-          <div className="text-xs font-black uppercase tracking-widest text-slate-400">Cần chú ý</div>
-          <div className="mt-2 text-3xl font-black text-red-600">{dispatchDashboard.total_need_attention}</div>
-        </div>
-        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0">
+        </button>
+        <button
+          type="button"
+          onClick={() => handleDashboardFilterClick('NOT_RETURNED')}
+          className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0 text-left hover:border-pink-400 hover:shadow-md transition"
+        >
+          <div className="text-xs font-black uppercase tracking-widest text-slate-400">Chưa trả</div>
+          <div className="mt-2 text-3xl font-black text-pink-700">{dispatchDashboard.total_not_returned}</div>
+        </button>
+        <button
+          type="button"
+          onClick={() => handleDashboardFilterClick('MISSING_ITEMS')}
+          className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0 text-left hover:border-red-400 hover:shadow-md transition"
+        >
+          <div className="text-xs font-black uppercase tracking-widest text-slate-400">Trả thiếu đồ</div>
+          <div className="mt-2 text-3xl font-black text-red-600">{dispatchDashboard.total_missing_items}</div>
+        </button>
+        <button
+          type="button"
+          onClick={() => handleDashboardFilterClick('OVERDUE')}
+          className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm min-w-0 text-left hover:border-orange-400 hover:shadow-md transition"
+        >
           <div className="text-xs font-black uppercase tracking-widest text-slate-400">Quá hạn</div>
           <div className="mt-2 text-3xl font-black text-orange-700">{dispatchDashboard.total_overdue}</div>
-        </div>
+        </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 w-full">
